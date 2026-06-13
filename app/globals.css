@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Variables de diseño — sistema de tokens del CLAUDE.md */
+@layer base {
+  :root {
+    --background: 0 0% 98%;        /* #FAFAFA — fondo claro para que los colores vibren */
+    --foreground: 0 0% 7%;         /* #111 — texto casi negro */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 262 84% 58%;        /* #7C3AED violeta eléctrico */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 262 30% 95%;
+    --secondary-foreground: 262 84% 40%;
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 262 30% 95%;
+    --accent-foreground: 262 84% 40%;
+    --destructive: 0 84% 51%;      /* #DC2626 rojo alertas */
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 262 84% 58%;
+    --radius: 0.75rem;             /* 12px base — tarjetas redondeadas */
+  }
+
+  .dark {
+    --background: 262 20% 8%;
+    --foreground: 0 0% 95%;
+    --card: 262 20% 11%;
+    --card-foreground: 0 0% 95%;
+    --popover: 262 20% 11%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 262 84% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 262 20% 18%;
+    --secondary-foreground: 262 60% 85%;
+    --muted: 262 20% 15%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 262 20% 18%;
+    --accent-foreground: 262 60% 85%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 262 20% 18%;
+    --input: 262 20% 18%;
+    --ring: 262 84% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Targets táctiles mínimo 44px — accesibilidad móvil */
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
+}
+
+/* Gradiente de encabezado — solo para pantalla Hoy y celebraciones */
+.gradient-hoy {
+  background: linear-gradient(135deg, #7C3AED 0%, #C026D3 100%);
+}
+
+/* Skeleton loader con shimmer */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
