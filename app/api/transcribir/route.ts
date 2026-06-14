@@ -1,13 +1,13 @@
 // =============================================================
 // POST /api/transcribir
-// Recibe cualquier formato de audio, lo sube a Supabase Storage
-// y lo envía a Whisper siempre como "audio.m4a" / "audio/m4a".
-// Los .mp4 de WhatsApp son contenedores AAC — idénticos a .m4a,
-// y Whisper acepta m4a perfectamente sin necesidad de conversión.
+// Recibe archivo de audio, lo sube a Supabase Storage y lo
+// transcribe con AssemblyAI (reemplaza Whisper).
+// AssemblyAI acepta mp4/m4a de WhatsApp sin conversión.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { AssemblyAI } from "assemblyai";
 
 export const maxDuration = 300;
 
@@ -23,9 +23,9 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.ASSEMBLYAI_API_KEY) {
       return NextResponse.json(
-        { error: "OPENAI_API_KEY no está configurada en .env.local" },
+        { error: "ASSEMBLYAI_API_KEY no está configurada en .env.local" },
         { status: 500 }
       );
     }
@@ -48,41 +48,7 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // ── Enviar a Whisper siempre como audio.m4a ─────────────────
-    // .mp4 de WhatsApp = contenedor AAC, idéntico a .m4a.
-    // Forzar nombre y tipo m4a hace que Whisper lo procese correctamente.
-    const whisperForm = new FormData();
-    const blob = new Blob([buffer], { type: "audio/m4a" });
-    whisperForm.append("file", blob, "audio.m4a");
-    whisperForm.append("model", "whisper-1");
-    whisperForm.append("language", "es");
-    whisperForm.append("response_format", "text");
-
-    console.log("[transcribir] Enviando a Whisper:", {
-      ext_original: ext,
-      nombre_whisper: "audio.m4a",
-      tipo_whisper: "audio/m4a",
-      tamaño_bytes: buffer.length,
-    });
-
-    const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: whisperForm,
-    });
-
-    if (!whisperResponse.ok) {
-      const errorText = await whisperResponse.text();
-      console.error("[transcribir] Whisper error:", {
-        status: whisperResponse.status,
-        body: errorText,
-      });
-      throw new Error(`Whisper ${whisperResponse.status}: ${errorText}`);
-    }
-
-    const transcripcion = await whisperResponse.text();
-
-    // ── Subir archivo original a Supabase Storage ───────────────
+    // ── Subir a Supabase Storage ────────────────────────────────
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -99,6 +65,32 @@ export async function POST(req: NextRequest) {
     if (storageError) {
       console.error("[transcribir] Error Storage (no crítico):", storageError.message);
     }
+
+    // ── Transcribir con AssemblyAI ──────────────────────────────
+    // AssemblyAI recibe el buffer directamente — no necesita URL pública
+    const client = new AssemblyAI({ apiKey: process.env.ASSEMBLYAI_API_KEY });
+
+    console.log("[transcribir] Enviando a AssemblyAI:", {
+      ext,
+      tamaño_bytes: buffer.length,
+    });
+
+    const transcript = await client.transcripts.transcribe({
+      audio: buffer,
+      language_code: "es",
+    });
+
+    if (transcript.status === "error") {
+      console.error("[transcribir] AssemblyAI error:", transcript.error);
+      throw new Error(`AssemblyAI: ${transcript.error ?? "Error desconocido"}`);
+    }
+
+    const transcripcion = transcript.text ?? "";
+
+    console.log("[transcribir] Transcripción completada:", {
+      palabras: transcript.words?.length ?? 0,
+      duración_ms: transcript.audio_duration,
+    });
 
     return NextResponse.json({
       ok: true,
