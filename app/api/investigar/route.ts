@@ -11,7 +11,7 @@ import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
 import type { FichaIA } from "@/lib/types";
 
 // Tiempo máximo de la función serverless (en segundos)
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const encoder = new TextEncoder();
 
