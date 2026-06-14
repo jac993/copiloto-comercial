@@ -33,7 +33,6 @@ interface ResultadoAnalisisProps {
 export function ResultadoAnalisisView({
   resultado,
   empresaId,
-  interaccionId: _interaccionId,
   onNuevaInteraccion,
 }: ResultadoAnalisisProps) {
   const router = useRouter();
