@@ -22,9 +22,9 @@ const ACCION_POR_ESTADO: Record<
   prospecto: { label: "Registrar primer contacto", Icon: Phone },
   contactado: { label: "Registrar seguimiento", Icon: Phone },
   en_conversacion: { label: "Registrar seguimiento", Icon: Phone },
-  reunion: { label: "Subir grabación de reunión", Icon: Upload },
+  reunion_agendada: { label: "Subir grabación de reunión", Icon: Upload },
   cotizado: { label: "Registrar respuesta", Icon: Phone },
-  cliente: { label: "Ver historial completo", Icon: Clock },
+  ganado: { label: "Ver historial completo", Icon: Clock },
   perdido: { label: "Ver historial completo", Icon: Clock },
 };
 
@@ -41,9 +41,9 @@ const ESTADO_BADGE: Record<EstadoEmpresa, { label: string; className: string }> 
   prospecto: { label: "Prospecto", className: "bg-white/20 text-white" },
   contactado: { label: "Contactado", className: "bg-blue-500/30 text-white" },
   en_conversacion: { label: "En conversación", className: "bg-indigo-500/30 text-white" },
-  reunion: { label: "En reunión", className: "bg-amber-500/30 text-white" },
+  reunion_agendada: { label: "Reunión agendada", className: "bg-amber-500/30 text-white" },
   cotizado: { label: "Cotizado", className: "bg-purple-500/30 text-white" },
-  cliente: { label: "Cliente ✓", className: "bg-green-500/30 text-white" },
+  ganado: { label: "Ganado ✓", className: "bg-green-500/30 text-white" },
   perdido: { label: "Perdido", className: "bg-red-500/30 text-white" },
 };
 

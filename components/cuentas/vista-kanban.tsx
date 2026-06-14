@@ -17,9 +17,9 @@ const COLUMNAS: { id: EstadoEmpresa; label: string; accentColor: string }[] = [
   { id: "prospecto",      label: "Prospecto",        accentColor: "bg-gray-400" },
   { id: "contactado",     label: "Contactado",        accentColor: "bg-blue-500" },
   { id: "en_conversacion",label: "En conversación",   accentColor: "bg-indigo-500" },
-  { id: "reunion",        label: "Reunión agendada",  accentColor: "bg-amber-500" },
-  { id: "cotizado",       label: "Cotizado",          accentColor: "bg-purple-500" },
-  { id: "cliente",        label: "Ganado",            accentColor: "bg-green-500" },
+  { id: "reunion_agendada", label: "Reunión agendada",  accentColor: "bg-amber-500" },
+  { id: "cotizado",         label: "Cotizado",          accentColor: "bg-purple-500" },
+  { id: "ganado",           label: "Ganado",            accentColor: "bg-green-500" },
 ];
 
 // Puntos de color por técnica recomendada
