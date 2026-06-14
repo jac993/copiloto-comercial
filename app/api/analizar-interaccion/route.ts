@@ -1,0 +1,210 @@
+// =============================================================
+// POST /api/analizar-interaccion
+// Recibe texto de una interacción (transcripción, correo, etc.),
+// carga el contexto completo de la empresa, llama a Claude con
+// PROMPT_COACH_ESCRITO y guarda el resultado en tabla interacciones.
+// Para tipo "sin_respuesta": no llama a Claude, solo guarda registro.
+// =============================================================
+
+import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
+import {
+  getEmpresaCompleta,
+  getHistorialResumido,
+  insertInteraccion,
+} from "@/lib/queries";
+import { PROMPT_COACH_ESCRITO } from "@/lib/prompts";
+import type {
+  ResultadoAnalisis,
+  TipoInteraccion,
+  InteraccionInsert,
+} from "@/lib/types";
+
+export const maxDuration = 60;
+
+// Suma N días hábiles a partir de hoy (excluye sábado y domingo)
+function sumarDiasHabiles(n: number): string {
+  const fecha = new Date();
+  let contados = 0;
+  while (contados < n) {
+    fecha.setDate(fecha.getDate() + 1);
+    const dia = fecha.getDay();
+    if (dia !== 0 && dia !== 6) contados++;
+  }
+  return fecha.toISOString().split("T")[0];
+}
+
+const TIPO_LABEL: Record<TipoInteraccion, string> = {
+  llamada: "Transcripción de llamada",
+  email: "Correo electrónico",
+  linkedin: "Conversación de LinkedIn",
+  whatsapp: "Conversación de WhatsApp",
+  sin_respuesta: "Sin respuesta",
+};
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json() as {
+      empresa_id: string;
+      contacto_id?: string;
+      tipo: TipoInteraccion;
+      texto?: string;
+      audio_url?: string;
+      asunto?: string; // para emails
+    };
+
+    const { empresa_id, contacto_id, tipo, texto, audio_url, asunto } = body;
+
+    if (!empresa_id || !tipo) {
+      return NextResponse.json(
+        { error: "empresa_id y tipo son requeridos" },
+        { status: 400 }
+      );
+    }
+
+    // ── CASO: sin_respuesta — solo registrar, sin llamar a Claude ──
+    if (tipo === "sin_respuesta") {
+      const interaccion = await insertInteraccion({
+        empresa_id,
+        contacto_id: contacto_id ?? null,
+        tipo,
+        fecha: new Date().toISOString(),
+        audio_url: null,
+        transcripcion: null,
+        resumen_ia: "Sin respuesta al intento de contacto.",
+        compromisos: null,
+        sentimiento: "sin_respuesta",
+        tecnica_usada: null,
+        coaching_ia: null,
+        proximo_paso: "Intentar contacto nuevamente",
+        proximo_paso_fecha: sumarDiasHabiles(5),
+      });
+
+      return NextResponse.json({ ok: true, interaccion_id: interaccion.id, resultado: null });
+    }
+
+    if (!texto?.trim()) {
+      return NextResponse.json(
+        { error: "texto requerido para analizar" },
+        { status: 400 }
+      );
+    }
+
+    // ── Cargar contexto completo de la empresa + historial previo ──
+    const [empresa, historial] = await Promise.all([
+      getEmpresaCompleta(empresa_id),
+      getHistorialResumido(empresa_id),
+    ]);
+
+    if (!empresa) {
+      return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+    }
+
+    // ── Construir el mensaje con todo el contexto para Claude ──
+    const fichaResumen = empresa.ficha_ia
+      ? [
+          `Resumen ejecutivo: ${empresa.ficha_ia.resumen_ejecutivo}`,
+          `Ángulo de entrada: ${empresa.ficha_ia.angulo_entrada}`,
+          `Técnica sugerida: ${empresa.ficha_ia.tecnica_recomendada} — ${empresa.ficha_ia.razon_tecnica}`,
+        ].join("\n")
+      : "Sin ficha de IA disponible.";
+
+    const encabezadoEmail = asunto ? `Asunto: ${asunto}\n\n` : "";
+
+    const mensajeAnalisis = `
+EMPRESA: ${empresa.nombre}
+INDUSTRIA: ${empresa.industria ?? "No especificada"}
+ESTADO EN EL PIPELINE: ${empresa.estado}
+NOTAS DEL VENDEDOR: ${empresa.notas_vendedor ?? "Ninguna"}
+
+FICHA COMERCIAL:
+${fichaResumen}
+
+HISTORIAL DE INTERACCIONES PREVIAS:
+${historial}
+
+---
+TIPO DE INTERACCIÓN: ${TIPO_LABEL[tipo]}
+FECHA: ${new Date().toLocaleDateString("es-CL")}
+
+CONTENIDO A ANALIZAR:
+${encabezadoEmail}${texto.trim()}
+`.trim();
+
+    // ── Llamar a Claude con el prompt de coaching ──
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      system: PROMPT_COACH_ESCRITO,
+      messages: [{ role: "user", content: mensajeAnalisis }],
+    });
+
+    const textContent = response.content.find((c) => c.type === "text");
+    if (!textContent || textContent.type !== "text") {
+      throw new Error("Claude no devolvió texto");
+    }
+
+    // ── Parsear JSON de Claude ──
+    let resultado: ResultadoAnalisis;
+    try {
+      // Limpiar posible markdown code block si Claude lo agrega
+      const jsonLimpio = textContent.text.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
+      resultado = JSON.parse(jsonLimpio) as ResultadoAnalisis;
+    } catch {
+      throw new Error("Error parseando respuesta de IA. Intenta de nuevo.");
+    }
+
+    // ── Calcular próximo paso ──
+    // Si hay compromisos, seguimiento en 3 días hábiles; si no, en 7
+    const proximoPasoFecha = resultado.compromisos.length > 0
+      ? sumarDiasHabiles(3)
+      : sumarDiasHabiles(7);
+
+    const primerCompromiso = resultado.compromisos[0];
+    const proximoPasoTexto = primerCompromiso
+      ? `${primerCompromiso.quien}: ${primerCompromiso.que}`
+      : "Revisar resultado del análisis";
+
+    // ── Guardar interacción en DB ──
+    // El análisis completo (coaching + borrador + señales) se persiste en coaching_ia
+    const interaccionData: InteraccionInsert = {
+      empresa_id,
+      contacto_id: contacto_id ?? null,
+      tipo,
+      fecha: new Date().toISOString(),
+      audio_url: audio_url ?? null,
+      transcripcion: tipo === "llamada" ? texto : null,
+      resumen_ia: resultado.resumen,
+      compromisos: resultado.compromisos.map((c) => ({
+        descripcion: `${c.quien}: ${c.que}`,
+        responsable: c.quien,
+        fecha: c.cuando !== "sin fecha definida" ? c.cuando : null,
+      })),
+      sentimiento: resultado.sentimiento_prospecto,
+      tecnica_usada: resultado.tecnica_recomendada,
+      coaching_ia: JSON.stringify({
+        coaching: resultado.coaching,
+        senales_detectadas: resultado.senales_detectadas,
+        lo_que_no_respondio: resultado.lo_que_no_respondio,
+        borrador_respuesta: resultado.borrador_respuesta,
+        estado_sugerido: resultado.estado_sugerido,
+      }),
+      proximo_paso: proximoPasoTexto,
+      proximo_paso_fecha: proximoPasoFecha,
+    };
+
+    const interaccion = await insertInteraccion(interaccionData);
+
+    return NextResponse.json({
+      ok: true,
+      resultado,
+      interaccion_id: interaccion.id,
+    });
+
+  } catch (err) {
+    const mensaje = err instanceof Error ? err.message : "Error desconocido";
+    return NextResponse.json({ error: mensaje }, { status: 500 });
+  }
+}

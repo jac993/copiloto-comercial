@@ -119,7 +119,7 @@ export async function getEmpresasPriorizadas(limite = 10): Promise<Empresa[]> {
     .from("empresas")
     .select("*")
     .not("estado", "eq", "perdido")
-    .not("estado", "eq", "cliente")
+    .not("estado", "eq", "ganado")
     .order("score_prioridad", { ascending: false })
     .limit(limite);
 
@@ -491,6 +491,48 @@ export async function actualizarCamposRegenerados(
 
   if (error) throw new Error(`actualizarCamposRegenerados: ${error.message}`);
   return data;
+}
+
+// ─── BÚSQUEDA Y CONTEXTO PARA /llamadas ──────────────────────
+
+// Busca empresas por nombre para el selector de empresa en /llamadas
+// Devuelve máximo 10 resultados ordenados por score
+export async function buscarEmpresas(query: string): Promise<Empresa[]> {
+  const { data, error } = await getSupabase()
+    .from("empresas")
+    .select("*")
+    .ilike("nombre", `%${query}%`)
+    .not("estado", "eq", "perdido")
+    .order("score_prioridad", { ascending: false })
+    .limit(10);
+
+  if (error) throw new Error(`buscarEmpresas: ${error.message}`);
+  return data ?? [];
+}
+
+// Devuelve las últimas 5 interacciones como texto compacto para inyectar en el prompt.
+// Evita mandar el JSON completo de cada interacción para no inflar el contexto de Claude.
+export async function getHistorialResumido(empresaId: string): Promise<string> {
+  const { data, error } = await getSupabase()
+    .from("interacciones")
+    .select("tipo, fecha, resumen_ia, sentimiento, proximo_paso")
+    .eq("empresa_id", empresaId)
+    .order("fecha", { ascending: false })
+    .limit(5);
+
+  if (error) throw new Error(`getHistorialResumido: ${error.message}`);
+  if (!data || data.length === 0) return "Sin interacciones previas registradas.";
+
+  return data
+    .map((i, idx) => {
+      const fecha = new Date(i.fecha).toLocaleDateString("es-CL");
+      const tipo = i.tipo ?? "interacción";
+      const resumen = i.resumen_ia ?? "Sin resumen";
+      const sentimiento = i.sentimiento ? ` | Sentimiento: ${i.sentimiento}` : "";
+      const proximo = i.proximo_paso ? ` | Próximo paso: ${i.proximo_paso}` : "";
+      return `${idx + 1}. [${fecha}] ${tipo}: ${resumen}${sentimiento}${proximo}`;
+    })
+    .join("\n");
 }
 
 // ─── GUARDAR EMPRESA DESDE FICHA IA ──────────────────────────

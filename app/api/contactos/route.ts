@@ -1,8 +1,22 @@
+// GET  /api/contactos?empresa_id=X — Lista contactos de una empresa (para selector en /llamadas)
 // POST /api/contactos — Registra un contacto encontrado manualmente por el vendedor.
-// Llamado desde tab-decisores cuando el vendedor encuentra a alguien en LinkedIn.
-import { NextResponse } from "next/server";
-import { insertContacto } from "@/lib/queries";
+import { NextRequest, NextResponse } from "next/server";
+import { insertContacto, getContactosPorEmpresa } from "@/lib/queries";
 import type { ContactoInsert, AreaContacto } from "@/lib/types";
+
+export async function GET(req: NextRequest) {
+  const empresa_id = req.nextUrl.searchParams.get("empresa_id");
+  if (!empresa_id) {
+    return NextResponse.json({ error: "empresa_id requerido" }, { status: 400 });
+  }
+  try {
+    const contactos = await getContactosPorEmpresa(empresa_id);
+    return NextResponse.json({ contactos });
+  } catch (err) {
+    const mensaje = err instanceof Error ? err.message : "Error desconocido";
+    return NextResponse.json({ error: mensaje }, { status: 500 });
+  }
+}
 
 export async function POST(request: Request) {
   try {

@@ -61,15 +61,40 @@ export interface FichaIA {
   verificacion_contexto: VerificacionContexto[];
 }
 
+// Resultado del análisis de IA para cualquier tipo de interacción
+export interface CoachingIA {
+  bien: string;
+  mejorar: string;
+  oportunidad_perdida: string;
+}
+
+export interface EstadoSugerido {
+  estado: EstadoEmpresa;
+  razon: string;
+}
+
+export interface ResultadoAnalisis {
+  resumen: string;
+  sentimiento_prospecto: SentimientoInteraccion;
+  senales_detectadas: { tipo: string; descripcion: string }[];
+  compromisos: { quien: string; que: string; cuando: string }[];
+  lo_que_no_respondio: string;
+  tecnica_recomendada: string;
+  razon_tecnica: string;
+  coaching: CoachingIA;
+  estado_sugerido: EstadoSugerido | null;
+  borrador_respuesta: string;
+}
+
 // ─── ENUMS ────────────────────────────────────────────────────
 
 export type EstadoEmpresa =
   | "prospecto"
   | "contactado"
   | "en_conversacion"
-  | "reunion"
+  | "reunion_agendada"
   | "cotizado"
-  | "cliente"
+  | "ganado"
   | "perdido";
 
 export type AreaContacto =
@@ -79,9 +104,18 @@ export type AreaContacto =
   | "gerencia"
   | "otro";
 
-export type TipoInteraccion = "llamada" | "reunion" | "email" | "whatsapp";
+export type TipoInteraccion =
+  | "llamada"
+  | "email"
+  | "linkedin"
+  | "whatsapp"
+  | "sin_respuesta";
 
-export type SentimientoInteraccion = "positivo" | "neutro" | "negativo";
+export type SentimientoInteraccion =
+  | "positivo"
+  | "neutro"
+  | "negativo"
+  | "sin_respuesta";
 
 export type TipoSenal =
   | "lanzamiento_producto"

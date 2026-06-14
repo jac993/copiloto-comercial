@@ -12,7 +12,8 @@
       "Bash(npx tsc *)",
       "Bash(npx next *)",
       "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\José Antonio Castro\\\\Desktop\\\\copiloto-comercial\\\\.next\" -ErrorAction SilentlyContinue)",
-      "Bash(Write-Output \"listo\")"
+      "Bash(Write-Output \"listo\")",
+      "Bash(npm install *)"
     ]
   }
 }
