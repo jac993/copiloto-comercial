@@ -74,9 +74,10 @@ export async function POST(req: NextRequest) {
     const nombreSeguro = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const pathStorage = `${timestamp}_${nombreSeguro}`;
 
-    const mimeType = MIME_POR_EXT[ext] ?? "audio/mp4";
+    // Para .mp4 forzar siempre audio/mp4 — WhatsApp entrega video/mp4 que Whisper rechaza
+    const mimeType = ext === "mp4" ? "audio/mp4" : (MIME_POR_EXT[ext] ?? "audio/mpeg");
 
-    // Subir al bucket "Llamadas"
+    // Subir al bucket "Llamadas" con el nombre original
     const { data: storageData, error: storageError } = await supabaseAdmin.storage
       .from("Llamadas")
       .upload(pathStorage, buffer, {
@@ -88,10 +89,16 @@ export async function POST(req: NextRequest) {
       throw new Error(`Error al subir el audio: ${storageError.message}`);
     }
 
-    // Transcribir con Whisper usando el buffer ya en memoria
+    // Transcribir con Whisper usando el buffer ya en memoria.
+    // Los .mp4 de WhatsApp se renombran a .m4a — Whisper los acepta mejor
+    // con esa extensión aunque el contenido sea idéntico.
+    const nombreParaWhisper = ext === "mp4"
+      ? pathStorage.replace(/\.mp4$/i, ".m4a")
+      : pathStorage;
+
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const audioFile = await toFile(buffer, pathStorage, { type: mimeType });
+    const audioFile = await toFile(buffer, nombreParaWhisper, { type: "audio/mp4" });
 
     // response_format "text" devuelve string directamente
     const transcripcionRaw = await openai.audio.transcriptions.create({
