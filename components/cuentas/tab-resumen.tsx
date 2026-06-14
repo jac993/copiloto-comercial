@@ -299,7 +299,7 @@ function ContextoVerificacion({
                         : "text-amber-700/80 dark:text-amber-400/80"
                     }
                   >
-                    "{item.dato_vendedor}" — {item.observacion}
+                    &ldquo;{item.dato_vendedor}&rdquo; — {item.observacion}
                   </span>
                 </div>
               </div>
