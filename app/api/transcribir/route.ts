@@ -12,13 +12,21 @@ import { createClient } from "@supabase/supabase-js";
 
 export const maxDuration = 300;
 
-const EXTENSIONES_PERMITIDAS = ["mp3", "mp4", "m4a", "wav"];
+// Todos los formatos que acepta Whisper
+const EXTENSIONES_PERMITIDAS = ["mp3", "mp4", "m4a", "wav", "mpeg", "mpga", "oga", "ogg", "flac", "webm"];
 
+// Siempre forzar tipos de audio — WhatsApp envía mp4 con tipo "video/mp4" que Whisper rechaza
 const MIME_POR_EXT: Record<string, string> = {
-  mp3: "audio/mpeg",
-  mp4: "audio/mp4",
-  m4a: "audio/mp4",
-  wav: "audio/wav",
+  mp3:  "audio/mpeg",
+  mpeg: "audio/mpeg",
+  mpga: "audio/mpeg",
+  mp4:  "audio/mp4",
+  m4a:  "audio/mp4",
+  wav:  "audio/wav",
+  ogg:  "audio/ogg",
+  oga:  "audio/ogg",
+  flac: "audio/flac",
+  webm: "audio/webm",
 };
 
 export async function POST(req: NextRequest) {

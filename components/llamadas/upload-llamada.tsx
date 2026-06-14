@@ -117,7 +117,7 @@ export function UploadLlamada({ empresas, onResultado }: UploadLlamadaProps) {
         <input
           ref={inputRef}
           type="file"
-          accept=".mp3,.m4a,.wav,.mp4"
+          accept=".mp3,.m4a,.wav,.mp4,.mpeg,.mpga,.oga,.ogg,.flac,.webm"
           className="hidden"
           onChange={handleArchivoChange}
         />
@@ -132,7 +132,7 @@ export function UploadLlamada({ empresas, onResultado }: UploadLlamadaProps) {
             </div>
             <div className="text-center">
               <p className="font-semibold text-sm">Selecciona el audio</p>
-              <p className="text-xs text-muted-foreground mt-0.5">MP3, M4A, WAV o MP4 · máx ~25 MB</p>
+              <p className="text-xs text-muted-foreground mt-0.5">MP3, M4A, MP4, OGG, FLAC, WEBM · máx ~25 MB</p>
             </div>
           </button>
         ) : (
