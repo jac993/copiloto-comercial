@@ -129,6 +129,41 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
 }
 `;
 
+// ─── PROMPT_REGENERAR ────────────────────────────────────────
+// Se usa en POST /api/investigar/regenerar
+// INPUT: ficha_ia existente + notas_vendedor del vendedor
+// OUTPUT: JSON con solo los 3 campos regenerados
+export const PROMPT_REGENERAR = `
+Eres un analista comercial B2B especializado en etiquetas autoadhesivas e imprenta industrial en Chile.
+
+Un vendedor tiene una ficha de empresa ya generada y ahora agrega contexto propio que solo él sabe:
+contactos internos que conoce, situaciones recientes, referencias en común, información de mercado, etc.
+
+Tu tarea es REESCRIBIR SOLO estos 3 campos, incorporando el contexto del vendedor:
+- angulo_entrada: enriquece el ángulo con el contexto personal del vendedor (qué palanca concreta tiene)
+- razon_tecnica: ajusta si el contexto cambia la técnica recomendada (ej: si tiene una referencia, podría ser más relacional)
+- preguntas_spin: ajusta las preguntas para reflejar el contexto específico del vendedor
+
+${CONTEXTO_DOMINIO}
+
+REGLAS:
+1. Si las notas mencionan un contacto conocido → el ángulo debe aprovechar esa referencia
+2. Si las notas mencionan un problema reciente (recall, paro de línea, auditoría) → úsalo en las preguntas SPIN
+3. Si las notas no agregan contexto relevante → mantén la esencia del ángulo original pero reescríbelo
+4. Las preguntas SPIN siguen siendo 3: Situación, Problema, Implicación — pero personalizadas
+
+Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
+{
+  "angulo_entrada": "3-4 líneas: por qué contactar ahora, incorporando el contexto del vendedor",
+  "razon_tecnica": "1 línea: por qué esta técnica, considerando el contexto del vendedor",
+  "preguntas_spin": [
+    "Pregunta de Situación personalizada",
+    "Pregunta de Problema personalizada",
+    "Pregunta de Implicación personalizada"
+  ]
+}
+`;
+
 // ─── PROMPT_COACHING ─────────────────────────────────────────
 // Se usa en POST /api/analizar-llamada (Prompt 4)
 // INPUT: transcripción de llamada + contexto de empresa + aprendizajes previos

@@ -9,9 +9,10 @@ import type { FichaIA, Interaccion, Compromiso } from "@/lib/types";
 interface TabPreparacionProps {
   ficha: FichaIA;
   ultimaInteraccion: Interaccion | null;
+  notasVendedor?: string | null;
 }
 
-export function TabPreparacion({ ficha, ultimaInteraccion }: TabPreparacionProps) {
+export function TabPreparacion({ ficha, ultimaInteraccion, notasVendedor }: TabPreparacionProps) {
   const compromisosPendientes =
     (ultimaInteraccion?.compromisos as Compromiso[] | null)?.filter(
       (c) => c.responsable?.toLowerCase().includes("vendedor") ||
@@ -19,8 +20,12 @@ export function TabPreparacion({ ficha, ultimaInteraccion }: TabPreparacionProps
              c.responsable?.toLowerCase().includes("yo")
     ) ?? [];
 
-  // Borrador de mensaje de apertura basado en el ángulo de entrada
-  const mensajeApertura = `Hola, buenos días. Mi nombre es [Nombre] de [Tu empresa], proveedor de etiquetas autoadhesivas. Contacto a ${ficha.nombre} porque ${ficha.angulo_entrada.split(".")[0].toLowerCase()}. ¿Podría hablar con ${ficha.decisores[0]?.cargo ?? "alguien del área de calidad o producción"}?`;
+  // Borrador de mensaje de apertura basado en el ángulo de entrada.
+  // Si hay notas del vendedor, se genera una versión más personalizada.
+  const contextoExtra = notasVendedor?.trim()
+    ? ` Tengo entendido que ${notasVendedor.split("\n")[0].toLowerCase().replace(/\.$/, "")}.`
+    : "";
+  const mensajeApertura = `Hola, buenos días. Mi nombre es [Nombre] de [Tu empresa], proveedor de etiquetas autoadhesivas.${contextoExtra} Contacto a ${ficha.nombre} porque ${ficha.angulo_entrada.split(".")[0].toLowerCase()}. ¿Podría hablar con ${ficha.decisores[0]?.cargo ?? "alguien del área de calidad o producción"}?`;
 
   return (
     <div className="space-y-4 pb-6">
@@ -101,6 +106,14 @@ export function TabPreparacion({ ficha, ultimaInteraccion }: TabPreparacionProps
         </p>
         <Card>
           <CardContent className="pt-4">
+            {notasVendedor?.trim() && (
+              <div className="mb-3 flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
+                <span className="text-amber-600 shrink-0 mt-0.5 text-xs">📒</span>
+                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed line-clamp-2">
+                  Tu contexto: {notasVendedor}
+                </p>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mb-2 italic">
               Adaptar antes de usar — es un punto de partida
             </p>

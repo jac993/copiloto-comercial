@@ -136,7 +136,13 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
 
       {/* Contenido del tab activo */}
       <div className="flex-1 px-4 pt-4">
-        {tabActivo === "resumen" && ficha && <TabResumen ficha={ficha} />}
+        {tabActivo === "resumen" && ficha && (
+          <TabResumen
+            ficha={ficha}
+            empresaId={empresa.id}
+            notasVendedor={empresa.notas_vendedor}
+          />
+        )}
         {tabActivo === "resumen" && !ficha && <SinFicha />}
 
         {tabActivo === "decisores" && (
@@ -158,6 +164,7 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
           <TabPreparacion
             ficha={ficha}
             ultimaInteraccion={empresa.ultima_interaccion}
+            notasVendedor={empresa.notas_vendedor}
           />
         )}
         {tabActivo === "preparacion" && !ficha && <SinFicha />}

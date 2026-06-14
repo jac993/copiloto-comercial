@@ -105,6 +105,7 @@ export interface Empresa {
   razon_de_contacto_actual: string | null;
   score_prioridad: number;
   ficha_ia: FichaIA | null;
+  notas_vendedor: string | null;
   creado_en: string;
   actualizado_en: string;
 }

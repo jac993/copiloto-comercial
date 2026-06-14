@@ -427,6 +427,55 @@ export async function regenerarContexto(): Promise<ContextoExportable> {
   return data;
 }
 
+// ─── NOTAS DEL VENDEDOR + REGENERAR CAMPOS IA ────────────────
+
+// Guarda las notas privadas del vendedor sobre una empresa
+export async function guardarNotasVendedor(id: string, notas: string | null): Promise<void> {
+  const { error } = await getSupabase()
+    .from("empresas")
+    .update({ notas_vendedor: notas } as unknown as Record<string, unknown>)
+    .eq("id", id);
+
+  if (error) throw new Error(`guardarNotasVendedor: ${error.message}`);
+}
+
+// Actualiza solo angulo_entrada, razon_tecnica y preguntas_spin en ficha_ia
+// sin tocar el resto de la ficha. Llamado por POST /api/investigar/regenerar.
+export async function actualizarCamposRegenerados(
+  id: string,
+  campos: { angulo_entrada: string; razon_tecnica: string; preguntas_spin: [string, string, string] }
+): Promise<Empresa> {
+  const { data: row, error: fetchError } = await getSupabase()
+    .from("empresas")
+    .select("ficha_ia")
+    .eq("id", id)
+    .single();
+
+  if (fetchError || !row) {
+    throw new Error(`actualizarCamposRegenerados: ${fetchError?.message ?? "empresa no encontrada"}`);
+  }
+
+  const fichaActualizada: FichaIA = {
+    ...(row.ficha_ia as FichaIA),
+    angulo_entrada: campos.angulo_entrada,
+    razon_tecnica: campos.razon_tecnica,
+    preguntas_spin: campos.preguntas_spin,
+  };
+
+  const { data, error } = await getSupabase()
+    .from("empresas")
+    .update({
+      ficha_ia: fichaActualizada,
+      razon_de_contacto_actual: campos.angulo_entrada,
+    } as unknown as Record<string, unknown>)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw new Error(`actualizarCamposRegenerados: ${error.message}`);
+  return data;
+}
+
 // ─── GUARDAR EMPRESA DESDE FICHA IA ──────────────────────────
 // Llamado por POST /api/investigar al terminar el análisis.
 // Upsert por URL para evitar duplicados.
@@ -458,6 +507,7 @@ export async function guardarEmpresaDesdeFicha(
     razon_de_contacto_actual: ficha.angulo_entrada,
     score_prioridad: score,
     ficha_ia: ficha,
+    notas_vendedor: null,
   };
 
   // Buscar si ya existe una empresa con esta URL
