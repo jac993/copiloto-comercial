@@ -173,6 +173,9 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                   rows={3}
                   className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/60"
                 />
+                <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                  La IA contrastará tu información con lo que encuentre en internet y te avisará si detecta alguna inconsistencia.
+                </p>
               </div>
               <Button
                 size="lg"

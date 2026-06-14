@@ -125,9 +125,28 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "como_responderla": "Respuesta concreta, no genérica, usando datos o ejemplos de su industria"
     }
   ],
-  "resumen_ejecutivo": "3 líneas: 1) Quiénes son y qué hacen. 2) La oportunidad específica. 3) Cómo entrar y con quién."
+  "resumen_ejecutivo": "3 líneas: 1) Quiénes son y qué hacen. 2) La oportunidad específica. 3) Cómo entrar y con quién.",
+  "verificacion_contexto": [
+    {
+      "dato_vendedor": "Exactamente lo que dijo el vendedor (cita textual o paráfrasis breve)",
+      "estado": "confirmado|inconsistente|no_verificable",
+      "observacion": "Qué encontraste en el sitio web que confirma, contradice o no permite verificar esto"
+    }
+  ]
 }
+
+INSTRUCCIONES PARA verificacion_contexto:
+- Incluye SOLO si el vendedor aportó contexto previo (sección CONTEXTO PREVIO DEL VENDEDOR).
+  Si no hubo contexto, devuelve "verificacion_contexto": [].
+- Separa el contexto en ítems individuales (uno por dato o afirmación del vendedor).
+- "confirmado": el sitio web o fuentes públicas corroboran lo que dijo el vendedor.
+- "inconsistente": el sitio contradice lo que dijo el vendedor. Sé específico en la observación.
+- "no_verificable": la información es interna o subjetiva (conoce a alguien, están evaluando proveedores,
+  tuvieron un problema interno) — imposible confirmar desde fuentes públicas.
+- Los ítems "confirmado" son útiles pero los "inconsistente" y "no_verificable" son los más
+  importantes: alertan al vendedor antes de que llegue a la llamada con información incorrecta.
 `;
+
 
 // ─── PROMPT_REGENERAR ────────────────────────────────────────
 // Se usa en POST /api/investigar/regenerar

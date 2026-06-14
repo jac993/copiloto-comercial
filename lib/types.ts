@@ -34,6 +34,12 @@ export interface ObjecionProbable {
   como_responderla: string;
 }
 
+export interface VerificacionContexto {
+  dato_vendedor: string;
+  estado: "confirmado" | "inconsistente" | "no_verificable";
+  observacion: string;
+}
+
 // Respuesta completa del PROMPT_INVESTIGADOR — se guarda en empresas.ficha_ia
 export interface FichaIA {
   nombre: string;
@@ -52,6 +58,7 @@ export interface FichaIA {
   preguntas_spin: [string, string, string];
   objeciones_probables: ObjecionProbable[];
   resumen_ejecutivo: string;
+  verificacion_contexto: VerificacionContexto[];
 }
 
 // ─── ENUMS ────────────────────────────────────────────────────

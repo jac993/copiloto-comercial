@@ -11,7 +11,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { FichaIA } from "@/lib/types";
+import type { FichaIA, VerificacionContexto } from "@/lib/types";
 
 const TECNICA_COLOR: Record<string, string> = {
   SPIN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -29,9 +29,10 @@ const URGENCIA_COLOR: Record<string, string> = {
 interface TabResumenProps {
   ficha: FichaIA;
   empresaId: string;
+  notasVendedor: string | null;
 }
 
-export function TabResumen({ ficha, empresaId }: TabResumenProps) {
+export function TabResumen({ ficha, empresaId, notasVendedor }: TabResumenProps) {
   const router = useRouter();
 
   // Estado local para campos regenerables (se actualizan sin recargar la página)
@@ -69,6 +70,14 @@ export function TabResumen({ ficha, empresaId }: TabResumenProps) {
 
   return (
     <div className="space-y-4 pb-6">
+      {/* Lo que yo sé — lectura del contexto aportado al investigar */}
+      {notasVendedor && (
+        <ContextoVerificacion
+          notasVendedor={notasVendedor}
+          verificacion={ficha.verificacion_contexto ?? []}
+        />
+      )}
+
       {/* Resumen ejecutivo — lo primero que ves */}
       <Card className="border-0 bg-primary/5 dark:bg-primary/10">
         <CardContent className="pt-5">
@@ -224,6 +233,78 @@ export function TabResumen({ ficha, empresaId }: TabResumenProps) {
               </Accordion>
             </CardContent>
           </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Componente: contexto del vendedor + verificación de la IA ──
+function ContextoVerificacion({
+  notasVendedor,
+  verificacion,
+}: {
+  notasVendedor: string;
+  verificacion: VerificacionContexto[];
+}) {
+  const alertas = verificacion.filter(
+    (v) => v.estado === "inconsistente" || v.estado === "no_verificable"
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* Lo que yo sé — read only */}
+      <Card className="border-amber-200 dark:border-amber-800/30 bg-amber-50/50 dark:bg-amber-900/5">
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs font-semibold text-amber-700 dark:text-amber-500 uppercase tracking-wide mb-1.5">
+            Lo que yo sé
+          </p>
+          <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed whitespace-pre-line">
+            {notasVendedor}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Verificación — solo inconsistentes y no verificables */}
+      {alertas.length > 0 && (
+        <div className="space-y-1.5">
+          {alertas.map((item, i) => {
+            const esInconsistente = item.estado === "inconsistente";
+            return (
+              <div
+                key={i}
+                className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs leading-relaxed ${
+                  esInconsistente
+                    ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/30"
+                    : "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/30"
+                }`}
+              >
+                <span className="shrink-0 mt-0.5">
+                  {esInconsistente ? "⚠️" : "❓"}
+                </span>
+                <div>
+                  <span
+                    className={`font-semibold ${
+                      esInconsistente
+                        ? "text-red-700 dark:text-red-400"
+                        : "text-amber-700 dark:text-amber-400"
+                    }`}
+                  >
+                    {esInconsistente ? "Inconsistencia: " : "No verificable: "}
+                  </span>
+                  <span
+                    className={
+                      esInconsistente
+                        ? "text-red-700/80 dark:text-red-400/80"
+                        : "text-amber-700/80 dark:text-amber-400/80"
+                    }
+                  >
+                    "{item.dato_vendedor}" — {item.observacion}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
