@@ -1,7 +1,7 @@
 // =============================================================
 // POST /api/transcribir
 // Recibe un archivo de audio como FormData, lo sube al bucket
-// "llamadas" en Supabase Storage y lo transcribe con Whisper.
+// "Llamadas" en Supabase Storage y lo transcribe con Whisper.
 // Requiere: SUPABASE_SERVICE_ROLE_KEY y OPENAI_API_KEY en .env.local
 // Límite práctico: ~25 MB (MP3/M4A). WAV no recomendado por tamaño.
 // =============================================================
@@ -68,9 +68,9 @@ export async function POST(req: NextRequest) {
 
     const mimeType = MIME_POR_EXT[ext] ?? "audio/mp4";
 
-    // Subir al bucket "llamadas"
+    // Subir al bucket "Llamadas"
     const { data: storageData, error: storageError } = await supabaseAdmin.storage
-      .from("llamadas")
+      .from("Llamadas")
       .upload(pathStorage, buffer, {
         contentType: mimeType,
         upsert: false,
