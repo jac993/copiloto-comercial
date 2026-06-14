@@ -98,25 +98,31 @@ export async function POST(req: NextRequest) {
     whisperForm.append("language", "es");
     whisperForm.append("response_format", "text");
 
-    console.log("Enviando a Whisper:", {
-      nombre: ext === "mp4" ? "audio.m4a" : `audio.${ext}`,
+    const nombreWhisper = ext === "mp4" ? "audio.m4a" : `audio.${ext}`;
+    console.log("[transcribir] Enviando a Whisper:", {
+      nombre: nombreWhisper,
       tipo: mimeType,
-      tamaño: buffer.length,
+      tamaño_bytes: buffer.length,
+      ext_original: ext,
     });
 
-    const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
       body: whisperForm,
     });
 
-    if (!whisperRes.ok) {
-      const errBody = await whisperRes.text();
-      console.error("Whisper error response:", whisperRes.status, errBody);
-      throw new Error(`Whisper ${whisperRes.status}: ${errBody}`);
+    if (!whisperResponse.ok) {
+      const errorText = await whisperResponse.text();
+      console.error("[transcribir] Whisper error completo:", {
+        status: whisperResponse.status,
+        statusText: whisperResponse.statusText,
+        body: errorText,
+      });
+      throw new Error(`Whisper ${whisperResponse.status}: ${errorText}`);
     }
 
-    const transcripcion = await whisperRes.text();
+    const transcripcion = await whisperResponse.text();
 
     return NextResponse.json({
       ok: true,
