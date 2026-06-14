@@ -217,7 +217,7 @@ function DecisorSugeridoCard({
             asChild
           >
             <a
-              href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(decisor.query_linkedin)}`}
+              href={`https://www.google.com/search?q=site:linkedin.com/in+${encodeURIComponent(decisor.query_linkedin)}`}
               target="_blank"
               rel="noopener noreferrer"
             >

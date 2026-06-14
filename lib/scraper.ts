@@ -1,16 +1,17 @@
 // =============================================================
 // Scraper web — recolecta texto del sitio de una empresa
+// Optimizado para Vercel Hobby (límite 60s): scraping máx 15s
 // Solo se usa en API routes (servidor). Nunca en el cliente.
 // =============================================================
 
-const FETCH_TIMEOUT_MS = 10_000;
-const MAX_CHARS_TOTAL = 20_000;
+const FETCH_TIMEOUT_MS = 4_000;   // 4s por página (antes 10s)
+const SCRAPE_TIMEOUT_MS = 15_000; // 15s máximo total de scraping
+const MAX_CHARS_TOTAL = 12_000;   // Menos texto = Claude responde más rápido
 
-// Subpáginas clave que intentamos leer además de la raíz
+// Solo 2 subpáginas — las más informativas
 const SUBPATHS = [
-  "/nosotros", "/quienes-somos", "/about", "/about-us", "/empresa",
-  "/productos", "/servicios", "/products", "/services",
-  "/clientes", "/portfolio", "/historia",
+  "/nosotros", "/quienes-somos", "/about", "/about-us",
+  "/productos", "/servicios", "/products",
 ];
 
 export function normalizarUrl(url: string): string {
@@ -21,7 +22,6 @@ export function normalizarUrl(url: string): string {
   return `https://${trimmed}`;
 }
 
-// Extrae el dominio limpio para búsquedas (ej: "acmechile.cl" → "Acme Chile")
 function domainToName(url: string): string {
   try {
     const hostname = new URL(url).hostname;
@@ -31,7 +31,7 @@ function domainToName(url: string): string {
   }
 }
 
-// Fetch con timeout — retorna HTML o string vacío si falla
+// Fetch con timeout corto — retorna HTML o string vacío si falla/demora
 async function fetchHtml(url: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -59,7 +59,6 @@ async function fetchHtml(url: string): Promise<string> {
   }
 }
 
-// Elimina HTML y normaliza espacios — extrae texto legible
 function stripHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -79,7 +78,6 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-// Intenta encontrar el nombre de la empresa en el HTML (title tag o h1)
 function extraerNombreEmpresa(html: string): string {
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   if (titleMatch) {
@@ -90,32 +88,31 @@ function extraerNombreEmpresa(html: string): string {
   return "";
 }
 
-// Búsqueda DuckDuckGo lite — retorna snippets de resultados (opcional)
-async function buscarNoticias(query: string): Promise<string> {
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-  const html = await fetchHtml(url);
-  if (!html) return "";
-
-  // Extrae solo los snippets de resultados (class="result__snippet")
-  const snippets: string[] = [];
-  const snippetRegex = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = snippetRegex.exec(html)) !== null) {
-    const text = stripHtml(match[1]);
-    if (text.length > 20) snippets.push(text);
-    if (snippets.length >= 5) break;
-  }
-
-  return snippets.join(" ");
-}
-
-// Función principal — recolecta todo el texto disponible sobre la empresa
+// Función principal con hard timeout de 15 segundos total
 export async function scrapeEmpresa(
   url: string,
   onProgress: (msg: string) => void
 ): Promise<{ texto: string; nombreDetectado: string }> {
   const baseUrl = normalizarUrl(url);
+
+  // Hard timeout: si scraping toma más de 15s, usamos lo que tengamos
+  const resultado = await Promise.race([
+    scraperInterno(baseUrl, onProgress),
+    new Promise<{ texto: string; nombreDetectado: string }>((resolve) =>
+      setTimeout(
+        () => resolve({ texto: `Sitio web: ${baseUrl}`, nombreDetectado: domainToName(baseUrl) }),
+        SCRAPE_TIMEOUT_MS
+      )
+    ),
+  ]);
+
+  return resultado;
+}
+
+async function scraperInterno(
+  baseUrl: string,
+  onProgress: (msg: string) => void
+): Promise<{ texto: string; nombreDetectado: string }> {
   const partes: string[] = [];
   let nombreDetectado = "";
 
@@ -131,10 +128,10 @@ export async function scrapeEmpresa(
     partes.push(`Sitio web: ${baseUrl}`);
   }
 
-  // PASO 2: Subpáginas internas en paralelo (máx 4)
+  // PASO 2: Solo 2 subpáginas en paralelo (antes 4)
   onProgress("Explorando páginas internas...");
   const subResultados = await Promise.allSettled(
-    SUBPATHS.slice(0, 4).map((path) => fetchHtml(baseUrl + path))
+    SUBPATHS.slice(0, 2).map((path) => fetchHtml(baseUrl + path))
   );
 
   for (const r of subResultados) {
@@ -143,15 +140,8 @@ export async function scrapeEmpresa(
     }
   }
 
-  // PASO 3: Búsqueda de noticias y ejecutivos (no crítico — falla silenciosamente)
+  // PASO 3: Sin DuckDuckGo — demora mucho y es poco confiable
   onProgress("Buscando noticias y ejecutivos...");
-  try {
-    const queryNoticias = `${nombreDetectado} Chile`;
-    const snippets = await buscarNoticias(queryNoticias);
-    if (snippets) partes.push(`NOTICIAS ENCONTRADAS:\n${snippets}`);
-  } catch {
-    // La búsqueda es opcional — si falla, seguimos con lo que tenemos
-  }
 
   const textoCompleto = partes.join("\n\n");
   return {
