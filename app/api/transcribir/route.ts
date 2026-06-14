@@ -89,27 +89,34 @@ export async function POST(req: NextRequest) {
       throw new Error(`Error al subir el audio: ${storageError.message}`);
     }
 
-    // Transcribir con Whisper usando el buffer ya en memoria.
-    // Los .mp4 de WhatsApp se renombran a .m4a — Whisper los acepta mejor
-    // con esa extensión aunque el contenido sea idéntico.
-    const nombreParaWhisper = ext === "mp4"
-      ? pathStorage.replace(/\.mp4$/i, ".m4a")
-      : pathStorage;
+    // Construir FormData con Blob explícito para garantizar tipo audio/mp4.
+    // Usar fetch directo en vez del SDK — evita que toFile reinterprete el tipo.
+    const blob = new Blob([buffer], { type: mimeType });
+    const whisperForm = new FormData();
+    whisperForm.append("file", blob, ext === "mp4" ? "audio.m4a" : `audio.${ext}`);
+    whisperForm.append("model", "whisper-1");
+    whisperForm.append("language", "es");
+    whisperForm.append("response_format", "text");
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    const audioFile = await toFile(buffer, nombreParaWhisper, { type: "audio/mp4" });
-
-    // response_format "text" devuelve string directamente
-    const transcripcionRaw = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: "whisper-1",
-      language: "es",
-      response_format: "text",
+    console.log("Enviando a Whisper:", {
+      nombre: ext === "mp4" ? "audio.m4a" : `audio.${ext}`,
+      tipo: mimeType,
+      tamaño: buffer.length,
     });
 
-    // El SDK tipifica esto como objeto pero con format "text" es un string
-    const transcripcion = transcripcionRaw as unknown as string;
+    const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: whisperForm,
+    });
+
+    if (!whisperRes.ok) {
+      const errBody = await whisperRes.text();
+      console.error("Whisper error response:", whisperRes.status, errBody);
+      throw new Error(`Whisper ${whisperRes.status}: ${errBody}`);
+    }
+
+    const transcripcion = await whisperRes.text();
 
     return NextResponse.json({
       ok: true,
