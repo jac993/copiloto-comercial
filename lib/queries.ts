@@ -481,7 +481,8 @@ export async function actualizarCamposRegenerados(
 // Upsert por URL para evitar duplicados.
 export async function guardarEmpresaDesdeFicha(
   ficha: FichaIA,
-  url: string
+  url: string,
+  contextoVendedor?: string | null
 ): Promise<Empresa> {
   // Calcular score basado en urgencia y señales detectadas
   const urgencias = ficha.productos_etiquetas.map((p) => p.urgencia);
@@ -507,7 +508,7 @@ export async function guardarEmpresaDesdeFicha(
     razon_de_contacto_actual: ficha.angulo_entrada,
     score_prioridad: score,
     ficha_ia: ficha,
-    notas_vendedor: null,
+    notas_vendedor: contextoVendedor ?? null,
   };
 
   // Buscar si ya existe una empresa con esta URL

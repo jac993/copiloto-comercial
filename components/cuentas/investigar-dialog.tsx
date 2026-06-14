@@ -34,6 +34,7 @@ interface InvestigarDialogProps {
 export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
   const router = useRouter();
   const [url, setUrl] = useState("");
+  const [contexto, setContexto] = useState("");
   const [estado, setEstado] = useState<EstadoDialog>({ fase: "idle" });
 
   const investigar = async () => {
@@ -46,7 +47,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
       const response = await fetch("/api/investigar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlLimpia }),
+        body: JSON.stringify({ url: urlLimpia, contexto_vendedor: contexto.trim() || undefined }),
       });
 
       if (!response.body) throw new Error("Sin respuesta del servidor");
@@ -121,6 +122,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
   const handleClose = () => {
     if (estado.fase === "cargando") return; // No cerrar mientras carga
     setUrl("");
+    setContexto("");
     setEstado({ fase: "idle" });
     onClose();
   };
@@ -158,6 +160,19 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                     autoFocus
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Lo que ya sé sobre esta empresa{" "}
+                  <span className="font-normal">(opcional)</span>
+                </label>
+                <textarea
+                  value={contexto}
+                  onChange={(e) => setContexto(e.target.value)}
+                  placeholder="Ej: fabrican envases para lácteos, conozco al jefe de calidad, tuvieron problemas con etiquetas en enero, están evaluando proveedores..."
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/60"
+                />
               </div>
               <Button
                 size="lg"

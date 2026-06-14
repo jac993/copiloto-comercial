@@ -58,7 +58,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const { url } = (await request.json()) as { url?: string };
+  const { url, contexto_vendedor } = (await request.json()) as {
+    url?: string;
+    contexto_vendedor?: string;
+  };
 
   if (!url?.trim()) {
     return Response.json({ error: "URL requerida" }, { status: 400 });
@@ -88,13 +91,18 @@ export async function POST(request: Request) {
 
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+        // Construir el contenido del mensaje: contexto del vendedor primero, luego web
+        const contextoBloque = contexto_vendedor?.trim()
+          ? `CONTEXTO PREVIO DEL VENDEDOR (priorizar esta información sobre lo que dice el sitio web):\n${contexto_vendedor.trim()}\n\nINFORMACIÓN ENCONTRADA EN INTERNET:`
+          : "--- TEXTO DEL SITIO WEB ---";
+
         const mensaje = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
           max_tokens: 4096,
           messages: [
             {
               role: "user",
-              content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${url.trim()}\nNombre detectado: ${nombreDetectado}\n\n--- TEXTO DEL SITIO WEB ---\n${texto}`,
+              content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${url.trim()}\nNombre detectado: ${nombreDetectado}\n\n${contextoBloque}\n${texto}`,
             },
           ],
         });
@@ -106,11 +114,15 @@ export async function POST(request: Request) {
 
         const ficha = extraerJson(contenido.text);
 
-        // PASO C: Guardar en Supabase
+        // PASO C: Guardar en Supabase (contexto_vendedor se guarda en notas_vendedor)
         send("progreso", { mensaje: "Guardando ficha en tu base de datos..." });
 
         console.log("[investigar] Guardando empresa:", ficha.nombre, url.trim());
-        const empresa = await guardarEmpresaDesdeFicha(ficha, url.trim());
+        const empresa = await guardarEmpresaDesdeFicha(
+          ficha,
+          url.trim(),
+          contexto_vendedor?.trim() || null
+        );
         console.log("[investigar] Empresa guardada con ID:", empresa.id);
 
         send("resultado", {

@@ -140,7 +140,6 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
           <TabResumen
             ficha={ficha}
             empresaId={empresa.id}
-            notasVendedor={empresa.notas_vendedor}
           />
         )}
         {tabActivo === "resumen" && !ficha && <SinFicha />}
