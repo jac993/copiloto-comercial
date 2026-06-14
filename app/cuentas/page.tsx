@@ -3,18 +3,29 @@ export const dynamic = "force-dynamic";
 
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { CuentasClient } from "@/components/cuentas/cuentas-client";
-import { getEmpresas } from "@/lib/queries";
+import { getEmpresas, getInteraccionesConProximoPaso } from "@/lib/queries";
 import type { Empresa } from "@/lib/types";
 
 export default async function CuentasPage() {
   let empresas: Empresa[] = [];
+  let empresasVencidasIds: string[] = [];
   let errorCarga: string | null = null;
+
   try {
-    empresas = await getEmpresas();
+    const [emps, interaccionesVencidas] = await Promise.all([
+      getEmpresas(),
+      getInteraccionesConProximoPaso(),
+    ]);
+    empresas = emps;
+    // IDs de empresas con al menos un próximo paso vencido
+    const idsUnicos = Array.from(new Set(interaccionesVencidas.map((i) => i.empresa_id)));
+    empresasVencidasIds = idsUnicos;
   } catch (err) {
     errorCarga = err instanceof Error ? err.message : "Error desconocido";
     console.error("[cuentas] Error cargando empresas:", errorCarga);
   }
+
+  const activas = empresas.filter((e) => e.estado !== "perdido").length;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -23,9 +34,7 @@ export default async function CuentasPage() {
           <div>
             <h1 className="text-lg font-semibold">Cuentas</h1>
             {empresas.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {empresas.filter((e) => e.estado !== "perdido").length} activas
-              </p>
+              <p className="text-xs text-muted-foreground">{activas} activas</p>
             )}
           </div>
           <ThemeToggle />
@@ -37,7 +46,8 @@ export default async function CuentasPage() {
           Error: {errorCarga}
         </div>
       )}
-      <CuentasClient empresas={empresas} />
+
+      <CuentasClient empresas={empresas} empresasVencidasIds={empresasVencidasIds} />
     </div>
   );
 }

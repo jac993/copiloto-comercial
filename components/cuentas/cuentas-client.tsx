@@ -1,48 +1,107 @@
 "use client";
 
-import { useState } from "react";
-import { Zap, Building2, Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Zap, Building2, Search, List, Columns3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmpresaCard } from "@/components/cuentas/empresa-card";
+import { VistaKanban } from "@/components/cuentas/vista-kanban";
 import { InvestigarDialog } from "@/components/cuentas/investigar-dialog";
 import type { Empresa } from "@/lib/types";
 
+type Vista = "lista" | "pipeline";
+
 interface CuentasClientProps {
   empresas: Empresa[];
+  empresasVencidasIds: string[];
 }
 
-export function CuentasClient({ empresas }: CuentasClientProps) {
+export function CuentasClient({ empresas, empresasVencidasIds }: CuentasClientProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [vista, setVista] = useState<Vista>("lista");
+
+  // Cargar preferencia desde localStorage al montar
+  useEffect(() => {
+    const saved = localStorage.getItem("copiloto_vista") as Vista | null;
+    if (saved === "lista" || saved === "pipeline") setVista(saved);
+  }, []);
+
+  const cambiarVista = (v: Vista) => {
+    setVista(v);
+    localStorage.setItem("copiloto_vista", v);
+  };
 
   return (
     <div className="relative pb-24">
-      {/* Lista de empresas */}
       {empresas.length === 0 ? (
         <EstadoVacio onAgregarClick={() => setDialogOpen(true)} />
       ) : (
-        <div className="px-4 py-4 space-y-3">
-          {/* Buscador simple (visual por ahora) */}
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="search"
-              placeholder="Buscar empresa..."
-              className="w-full h-11 pl-10 pr-4 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+        <>
+          {/* Barra de controles: buscador + toggle de vista */}
+          <div className="px-4 pt-4 pb-2 flex items-center gap-2">
+            {/* Buscador */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="search"
+                placeholder="Buscar empresa..."
+                className="w-full h-10 pl-10 pr-4 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
+            {/* Toggle lista / pipeline */}
+            <div className="flex items-center border border-input rounded-xl overflow-hidden shrink-0">
+              <button
+                onClick={() => cambiarVista("lista")}
+                className={`h-10 w-10 flex items-center justify-center transition-colors ${
+                  vista === "lista"
+                    ? "bg-primary text-white"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+                title="Vista lista"
+              >
+                <List className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => cambiarVista("pipeline")}
+                className={`h-10 w-10 flex items-center justify-center transition-colors ${
+                  vista === "pipeline"
+                    ? "bg-primary text-white"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+                title="Vista pipeline"
+              >
+                <Columns3 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Conteo */}
-          <p className="text-xs text-muted-foreground font-medium px-1">
-            {empresas.length} {empresas.length === 1 ? "empresa" : "empresas"}
-          </p>
+          {/* Conteo — solo en lista */}
+          {vista === "lista" && (
+            <p className="text-xs text-muted-foreground font-medium px-5 pb-2">
+              {empresas.length} {empresas.length === 1 ? "empresa" : "empresas"}
+            </p>
+          )}
 
-          {empresas.map((empresa) => (
-            <EmpresaCard key={empresa.id} empresa={empresa} />
-          ))}
-        </div>
+          {/* Vista lista */}
+          {vista === "lista" && (
+            <div className="px-4 space-y-3">
+              {empresas.map((empresa) => (
+                <EmpresaCard key={empresa.id} empresa={empresa} />
+              ))}
+            </div>
+          )}
+
+          {/* Vista pipeline (Kanban) */}
+          {vista === "pipeline" && (
+            <VistaKanban
+              empresas={empresas}
+              empresasVencidasIds={empresasVencidasIds}
+            />
+          )}
+        </>
       )}
 
-      {/* Botón flotante — acción principal de esta pantalla */}
+      {/* Botón flotante — acción principal */}
       <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
         <Button
           size="lg"
@@ -62,7 +121,6 @@ export function CuentasClient({ empresas }: CuentasClientProps) {
   );
 }
 
-// Estado vacío cuando no hay empresas
 function EstadoVacio({ onAgregarClick }: { onAgregarClick: () => void }) {
   return (
     <div className="px-4 py-6">

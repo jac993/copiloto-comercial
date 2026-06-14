@@ -66,6 +66,7 @@ export interface FichaIA {
 export type EstadoEmpresa =
   | "prospecto"
   | "contactado"
+  | "en_conversacion"
   | "reunion"
   | "cotizado"
   | "cliente"
@@ -113,6 +114,8 @@ export interface Empresa {
   score_prioridad: number;
   ficha_ia: FichaIA | null;
   notas_vendedor: string | null;
+  razon_perdido: string | null;
+  fecha_reactivacion: string | null;
   creado_en: string;
   actualizado_en: string;
 }

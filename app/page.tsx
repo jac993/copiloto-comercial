@@ -1,16 +1,29 @@
-import { Sun, Zap, Target, TrendingUp } from "lucide-react";
+// Forzar render dinámico para la sección de reactivación
+export const dynamic = "force-dynamic";
+
+import Link from "next/link";
+import { Sun, Zap, Target, TrendingUp, RefreshCw } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getEmpresasParaReactivar } from "@/lib/queries";
+import type { Empresa } from "@/lib/types";
 
 // Pantalla "Hoy" — punto de entrada diario del vendedor
-export default function HoyPage() {
+export default async function HoyPage() {
   const hoy = new Intl.DateTimeFormat("es-CL", {
     weekday: "long",
     day: "numeric",
     month: "long",
   }).format(new Date());
+
+  let reactivaciones: Empresa[] = [];
+  try {
+    reactivaciones = await getEmpresasParaReactivar();
+  } catch {
+    // No interrumpir la pantalla Hoy si falla
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -58,7 +71,25 @@ export default function HoyPage() {
           </CardContent>
         </Card>
 
-        {/* Estado vacío — prioridades del día */}
+        {/* Reactivaciones — empresas perdidas que ya llegó su fecha */}
+        {reactivaciones.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <RefreshCw className="h-4 w-4 text-amber-500" />
+              <h2 className="font-semibold text-base">Reactivar hoy</h2>
+              <span className="ml-1 text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full">
+                {reactivaciones.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {reactivaciones.map((empresa) => (
+                <ReactivacionCard key={empresa.id} empresa={empresa} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Prioridades del día */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-base flex items-center gap-2">
@@ -116,5 +147,52 @@ export default function HoyPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+// ── Card de empresa para reactivar ──────────────────────────────
+
+function ReactivacionCard({ empresa }: { empresa: Empresa }) {
+  return (
+    <Card className="border-amber-200 dark:border-amber-800/30 bg-amber-50/50 dark:bg-amber-900/5">
+      <CardContent className="pt-4 pb-4">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 px-2 py-0.5 rounded-full">
+                🔄 Reactivar
+              </span>
+            </div>
+            <p className="font-semibold text-sm mt-1.5">{empresa.nombre}</p>
+            {empresa.industria && (
+              <p className="text-xs text-muted-foreground">{empresa.industria}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Por qué se perdió */}
+        {empresa.razon_perdido && (
+          <div className="mt-2 p-2.5 rounded-lg bg-background border border-amber-200 dark:border-amber-800/30">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Se perdió por:</span>{" "}
+              {empresa.razon_perdido}
+            </p>
+          </div>
+        )}
+
+        {/* Acciones */}
+        <div className="flex gap-2 mt-3">
+          <Button variant="outline" size="sm" className="flex-1 text-xs" asChild>
+            <Link href={`/cuentas/${empresa.id}`}>Ver historial</Link>
+          </Button>
+          <Button size="sm" className="flex-1 text-xs gap-1" asChild>
+            <Link href={`/cuentas/${empresa.id}`}>
+              <Zap className="h-3 w-3" />
+              Nuevo contacto
+            </Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

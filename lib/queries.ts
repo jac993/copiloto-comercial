@@ -427,6 +427,23 @@ export async function regenerarContexto(): Promise<ContextoExportable> {
   return data;
 }
 
+// ─── REACTIVACIÓN ─────────────────────────────────────────────
+
+// Empresas perdidas cuya fecha de reactivación es hoy o ya pasó
+export async function getEmpresasParaReactivar(): Promise<Empresa[]> {
+  const hoy = new Date().toISOString().split("T")[0];
+  const { data, error } = await getSupabase()
+    .from("empresas")
+    .select("*")
+    .eq("estado", "perdido")
+    .not("fecha_reactivacion", "is", null)
+    .lte("fecha_reactivacion", hoy)
+    .order("fecha_reactivacion", { ascending: true });
+
+  if (error) throw new Error(`getEmpresasParaReactivar: ${error.message}`);
+  return data ?? [];
+}
+
 // ─── NOTAS DEL VENDEDOR + REGENERAR CAMPOS IA ────────────────
 
 // Guarda las notas privadas del vendedor sobre una empresa
@@ -509,6 +526,8 @@ export async function guardarEmpresaDesdeFicha(
     score_prioridad: score,
     ficha_ia: ficha,
     notas_vendedor: contextoVendedor ?? null,
+    razon_perdido: null,
+    fecha_reactivacion: null,
   };
 
   // Buscar si ya existe una empresa con esta URL
