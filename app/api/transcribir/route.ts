@@ -1,37 +1,52 @@
 // =============================================================
 // POST /api/transcribir
-// Recibe un archivo de audio como FormData, lo sube al bucket
-// "Llamadas" en Supabase Storage y lo transcribe con Whisper.
-// Requiere: SUPABASE_SERVICE_ROLE_KEY y OPENAI_API_KEY en .env.local
-// Límite práctico: ~25 MB (MP3/M4A). WAV no recomendado por tamaño.
+// Convierte CUALQUIER formato de audio a MP3 con ffmpeg antes de
+// enviarlo a Whisper — resuelve el 400 con .mp4 de WhatsApp y
+// cualquier otro formato raro.
+// Flujo: recibe archivo → guarda en /tmp → convierte a mp3 →
+//        envía a Whisper → sube original a Supabase → limpia /tmp
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI, { toFile } from "openai";
 import { createClient } from "@supabase/supabase-js";
+import Ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "ffmpeg-static";
+import * as fs from "fs";
+import * as path from "path";
 
 export const maxDuration = 300;
 
-// Todos los formatos que acepta Whisper
-const EXTENSIONES_PERMITIDAS = ["mp3", "mp4", "m4a", "wav", "mpeg", "mpga", "oga", "ogg", "flac", "webm"];
+// Todos los formatos que acepta el pipeline (ffmpeg los convierte todos)
+const EXTENSIONES_PERMITIDAS = [
+  "mp3", "mp4", "m4a", "wav", "mpeg", "mpga", "oga", "ogg", "flac", "webm",
+];
 
-// Siempre forzar tipos de audio — WhatsApp envía mp4 con tipo "video/mp4" que Whisper rechaza
-const MIME_POR_EXT: Record<string, string> = {
-  mp3:  "audio/mpeg",
-  mpeg: "audio/mpeg",
-  mpga: "audio/mpeg",
-  mp4:  "audio/mp4",
-  m4a:  "audio/mp4",
-  wav:  "audio/wav",
-  ogg:  "audio/ogg",
-  oga:  "audio/ogg",
-  flac: "audio/flac",
-  webm: "audio/webm",
-};
+// Configura el path del binario de ffmpeg
+if (ffmpegPath) Ffmpeg.setFfmpegPath(ffmpegPath);
+
+// Convuelve la conversión de fluent-ffmpeg en una Promise
+function convertirAMp3(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    Ffmpeg(inputPath)
+      .noVideo()                  // -vn: ignorar pista de video
+      .audioCodec("libmp3lame")   // -acodec mp3
+      .audioFrequency(16000)      // -ar 16000: sample rate óptimo para Whisper
+      .audioChannels(1)           // -ac 1: mono
+      .audioBitrate("64k")        // -ab 64k: bitrate suficiente para voz
+      .output(outputPath)
+      .on("end", () => resolve())
+      .on("error", (err: Error) => reject(err))
+      .run();
+  });
+}
 
 export async function POST(req: NextRequest) {
+  const timestamp = Date.now();
+  const inputPath  = path.join("/tmp", `input_${timestamp}`);
+  const outputPath = path.join("/tmp", `output_${timestamp}.mp3`);
+
   try {
-    // Verificar que las API keys estén configuradas
+    // ── Verificar API keys ──────────────────────────────────────
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json(
         { error: "SUPABASE_SERVICE_ROLE_KEY no está configurada en .env.local" },
@@ -45,6 +60,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Leer archivo del request ────────────────────────────────
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
 
@@ -55,56 +71,40 @@ export async function POST(req: NextRequest) {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     if (!EXTENSIONES_PERMITIDAS.includes(ext)) {
       return NextResponse.json(
-        { error: "Formato no soportado. Usa MP3, M4A, WAV o MP4." },
+        { error: `Formato no soportado: .${ext}. Usa MP3, M4A, MP4, WAV, OGG, FLAC o WEBM.` },
         { status: 400 }
       );
     }
 
-    // Cliente admin con service role para el bucket privado
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Nombre único en Storage: timestamp + nombre sanitizado
-    const timestamp = Date.now();
-    const nombreSeguro = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const pathStorage = `${timestamp}_${nombreSeguro}`;
+    // ── Guardar en /tmp con extensión original ──────────────────
+    const inputPathConExt = `${inputPath}.${ext}`;
+    fs.writeFileSync(inputPathConExt, buffer);
 
-    // Para .mp4 forzar siempre audio/mp4 — WhatsApp entrega video/mp4 que Whisper rechaza
-    const mimeType = ext === "mp4" ? "audio/mp4" : (MIME_POR_EXT[ext] ?? "audio/mpeg");
+    console.log("[transcribir] Archivo guardado en /tmp:", {
+      nombre: file.name,
+      ext,
+      tamaño_bytes: buffer.length,
+    });
 
-    // Subir al bucket "Llamadas" con el nombre original
-    const { data: storageData, error: storageError } = await supabaseAdmin.storage
-      .from("Llamadas")
-      .upload(pathStorage, buffer, {
-        contentType: mimeType,
-        upsert: false,
-      });
+    // ── Convertir a MP3 con ffmpeg ──────────────────────────────
+    await convertirAMp3(inputPathConExt, outputPath);
 
-    if (storageError) {
-      throw new Error(`Error al subir el audio: ${storageError.message}`);
-    }
+    const mp3Buffer = fs.readFileSync(outputPath);
 
-    // Construir FormData con Blob explícito para garantizar tipo audio/mp4.
-    // Usar fetch directo en vez del SDK — evita que toFile reinterprete el tipo.
-    const blob = new Blob([buffer], { type: mimeType });
+    console.log("[transcribir] Convertido a MP3:", {
+      tamaño_mp3_bytes: mp3Buffer.length,
+    });
+
+    // ── Enviar MP3 a Whisper ────────────────────────────────────
     const whisperForm = new FormData();
-    whisperForm.append("file", blob, ext === "mp4" ? "audio.m4a" : `audio.${ext}`);
+    const mp3Blob = new Blob([mp3Buffer], { type: "audio/mpeg" });
+    whisperForm.append("file", mp3Blob, "audio.mp3");
     whisperForm.append("model", "whisper-1");
     whisperForm.append("language", "es");
     whisperForm.append("response_format", "text");
-
-    const nombreWhisper = ext === "mp4" ? "audio.m4a" : `audio.${ext}`;
-    console.log("[transcribir] Enviando a Whisper:", {
-      nombre: nombreWhisper,
-      tipo: mimeType,
-      tamaño_bytes: buffer.length,
-      ext_original: ext,
-    });
 
     const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
@@ -124,14 +124,43 @@ export async function POST(req: NextRequest) {
 
     const transcripcion = await whisperResponse.text();
 
+    // ── Subir archivo ORIGINAL a Supabase Storage ───────────────
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    const nombreSeguro = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const pathStorage  = `${timestamp}_${nombreSeguro}`;
+    const mimeOriginal = ext === "mp4" || ext === "m4a" ? "audio/mp4" : "audio/mpeg";
+
+    const { data: storageData, error: storageError } = await supabaseAdmin.storage
+      .from("Llamadas")
+      .upload(pathStorage, buffer, { contentType: mimeOriginal, upsert: false });
+
+    if (storageError) {
+      // El audio ya está transcrito — solo loguear, no bloquear
+      console.error("[transcribir] Error al subir a Storage (no crítico):", storageError.message);
+    }
+
     return NextResponse.json({
       ok: true,
       transcripcion,
-      audio_url: storageData.path, // path dentro del bucket, no URL completa
+      audio_url: storageData?.path ?? null,
     });
 
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : "Error desconocido";
+    console.error("[transcribir] Error general:", mensaje);
     return NextResponse.json({ error: mensaje }, { status: 500 });
+  } finally {
+    // Limpiar archivos temporales — best-effort, no bloquea la respuesta
+    try {
+      for (const f of fs.readdirSync("/tmp")) {
+        if (f.startsWith(`input_${timestamp}`) || f.startsWith(`output_${timestamp}`)) {
+          fs.unlinkSync(path.join("/tmp", f));
+        }
+      }
+    } catch { /* ignorar errores de limpieza */ }
   }
 }
