@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Zap, Globe, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   Dialog,
   DialogContent,
@@ -144,10 +145,17 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
           {estado.fase === "idle" && (
             <>
               <div>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Pega la URL del sitio web de la empresa. La IA construirá
-                  la ficha completa con decisores, dolores y ángulo de entrada.
-                </p>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <p className="text-sm text-muted-foreground">
+                    Pega la URL del sitio web de la empresa. La IA construirá
+                    la ficha completa con decisores, dolores y ángulo de entrada.
+                  </p>
+                  <HelpTooltip
+                    titulo="¿Para qué sirve investigar?"
+                    explicacion="La IA lee el sitio web de la empresa y te prepara una ficha completa: qué les puedes vender, quiénes son los decisores clave y cómo abordarlos."
+                    ejemplo={"Pega la URL: www.coexpan.cl y en 30 segundos tendrás todo lo que necesitas saber antes de llamar."}
+                  />
+                </div>
                 <div className="relative">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <input
@@ -162,10 +170,17 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  Lo que ya sé sobre esta empresa{" "}
-                  <span className="font-normal">(opcional)</span>
-                </label>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Lo que ya sé sobre esta empresa{" "}
+                    <span className="font-normal">(opcional)</span>
+                  </label>
+                  <HelpTooltip
+                    titulo="¿Para qué sirve este campo?"
+                    explicacion="Agrega información que solo tú sabes y que no está en internet. La IA la incorpora al análisis para hacerlo más preciso y personalizado."
+                    ejemplo={"Ej: 'Hablé con alguien del mercado, me dijeron que tuvieron 3 rechazos este mes con su proveedor actual de etiquetas.'"}
+                  />
+                </div>
                 <textarea
                   value={contexto}
                   onChange={(e) => setContexto(e.target.value)}

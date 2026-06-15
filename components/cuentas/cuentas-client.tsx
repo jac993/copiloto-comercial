@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Zap, Building2, Search, List, Columns3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EmpresaCard } from "@/components/cuentas/empresa-card";
 import { VistaKanban } from "@/components/cuentas/vista-kanban";
 import { InvestigarDialog } from "@/components/cuentas/investigar-dialog";
@@ -49,7 +50,13 @@ export function CuentasClient({ empresas, empresasVencidasIds }: CuentasClientPr
             </div>
 
             {/* Toggle lista / pipeline */}
-            <div className="flex items-center border border-input rounded-xl overflow-hidden shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+            <HelpTooltip
+              titulo="¿Cómo funciona el pipeline?"
+              explicacion="Muestra en qué etapa está cada empresa. Cambia el estado desde la ficha de cada empresa según cómo avanza la conversación."
+              ejemplo={"Prospecto → la contactaste por primera vez.\nContactado → respondió.\nEn conversación → hay intercambio activo.\nCotizado → enviaste propuesta."}
+            />
+            <div className="flex items-center border border-input rounded-xl overflow-hidden">
               <button
                 onClick={() => cambiarVista("lista")}
                 className={`h-10 w-10 flex items-center justify-center transition-colors ${
@@ -72,6 +79,7 @@ export function CuentasClient({ empresas, empresasVencidasIds }: CuentasClientPr
               >
                 <Columns3 className="h-4 w-4" />
               </button>
+            </div>
             </div>
           </div>
 

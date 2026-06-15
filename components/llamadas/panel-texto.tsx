@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EmpresaSelector } from "./empresa-selector";
 import type { Empresa, Contacto, ResultadoAnalisis, TipoInteraccion } from "@/lib/types";
 
@@ -14,6 +15,27 @@ interface PanelTextoProps {
   empresas: Empresa[];
   onResultado: (resultado: ResultadoAnalisis, empresaId: string, interaccionId: string) => void;
 }
+
+const HELP_CONFIG: Record<
+  Extract<TipoInteraccion, "email" | "linkedin" | "whatsapp">,
+  { titulo: string; explicacion: string; ejemplo: string }
+> = {
+  email: {
+    titulo: "¿Qué debo pegar aquí?",
+    explicacion: "Pega el hilo completo del correo — tanto lo que escribiste tú como lo que respondió el prospecto. La IA necesita ver ambos lados para darte un análisis útil.",
+    ejemplo: "Copia desde Gmail el hilo completo: tu mensaje + la respuesta del cliente. Si es una cadena larga, copia los últimos 2-3 intercambios.",
+  },
+  linkedin: {
+    titulo: "¿Qué debo pegar aquí?",
+    explicacion: "Pega el hilo de mensajes de LinkedIn — lo que escribiste tú y lo que respondió el prospecto. Abre la conversación en LinkedIn, selecciona todos los mensajes y copia.",
+    ejemplo: "Tú: Hola Juan, te contacto porque vi que Coexpan estuvo en EXPO PACK...\nJuan: Hola, sí efectivamente...",
+  },
+  whatsapp: {
+    titulo: "¿Qué debo pegar aquí?",
+    explicacion: "Pega el hilo completo de WhatsApp — tus mensajes y los del prospecto. En WhatsApp: mantén presionado un mensaje → Más → selecciona todos → Copiar → pegar aquí.",
+    ejemplo: "14/06/2026 - Tú: Buenos días...\n14/06/2026 - Juan: Hola, gracias...",
+  },
+};
 
 const CONFIG: Record<
   Extract<TipoInteraccion, "email" | "linkedin" | "whatsapp">,
@@ -120,9 +142,12 @@ export function PanelTexto({ tipo, empresas, onResultado }: PanelTextoProps) {
 
       {/* Textarea principal */}
       <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-          {conf.labelTexto}
-        </p>
+        <div className="flex items-center gap-1.5 mb-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            {conf.labelTexto}
+          </p>
+          <HelpTooltip {...HELP_CONFIG[tipo]} />
+        </div>
         <textarea
           value={texto}
           onChange={(e) => setTexto(e.target.value)}

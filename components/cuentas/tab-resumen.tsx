@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Zap, Tag, AlertTriangle, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -136,9 +137,16 @@ export function TabResumen({ ficha, empresaId, notasVendedor }: TabResumenProps)
           )}
 
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              Agrega contexto nuevo
-            </label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Agrega contexto nuevo
+              </label>
+              <HelpTooltip
+                titulo="¿Cuándo regenerar?"
+                explicacion="Úsalo cuando tengas información nueva sobre la empresa que cambia el ángulo de entrada. No lo uses sin escribir contexto nuevo — el botón no hace nada si está vacío."
+                ejemplo={"Ej: después de hablar con alguien del mercado que te dio datos internos de la empresa."}
+              />
+            </div>
             <textarea
               value={contextoNuevo}
               onChange={(e) => setContextoNuevo(e.target.value)}
@@ -275,9 +283,16 @@ function ContextoVerificacion({
       {/* Lo que yo sé — read only */}
       <Card className="border-amber-200 dark:border-amber-800/30 bg-amber-50/50 dark:bg-amber-900/5">
         <CardContent className="pt-4 pb-4">
-          <p className="text-xs font-semibold text-amber-700 dark:text-amber-500 uppercase tracking-wide mb-1.5">
-            Lo que yo sé
-          </p>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-500 uppercase tracking-wide">
+              Lo que yo sé
+            </p>
+            <HelpTooltip
+              titulo="¿Para qué sirve este campo?"
+              explicacion="Agrega información que solo tú sabes y que no está en internet. La IA la incorpora al análisis para hacerlo más preciso y personalizado."
+              ejemplo={"Ej: 'Hablé con alguien del mercado, me dijeron que tuvieron 3 rechazos este mes con su proveedor actual de etiquetas.'"}
+            />
+          </div>
           <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed whitespace-pre-line">
             {notasVendedor}
           </p>

@@ -7,6 +7,7 @@
 import { useState, useRef } from "react";
 import { Mic, Upload, FileAudio } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EmpresaSelector } from "./empresa-selector";
 import type { Empresa, Contacto, ResultadoAnalisis } from "@/lib/types";
 
@@ -131,7 +132,14 @@ export function UploadLlamada({ empresas, onResultado }: UploadLlamadaProps) {
               <Upload className="h-7 w-7 text-primary" />
             </div>
             <div className="text-center">
-              <p className="font-semibold text-sm">Selecciona el audio</p>
+              <div className="flex items-center justify-center gap-1.5">
+                <p className="font-semibold text-sm">Selecciona el audio</p>
+                <HelpTooltip
+                  titulo="¿Cómo subir una llamada?"
+                  explicacion="Graba tu llamada con la app de notas de voz de tu celular. La IA transcribe todo y te da coaching de lo que hiciste bien y qué mejorar."
+                  ejemplo={"Formatos aceptados: .m4a, .mp3, .wav. Graba con la app 'Notas de voz' de tu iPhone o Android y mándatela por email."}
+                />
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">MP3, M4A, MP4, OGG, FLAC, WEBM · máx ~25 MB</p>
             </div>
           </button>

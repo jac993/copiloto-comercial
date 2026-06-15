@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import type { Contacto, DecisorIA } from "@/lib/types";
 
 const AREA_LABEL: Record<string, string> = {
@@ -70,9 +71,16 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
       {/* Decisores sugeridos por IA (pendientes de encontrar) */}
       {decisoresSugeridos.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-            {contactos.length > 0 ? "Buscar también" : "A quién buscar"}
-          </p>
+          <div className="flex items-center gap-1.5 mb-2 px-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              {contactos.length > 0 ? "Buscar también" : "A quién buscar"}
+            </p>
+            <HelpTooltip
+              titulo="¿Para qué sirven los decisores?"
+              explicacion="Son las personas clave dentro de la empresa a las que debes contactar. Cada cargo tiene un dolor diferente — hablarle al de Calidad es muy distinto que hablarle al de Compras."
+              ejemplo={"Busca primero al Jefe de Calidad u Operaciones — ellos sienten el dolor real. Compras decide formalmente pero no impulsa el cambio."}
+            />
+          </div>
           <div className="space-y-2">
             {decisoresSugeridos.map((decisor, i) => (
               <DecisorSugeridoCard

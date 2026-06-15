@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Copy, CheckCheck, HelpCircle, Clock, MessageSquare } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { FichaIA, Interaccion, Compromiso } from "@/lib/types";
@@ -31,10 +32,17 @@ export function TabPreparacion({ ficha, ultimaInteraccion, notasVendedor }: TabP
     <div className="space-y-4 pb-6">
       {/* Preguntas SPIN */}
       <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
-          <HelpCircle className="h-3.5 w-3.5" />
-          Preguntas SPIN para esta empresa
-        </p>
+        <div className="flex items-center gap-1.5 mb-2 px-1">
+          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Preguntas SPIN para esta empresa
+          </p>
+          <HelpTooltip
+            titulo="¿Cómo usar estas preguntas?"
+            explicacion="Son preguntas diseñadas para que el cliente descubra solo que tiene un problema. No las leas literalmente — úsalas como guía para la conversación."
+            ejemplo={"En vez de decir 'tenemos etiquetas de mejor calidad', pregunta:\n'¿Con qué frecuencia les ocurre que rechazan un lote por problemas de etiquetado?'"}
+          />
+        </div>
         <Card>
           <CardContent className="pt-4 pb-2">
             {ficha.preguntas_spin.map((pregunta, i) => {
