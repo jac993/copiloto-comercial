@@ -42,6 +42,14 @@ interface MetricasHoy {
   resumen_dia_cache: string | null;
 }
 
+// Feedback de coaching que devuelve la API tras guardar misiones
+interface FeedbackItem {
+  empresa_id: string;
+  nombre_empresa: string;
+  resultado: ResultadoMision;
+  feedback_ia: string;
+}
+
 // Subconjunto mínimo de empresa que necesita la tarjeta de prioridad
 interface EmpresaResumen {
   nombre: string;
@@ -96,6 +104,7 @@ export function HoyClient() {
   const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
   const [guardandoReporte, setGuardandoReporte] = useState(false);
   const [reporteGuardado, setReporteGuardado] = useState(false);
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
   const prevContactosRef = useRef(0);
 
   const cargarMetricas = useCallback(async () => {
@@ -165,11 +174,11 @@ export function HoyClient() {
   };
 
   const abrirDialogReporte = () => {
-    // Pre-seleccionar "completada" para todas como punto de partida
     const init: Record<string, ResultadoMision> = {};
     prioridades.forEach((p) => { init[p.empresa_id] = "completada"; });
     setResultados(init);
     setReporteGuardado(false);
+    setFeedbacks([]);
     setDialogReporte(true);
   };
 
@@ -187,10 +196,14 @@ export function HoyClient() {
         body: JSON.stringify({ misiones }),
       });
       if (!res.ok) throw new Error("Error al guardar");
+      const data = await res.json() as { ok: boolean; feedbacks?: FeedbackItem[] };
+      const fbConTexto = (data.feedbacks ?? []).filter((f) => f.feedback_ia);
+      setFeedbacks(fbConTexto);
       setReporteGuardado(true);
-      setTimeout(() => setDialogReporte(false), 1200);
+      // Si no hay feedback de IA, cerrar automáticamente
+      if (fbConTexto.length === 0) setTimeout(() => setDialogReporte(false), 1200);
     } catch {
-      // El error se maneja con el estado guardandoReporte falso
+      // No interrumpir UI si falla
     } finally {
       setGuardandoReporte(false);
     }
@@ -424,12 +437,29 @@ export function HoyClient() {
         <DialogContent className="max-w-sm mx-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ClipboardCheck className="h-5 w-5 text-[#22C55E]" />
-              ¿Cómo resultó el día?
+              {reporteGuardado && feedbacks.length > 0 ? (
+                <>🎯 Tu coaching de hoy</>
+              ) : (
+                <>
+                  <ClipboardCheck className="h-5 w-5 text-[#22C55E]" />
+                  ¿Cómo resultó el día?
+                </>
+              )}
             </DialogTitle>
           </DialogHeader>
 
-          {reporteGuardado ? (
+          {reporteGuardado && feedbacks.length > 0 ? (
+            // Paso 2: mostrar coaching de la IA
+            <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+              <p className="text-xs text-muted-foreground text-center pb-1">
+                Basado en lo que reportaste hoy
+              </p>
+              {feedbacks.map((fb) => (
+                <CoachingCard key={fb.empresa_id} feedback={fb} />
+              ))}
+            </div>
+          ) : reporteGuardado ? (
+            // Paso 2 fallback: éxito simple sin IA
             <div className="py-8 flex flex-col items-center gap-3">
               <div className="h-14 w-14 rounded-full bg-[#22C55E]/15 flex items-center justify-center">
                 <CheckCircle2 className="h-7 w-7 text-[#22C55E]" />
@@ -475,8 +505,12 @@ export function HoyClient() {
             </div>
           )}
 
-          {!reporteGuardado && (
-            <DialogFooter>
+          <DialogFooter>
+            {reporteGuardado && feedbacks.length > 0 ? (
+              <Button className="w-full" onClick={() => setDialogReporte(false)}>
+                Entendido 👍
+              </Button>
+            ) : !reporteGuardado ? (
               <Button
                 className="w-full gap-2"
                 onClick={guardarReporte}
@@ -487,10 +521,10 @@ export function HoyClient() {
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}
-                {guardandoReporte ? "Guardando..." : "Guardar resultados"}
+                {guardandoReporte ? "Analizando tu día... ⚡" : "Guardar resultados"}
               </Button>
-            </DialogFooter>
-          )}
+            ) : null}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -665,6 +699,33 @@ function StatCard({
         <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Card de coaching post-misión ─────────────────────────────
+
+const RESULTADO_LABEL: Record<ResultadoMision, string> = {
+  completada: "✅ Completada",
+  parcial: "🔄 Parcial",
+  no_ejecutada: "❌ No ejecutada",
+};
+
+function CoachingCard({ feedback }: { feedback: FeedbackItem }) {
+  return (
+    <div
+      className="rounded-2xl p-4 space-y-2.5"
+      style={{ background: "#F5F3FF", border: "1px solid rgba(124,58,237,0.15)" }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold text-sm text-[#7C3AED]">{feedback.nombre_empresa}</p>
+        <span className="text-[11px] text-muted-foreground shrink-0">
+          {RESULTADO_LABEL[feedback.resultado]}
+        </span>
+      </div>
+      <p className="text-xs leading-relaxed whitespace-pre-wrap text-foreground/80">
+        {feedback.feedback_ia}
+      </p>
+    </div>
   );
 }
 
