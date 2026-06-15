@@ -34,7 +34,7 @@ export default async function CuentasPage() {
         <div className="flex h-16 items-center justify-between px-5">
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="text-lg font-semibold">Cuentas</h1>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-[#7C3AED]">Cuentas</h1>
               <HelpTooltip
                 titulo="¿Qué son las cuentas?"
                 explicacion="Son las empresas que estás prospectando o que ya son tus clientes. Cada cuenta tiene su ficha completa con análisis de IA, decisores y todo el historial de contacto."

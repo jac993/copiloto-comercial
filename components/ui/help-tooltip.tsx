@@ -22,10 +22,10 @@ export function HelpTooltip({ titulo, explicacion, ejemplo }: HelpTooltipProps) 
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-        className="inline-flex items-center justify-center h-5 w-5 rounded-full border border-border bg-background text-muted-foreground text-[11px] font-semibold leading-none hover:border-primary hover:bg-primary/10 hover:text-primary transition-colors shrink-0 select-none"
+        className="inline-flex items-center justify-center h-[22px] w-[22px] rounded-full border border-[#7C3AED]/40 bg-background text-[#7C3AED] text-[11px] font-bold leading-none shadow-sm shadow-[#7C3AED]/10 hover:bg-[#7C3AED] hover:text-white hover:border-[#7C3AED] transition-all shrink-0 select-none"
         aria-label={`Ayuda: ${titulo}`}
       >
-        ?
+        i
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>

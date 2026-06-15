@@ -105,7 +105,7 @@ export default function RendimientoPage() {
           <div>
             <p className="text-white/70 text-sm font-medium">Tu progreso</p>
             <div className="flex items-center gap-2 mt-1">
-              <h1 className="text-white text-2xl font-semibold">Rendimiento</h1>
+              <h1 className="text-white text-2xl md:text-3xl font-extrabold">Rendimiento</h1>
               <HelpTooltip
                 titulo="¿Para qué sirve esta pantalla?"
                 explicacion="Muestra tu historial de evaluaciones semanales generadas por IA. Cada semana la IA analiza tus misiones, contactos y resultados para darte coaching específico."

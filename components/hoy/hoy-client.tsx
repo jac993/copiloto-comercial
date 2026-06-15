@@ -215,7 +215,7 @@ export function HoyClient() {
           <div>
             <p className="text-white/80 text-sm font-medium capitalize">{hoy}</p>
             <div className="flex items-center gap-2 mt-1">
-              <h1 className="text-white text-2xl font-semibold">Buenos días 👋</h1>
+              <h1 className="text-white text-2xl md:text-3xl font-extrabold">Buenos días 👋</h1>
               <HelpTooltip
                 titulo="¿Para qué sirve esta pantalla?"
                 explicacion="Es tu agenda diaria. Muestra las 5 cuentas más importantes para contactar hoy, ordenadas por prioridad. Cada mañana revísala antes de empezar a trabajar."

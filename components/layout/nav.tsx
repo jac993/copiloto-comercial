@@ -21,9 +21,9 @@ const navItems = [
   },
   {
     href: "/llamadas",
-    label: "Llamadas",
+    label: "Interacciones",
     icon: Mic,
-    description: "Transcripciones y coaching",
+    description: "Registro de interacciones con IA",
   },
   {
     href: "/rendimiento",
@@ -84,15 +84,8 @@ export function Sidebar() {
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:left-0 md:z-50 border-r border-border bg-background">
       {/* Logo / nombre de la app */}
       <div className="flex h-16 items-center px-6 border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-xl bg-primary flex items-center justify-center">
-            <span className="text-white font-bold text-sm">CC</span>
-          </div>
-          <div>
-            <p className="font-semibold text-sm leading-none">Copiloto</p>
-            <p className="text-xs text-muted-foreground leading-none mt-0.5">Comercial</p>
-          </div>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png.png" alt="Copiloto Comercial" style={{ height: 40 }} />
       </div>
 
       {/* Links de navegación */}

@@ -111,7 +111,7 @@ export function LlamadasClient({ empresas }: LlamadasClientProps) {
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="flex h-16 items-center justify-between px-5">
           <div className="flex items-center gap-1.5">
-            <h1 className="text-lg font-semibold">Interacciones</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-[#7C3AED]">Interacciones</h1>
             <HelpTooltip
               titulo="¿Para qué sirve esta sección?"
               explicacion="Aquí registras todas tus interacciones comerciales para que la IA las analice y te dé coaching. Puedes subir llamadas grabadas o pegar conversaciones de correo, WhatsApp y LinkedIn."

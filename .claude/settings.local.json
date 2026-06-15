@@ -37,7 +37,8 @@
       "Bash(npx supabase *)",
       "Bash(where supabase *)",
       "Bash(cd \"C:\\\\Users\\\\Jose Antonio Castro\\\\Desktop\\\\copiloto-comercial\" && grep -n \"Evaluacion\\\\|Rendimiento\\\\|evaluacion\\\\|rendimiento\" lib/types.ts | head -40)",
-      "Bash(cd \"C:\\\\Users\\\\Jose Antonio Castro\\\\Desktop\\\\copiloto-comercial\" && grep -n \"Evaluacion\\\\|Rendimiento\\\\|evaluacion\\\\|rendimiento\" lib/queries.ts | head -30)"
+      "Bash(cd \"C:\\\\Users\\\\Jose Antonio Castro\\\\Desktop\\\\copiloto-comercial\" && grep -n \"Evaluacion\\\\|Rendimiento\\\\|evaluacion\\\\|rendimiento\" lib/queries.ts | head -30)",
+      "Bash(gh run *)"
     ]
   }
 }
