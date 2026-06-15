@@ -99,6 +99,7 @@ export type EstadoEmpresa =
 
 export type AreaContacto =
   | "adquisiciones"
+  | "compras"
   | "calidad"
   | "operaciones"
   | "gerencia"

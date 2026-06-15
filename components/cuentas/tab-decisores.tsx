@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, UserPlus, User, CheckCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Contacto, DecisorIA } from "@/lib/types";
@@ -31,6 +32,19 @@ interface TabDecisoresProps {
 }
 
 export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisoresProps) {
+  const router = useRouter();
+  const [actualizando, setActualizando] = useState(false);
+
+  const actualizarDecisores = async () => {
+    setActualizando(true);
+    try {
+      await fetch(`/api/empresas/${empresaId}/regenerar-decisores`, { method: "POST" });
+      router.refresh();
+    } finally {
+      setActualizando(false);
+    }
+  };
+
   // Mostrar los contactos ya registrados primero, luego los sugeridos por IA no registrados
   const cargoRegistrado = new Set(contactos.map((c) => c.cargo));
   const decisoresSugeridos = decisoresIA.filter(
@@ -77,6 +91,16 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
           <p className="text-sm">Sin decisores identificados</p>
         </div>
       )}
+
+      {/* Botón para regenerar los decisores sugeridos con Claude */}
+      <button
+        onClick={actualizarDecisores}
+        disabled={actualizando}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 mx-auto mt-2"
+      >
+        <RefreshCw className={`h-3 w-3 ${actualizando ? "animate-spin" : ""}`} />
+        {actualizando ? "Actualizando decisores..." : "↻ Actualizar decisores"}
+      </button>
     </div>
   );
 }

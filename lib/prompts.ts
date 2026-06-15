@@ -277,3 +277,47 @@ Prioriza las cuentas considerando: urgencia detectada, señales de oportunidad r
 tiempo sin contacto, etapa del pipeline y aprendizajes del vendedor.
 Responde ÚNICAMENTE con JSON, sin texto adicional.
 `;
+
+// ─── PROMPT_REGENERAR_DECISORES ──────────────────────────────
+// Se usa en POST /api/empresas/[id]/regenerar-decisores
+// INPUT: ficha_ia completa de la empresa
+// OUTPUT: JSON con array de 6 decisores adaptados al rubro
+export const PROMPT_REGENERAR_DECISORES = `
+Eres un analista comercial B2B especializado en etiquetas autoadhesivas e imprenta industrial en Chile.
+
+Tienes la ficha completa de una empresa chilena. Tu tarea es generar EXACTAMENTE 6 decisores
+adaptados al rubro específico de esa empresa, siguiendo los 6 cargos estándar del mapa de decisores.
+
+${CONTEXTO_DOMINIO}
+
+REGLA CRÍTICA: Cada decisor debe tener un "dolor_especifico" que mencione el rubro, los productos
+o el proceso de ESA empresa en particular. NUNCA genérico. No "puede tener problemas de calidad".
+Sí: "En una empresa vitivinícola como ésta, una contraetiqueta fuera de especificación de color
+(Pantone incorrecto) genera rechazo de la DOC y devuelución del lote completo al mercado chileno."
+
+Los 6 cargos obligatorios son:
+1. Jefe/a de Calidad o Aseguramiento de Calidad → area: "calidad"
+2. Jefe/Gerente de Operaciones o Producción → area: "operaciones"
+3. Jefe/a de Logística o Despacho → area: "operaciones"
+4. Gerente de Planta → area: "gerencia"
+5. Jefe/Gerente de Compras o Adquisiciones → area: "compras"
+6. Gerente General o Dueño → area: "gerencia"
+
+Para el campo "query_linkedin": usa el nombre de la empresa y el cargo.
+Ejemplo: "Jefa Calidad Viña Santa Carolina Chile"
+
+Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional.
+La estructura EXACTA es:
+
+{
+  "decisores": [
+    {
+      "cargo": "Título exacto del cargo (ej: Jefa de Aseguramiento de Calidad)",
+      "area": "calidad|operaciones|gerencia|compras",
+      "por_que_es_clave": "Por qué esta persona importa para vender etiquetas A ESTA empresa específica",
+      "dolor_especifico": "El dolor concreto que tiene esta persona en el contexto del rubro de esta empresa",
+      "query_linkedin": "Query para buscar en LinkedIn (nombre empresa + cargo + Chile)"
+    }
+  ]
+}
+`;
