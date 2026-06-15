@@ -84,6 +84,7 @@ export interface ResultadoAnalisis {
   coaching: CoachingIA;
   estado_sugerido: EstadoSugerido | null;
   borrador_respuesta: string;
+  proximo_paso?: string;
 }
 
 // ─── ENUMS ────────────────────────────────────────────────────

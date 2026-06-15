@@ -156,16 +156,18 @@ ${encabezadoEmail}${texto.trim()}
       throw new Error("Error parseando respuesta de IA. Intenta de nuevo.");
     }
 
-    // ── Calcular próximo paso ──
-    // Si hay compromisos, seguimiento en 3 días hábiles; si no, en 7
+    // ── Próximo paso ──
+    // Prefiere el campo proximo_paso generado por Claude (más específico y accionable).
+    // Fallback: deriva del primer compromiso. Fecha: 3 días si hay compromisos, 7 si no.
     const proximoPasoFecha = resultado.compromisos.length > 0
       ? sumarDiasHabiles(3)
       : sumarDiasHabiles(7);
 
     const primerCompromiso = resultado.compromisos[0];
-    const proximoPasoTexto = primerCompromiso
-      ? `${primerCompromiso.quien}: ${primerCompromiso.que}`
-      : "Revisar resultado del análisis";
+    const proximoPasoTexto = resultado.proximo_paso?.trim()
+      || (primerCompromiso
+        ? `${primerCompromiso.quien}: ${primerCompromiso.que}`
+        : "Revisar resultado del análisis");
 
     // ── Guardar interacción en DB ──
     // El análisis completo (coaching + borrador + señales) se persiste en coaching_ia
