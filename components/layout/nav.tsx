@@ -83,9 +83,9 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:left-0 md:z-50 border-r border-border bg-background">
       {/* Logo / nombre de la app */}
-      <div className="flex h-16 items-center px-6 border-b border-border">
+      <div className="flex h-28 items-center justify-center pt-2 border-b border-border">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png.png" alt="Copiloto Comercial" style={{ height: 72, width: "auto" }} />
+        <img src="/logo.png.png" alt="Copiloto Comercial" style={{ height: 96, width: "auto" }} />
       </div>
 
       {/* Links de navegación */}
