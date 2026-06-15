@@ -85,7 +85,7 @@ export function Sidebar() {
       {/* Logo / nombre de la app */}
       <div className="flex h-16 items-center px-6 border-b border-border">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png.png" alt="Copiloto Comercial" style={{ height: 40 }} />
+        <img src="/logo.png.png" alt="Copiloto Comercial" style={{ height: 56 }} />
       </div>
 
       {/* Links de navegación */}
