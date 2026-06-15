@@ -10,10 +10,10 @@ import { useState, useEffect, useCallback } from "react";
 import {
   BarChart2, Zap, TrendingUp, Award, Target,
   ChevronDown, ChevronUp, AlertCircle, Loader2,
-  CheckCircle2, MinusCircle, XCircle,
+  CheckCircle2, MinusCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import type { EvaluacionSemanal, RendimientoEjecutivo } from "@/lib/types";
@@ -200,7 +200,7 @@ export default function RendimientoPage() {
                 <div className="space-y-1.5 max-w-xs">
                   <p className="font-semibold">Sin evaluaciones aún</p>
                   <p className="text-sm text-muted-foreground">
-                    Al terminar la semana, aprieta "Evaluar semana" para recibir
+                    Al terminar la semana, aprieta &quot;Evaluar semana&quot; para recibir
                     coaching personalizado basado en tus resultados reales.
                   </p>
                 </div>
