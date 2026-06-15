@@ -8,6 +8,7 @@ import type { Contacto, DecisorIA } from "@/lib/types";
 
 const AREA_LABEL: Record<string, string> = {
   adquisiciones: "Adquisiciones",
+  compras: "Compras",
   calidad: "Calidad",
   operaciones: "Operaciones",
   gerencia: "Gerencia",
@@ -18,6 +19,7 @@ const AREA_COLOR: Record<string, string> = {
   calidad: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   operaciones: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   adquisiciones: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  compras: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   gerencia: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
   otro: "bg-muted text-muted-foreground",
 };
@@ -145,7 +147,8 @@ function DecisorSugeridoCard({
   decisor: DecisorIA;
   empresaId: string;
 }) {
-  const [agregado, setAgregado] = useState(false);
+  // Lista de contactos ya agregados para este cargo (permite múltiples)
+  const [agregados, setAgregados] = useState<string[]>([]);
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [mostrando, setMostrando] = useState(false);
@@ -170,23 +173,14 @@ function DecisorSugeridoCard({
           notas_ia: `${decisor.por_que_es_clave}\n\nDolor: ${decisor.dolor_especifico}`,
         }),
       });
-      setAgregado(true);
+      setAgregados((prev) => [...prev, nombre.trim()]);
+      setNombre("");
+      setTelefono("");
+      setMostrando(false);
     } finally {
       setGuardando(false);
-      setMostrando(false);
     }
   };
-
-  if (agregado) {
-    return (
-      <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30">
-        <CheckCircle className="h-4 w-4 text-green-600" />
-        <p className="text-sm text-green-700 dark:text-green-400">
-          {nombre} agregado como contacto
-        </p>
-      </div>
-    );
-  }
 
   return (
     <Card className="border-dashed">
@@ -208,6 +202,21 @@ function DecisorSugeridoCard({
           </div>
         </div>
 
+        {/* Contactos ya agregados para este cargo */}
+        {agregados.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            {agregados.map((n, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400"
+              >
+                <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{n} agregado</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-2 mt-3">
           {/* Buscar en LinkedIn */}
           <Button
@@ -226,7 +235,7 @@ function DecisorSugeridoCard({
             </a>
           </Button>
 
-          {/* Agregar cuando lo encuentres */}
+          {/* Agregar / Agregar otro — siempre visible */}
           <Button
             variant="outline"
             size="sm"
@@ -234,7 +243,7 @@ function DecisorSugeridoCard({
             onClick={() => setMostrando(!mostrando)}
           >
             <UserPlus className="h-3.5 w-3.5" />
-            Agregar
+            {agregados.length > 0 ? "+ Agregar otro" : "Agregar"}
           </Button>
         </div>
 

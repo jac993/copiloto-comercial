@@ -4,10 +4,20 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Phone, Users, Mail, MessageCircle,
-  ChevronDown, ChevronUp, Upload, Zap, Clock,
+  ChevronDown, ChevronUp, Upload, Zap, Clock, Trash2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Interaccion } from "@/lib/types";
 
 const TIPO_CONFIG: Record<
@@ -41,12 +51,27 @@ interface TabHistorialProps {
   empresaId: string;
 }
 
-export function TabHistorial({ interacciones, empresaId }: TabHistorialProps) {
+export function TabHistorial({ interacciones: interaccionesIniciales, empresaId }: TabHistorialProps) {
   const router = useRouter();
+  const [lista, setLista] = useState(interaccionesIniciales);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
+
+  const eliminar = async () => {
+    if (!confirmandoId) return;
+    setEliminandoId(confirmandoId);
+    setConfirmandoId(null);
+    try {
+      await fetch(`/api/interacciones/${confirmandoId}`, { method: "DELETE" });
+      setLista((prev) => prev.filter((i) => i.id !== confirmandoId));
+    } finally {
+      setEliminandoId(null);
+    }
+  };
 
   return (
     <div className="space-y-3 pb-24">
-      {interacciones.length === 0 ? (
+      {lista.length === 0 ? (
         <div className="text-center py-10 space-y-3">
           <Clock className="h-10 w-10 mx-auto text-muted-foreground opacity-30" />
           <p className="text-sm text-muted-foreground">Sin interacciones aún</p>
@@ -55,10 +80,36 @@ export function TabHistorial({ interacciones, empresaId }: TabHistorialProps) {
           </p>
         </div>
       ) : (
-        interacciones.map((interaccion) => (
-          <EntradaTimeline key={interaccion.id} interaccion={interaccion} />
+        lista.map((interaccion) => (
+          <EntradaTimeline
+            key={interaccion.id}
+            interaccion={interaccion}
+            eliminando={eliminandoId === interaccion.id}
+            onEliminar={() => setConfirmandoId(interaccion.id)}
+          />
         ))
       )}
+
+      {/* Dialog de confirmación de eliminación */}
+      <AlertDialog open={confirmandoId !== null} onOpenChange={(open: boolean) => { if (!open) setConfirmandoId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esta interacción?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={eliminar}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Botón flotante para subir nueva llamada */}
       <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
@@ -75,7 +126,15 @@ export function TabHistorial({ interacciones, empresaId }: TabHistorialProps) {
   );
 }
 
-function EntradaTimeline({ interaccion }: { interaccion: Interaccion }) {
+function EntradaTimeline({
+  interaccion,
+  eliminando,
+  onEliminar,
+}: {
+  interaccion: Interaccion;
+  eliminando: boolean;
+  onEliminar: () => void;
+}) {
   const [expandida, setExpandida] = useState(false);
   const tipoConf = TIPO_CONFIG[interaccion.tipo] ?? TIPO_CONFIG.llamada;
   const Icon = tipoConf.Icon;
@@ -85,7 +144,7 @@ function EntradaTimeline({ interaccion }: { interaccion: Interaccion }) {
       : "border-l-4 border-l-gray-200";
 
   return (
-    <Card className={`overflow-hidden ${bordeSentimiento}`}>
+    <Card className={`overflow-hidden transition-opacity ${eliminando ? "opacity-40 pointer-events-none" : ""} ${bordeSentimiento}`}>
       <CardContent className="pt-4 pb-3">
         {/* Cabecera de la entrada */}
         <div className="flex items-start justify-between gap-2">
@@ -106,6 +165,13 @@ function EntradaTimeline({ interaccion }: { interaccion: Interaccion }) {
                 {interaccion.tecnica_usada}
               </span>
             )}
+            <button
+              onClick={onEliminar}
+              className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
+              aria-label="Eliminar interacción"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-destructive/60 hover:text-destructive transition-colors" />
+            </button>
             <button
               onClick={() => setExpandida(!expandida)}
               className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors"

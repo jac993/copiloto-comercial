@@ -30,9 +30,11 @@ MAPA DE DECISORES — quién tiene el dolor real y cómo venderle:
    Dolor: la línea para porque se acabaron las etiquetas, o hay re-etiquetados que detienen producción.
    Técnica: consultiva con énfasis en impacto operacional (cuántas horas de paro por mes por etiquetas).
 
-3. Jefe de Adquisiciones / Procurement → KPIs: precio unitario, tiempo de respuesta, condiciones.
-   Resistente al cambio. No ve el problema de calidad, solo ve el costo.
-   Técnica: relacional + TCO (costo total incluyendo NC, reprocesos, devoluciones).
+3. Jefe/Gerente de Compras o Adquisiciones → KPIs: precio unitario, plazo de entrega, homologación de proveedores.
+   Responsable formal del cambio de proveedor: puede aprobarlo o bloquearlo.
+   Dolor: presión por reducir costos sin interrumpir el suministro; riesgo reputacional si cambia de proveedor y algo falla.
+   Técnica: relacional + TCO (costo total de propiedad: precio unitario + NC + reprocesos + devoluciones + paro de línea).
+   Nota estratégica: es el GUARDIÁN, no el IMPULSOR del cambio. Nunca abrir por aquí; hacer que Calidad u Operaciones lo presionen internamente.
 
 4. Gerente de Planta / Producción → aprueba cambios que afectan la línea.
    Técnica: challenger con datos de la industria (qué hace la competencia, benchmarks de OEE).
@@ -105,7 +107,7 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
   "decisores": [
     {
       "cargo": "Cargo específico (ej: Jefa de Aseguramiento de Calidad)",
-      "area": "adquisiciones|calidad|operaciones|gerencia|otro",
+      "area": "adquisiciones|calidad|operaciones|gerencia|compras|otro",
       "por_que_es_clave": "Por qué esta persona nos importa para esta venta",
       "dolor_especifico": "Qué problema concreto tiene esta persona en esta empresa",
       "query_linkedin": "Query para buscar en LinkedIn (ej: 'Jefa Calidad Carozzi Chile')"
