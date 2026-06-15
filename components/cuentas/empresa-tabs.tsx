@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  FileText, Users, Clock, Clipboard,
+  FileText, Users, Clock, Clipboard, MessageSquare,
   ArrowLeft, Zap, Phone, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { TabResumen } from "@/components/cuentas/tab-resumen";
 import { TabDecisores } from "@/components/cuentas/tab-decisores";
 import { TabHistorial } from "@/components/cuentas/tab-historial";
 import { TabPreparacion } from "@/components/cuentas/tab-preparacion";
+import { TabChat } from "@/components/cuentas/tab-chat";
 import type { EmpresaCompleta, EstadoEmpresa, Interaccion } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ const TABS = [
   { id: "decisores", label: "Decisores", Icon: Users },
   { id: "historial", label: "Historial", Icon: Clock },
   { id: "preparacion", label: "Preparación", Icon: Clipboard },
+  { id: "chat", label: "Consultar", Icon: MessageSquare },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -170,10 +172,17 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
           />
         )}
         {tabActivo === "preparacion" && !ficha && <SinFicha />}
+
+        {tabActivo === "chat" && (
+          <TabChat
+            empresaId={empresa.id}
+            empresaNombre={empresa.nombre}
+          />
+        )}
       </div>
 
-      {/* Botón flotante de acción principal */}
-      {tabActivo !== "historial" && (
+      {/* Botón flotante de acción principal — oculto en chat para no tapar el input */}
+      {tabActivo !== "historial" && tabActivo !== "chat" && (
         <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
           <Button
             size="lg"
