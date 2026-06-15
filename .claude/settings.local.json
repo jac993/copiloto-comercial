@@ -13,7 +13,31 @@
       "Bash(npx next *)",
       "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\José Antonio Castro\\\\Desktop\\\\copiloto-comercial\\\\.next\" -ErrorAction SilentlyContinue)",
       "Bash(Write-Output \"listo\")",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(node -e ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npm run *)",
+      "Bash(npm uninstall *)",
+      "Bash(git commit *)",
+      "Bash(xargs grep -l \"historial\\\\|Historial\\\\|interacc\")",
+      "Bash(xargs grep -l \"decisores\\\\|Decisores\\\\|cargo_sugerido\\\\|agregar.*contacto\\\\|Agregar.*contacto\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\José Antonio Castro\\\\Desktop\\\\copiloto-comercial\\\\app\\\\api\\\\interacciones\\\\[id]\")",
+      "Bash(npx shadcn@latest add alert-dialog --yes)",
+      "Bash(node --env-file=.env.local scripts/regenerar-todos-decisores.mjs)",
+      "Bash(sed -n '300,315p' lib/types.ts)",
+      "Bash(sed -n '515,545p' lib/queries.ts)",
+      "Bash(grep -n \"chat_empresa\\\\|misiones_diarias\\\\|prioridades_cache\" lib/types.ts lib/queries.ts)",
+      "Bash(ls app/api/empresas/[id]/)",
+      "Bash(ls app/rendimiento/)",
+      "Bash(ls app/api/rendimiento/)",
+      "Bash(ls app/api/misiones/)",
+      "Bash(curl -s -X POST https://bxevihqkutmsxicfbjod.supabase.co/pg/query -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4ZXZpaHFrdXRtc3hpY2Ziam9kIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTM2MDE0OCwiZXhwIjoyMDk2OTM2MTQ4fQ.4TDa_ZURMGoXK82wOR5bMuYwx-Nl4duJvWLESbRaLBo' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4ZXZpaHFrdXRtc3hpY2Ziam9kIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTM2MDE0OCwiZXhwIjoyMDk2OTM2MTQ4fQ.4TDa_ZURMGoXK82wOR5bMuYwx-Nl4duJvWLESbRaLBo' -H 'Content-Type: application/json' -d '{\"query\":\"SELECT 1 as ok\"}')",
+      "Bash(npx supabase *)",
+      "Bash(where supabase *)",
+      "Bash(cd \"C:\\\\Users\\\\Jose Antonio Castro\\\\Desktop\\\\copiloto-comercial\" && grep -n \"Evaluacion\\\\|Rendimiento\\\\|evaluacion\\\\|rendimiento\" lib/types.ts | head -40)",
+      "Bash(cd \"C:\\\\Users\\\\Jose Antonio Castro\\\\Desktop\\\\copiloto-comercial\" && grep -n \"Evaluacion\\\\|Rendimiento\\\\|evaluacion\\\\|rendimiento\" lib/queries.ts | head -30)"
     ]
   }
 }

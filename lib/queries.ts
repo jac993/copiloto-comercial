@@ -37,8 +37,18 @@ import type {
   PatronConversionInsert,
   MetricaDiaria,
   MetricaDiariaUpdate,
+  PrioridadCacheItem,
   ContextoExportable,
   ResumenContexto,
+  ChatEmpresa,
+  ChatEmpresaInsert,
+  MisionDiaria,
+  MisionDiariaInsert,
+  MisionDiariaUpdate,
+  EvaluacionSemanal,
+  EvaluacionSemanalInsert,
+  RendimientoEjecutivo,
+  RendimientoEjecutivoUpdate,
 } from "@/lib/types";
 
 // ─── EMPRESAS ────────────────────────────────────────────────
@@ -632,4 +642,175 @@ export async function guardarEmpresaDesdeFicha(
   }
 
   return empresa;
+}
+
+// ─── CHAT EMPRESA ─────────────────────────────────────────────
+
+export async function getChatHistorial(empresaId: string, limite = 30): Promise<ChatEmpresa[]> {
+  const { data, error } = await getSupabase()
+    .from("chat_empresa")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .order("creado_en", { ascending: true })
+    .limit(limite);
+
+  if (error) throw new Error(`getChatHistorial: ${error.message}`);
+  return data ?? [];
+}
+
+export async function insertChatMensaje(msg: ChatEmpresaInsert): Promise<ChatEmpresa> {
+  const { data, error } = await getSupabase()
+    .from("chat_empresa")
+    .insert(msg)
+    .select()
+    .single();
+
+  if (error) throw new Error(`insertChatMensaje: ${error.message}`);
+  return data;
+}
+
+export async function limpiarChatEmpresa(empresaId: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from("chat_empresa")
+    .delete()
+    .eq("empresa_id", empresaId);
+
+  if (error) throw new Error(`limpiarChatEmpresa: ${error.message}`);
+}
+
+// ─── MISIONES DIARIAS ─────────────────────────────────────────
+
+export async function getMisionesPorFecha(fecha: string): Promise<MisionDiaria[]> {
+  const { data, error } = await getSupabase()
+    .from("misiones_diarias")
+    .select("*, empresas(nombre, industria)")
+    .eq("fecha", fecha)
+    .order("creado_en", { ascending: true });
+
+  if (error) throw new Error(`getMisionesPorFecha: ${error.message}`);
+  return data ?? [];
+}
+
+export async function getMisionesPorEmpresa(empresaId: string, limite = 10): Promise<MisionDiaria[]> {
+  const { data, error } = await getSupabase()
+    .from("misiones_diarias")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .order("fecha", { ascending: false })
+    .limit(limite);
+
+  if (error) throw new Error(`getMisionesPorEmpresa: ${error.message}`);
+  return data ?? [];
+}
+
+export async function insertMision(mision: MisionDiariaInsert): Promise<MisionDiaria> {
+  const { data, error } = await getSupabase()
+    .from("misiones_diarias")
+    .insert(mision)
+    .select()
+    .single();
+
+  if (error) throw new Error(`insertMision: ${error.message}`);
+  return data;
+}
+
+export async function updateMision(id: string, cambios: MisionDiariaUpdate): Promise<MisionDiaria> {
+  const { data, error } = await getSupabase()
+    .from("misiones_diarias")
+    .update(cambios)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw new Error(`updateMision: ${error.message}`);
+  return data;
+}
+
+// ─── EVALUACIONES SEMANALES ───────────────────────────────────
+
+export async function getEvaluacionesSemana(limite = 8): Promise<EvaluacionSemanal[]> {
+  const { data, error } = await getSupabase()
+    .from("evaluaciones_semanales")
+    .select("*")
+    .order("semana_inicio", { ascending: false })
+    .limit(limite);
+
+  if (error) throw new Error(`getEvaluacionesSemana: ${error.message}`);
+  return data ?? [];
+}
+
+export async function insertEvaluacionSemanal(eval_: EvaluacionSemanalInsert): Promise<EvaluacionSemanal> {
+  const { data, error } = await getSupabase()
+    .from("evaluaciones_semanales")
+    .upsert(eval_, { onConflict: "semana_inicio" })
+    .select()
+    .single();
+
+  if (error) throw new Error(`insertEvaluacionSemanal: ${error.message}`);
+  return data;
+}
+
+// ─── RENDIMIENTO EJECUTIVO ────────────────────────────────────
+
+export async function getRendimientoEjecutivo(): Promise<RendimientoEjecutivo | null> {
+  const { data, error } = await getSupabase()
+    .from("rendimiento_ejecutivo")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) throw new Error(`getRendimientoEjecutivo: ${error.message}`);
+  return data;
+}
+
+export async function updateRendimientoEjecutivo(cambios: RendimientoEjecutivoUpdate): Promise<RendimientoEjecutivo> {
+  const { data, error } = await getSupabase()
+    .from("rendimiento_ejecutivo")
+    .update({ ...cambios, ultimo_calculo: new Date().toISOString() })
+    .eq("id", 1)
+    .select()
+    .single();
+
+  if (error) throw new Error(`updateRendimientoEjecutivo: ${error.message}`);
+  return data;
+}
+
+// ─── CACHE DE PRIORIDADES ─────────────────────────────────────
+
+export async function guardarPrioridadesCache(
+  fecha: string,
+  prioridades: PrioridadCacheItem[],
+  resumenDia: string
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from("metricas_diarias")
+    .upsert({
+      fecha,
+      prioridades_cache: prioridades as unknown as Record<string, unknown>[],
+      prioridades_generadas_en: new Date().toISOString(),
+      notas_dia: resumenDia,
+    });
+
+  if (error) throw new Error(`guardarPrioridadesCache: ${error.message}`);
+}
+
+export async function getPrioridadesCache(fecha: string): Promise<{
+  prioridades: PrioridadCacheItem[];
+  resumen_dia: string | null;
+  generadas_en: string | null;
+} | null> {
+  const { data, error } = await getSupabase()
+    .from("metricas_diarias")
+    .select("prioridades_cache, prioridades_generadas_en, notas_dia")
+    .eq("fecha", fecha)
+    .maybeSingle();
+
+  if (error) throw new Error(`getPrioridadesCache: ${error.message}`);
+  if (!data?.prioridades_cache) return null;
+
+  return {
+    prioridades: data.prioridades_cache as unknown as PrioridadCacheItem[],
+    resumen_dia: data.notas_dia ?? null,
+    generadas_en: data.prioridades_generadas_en ?? null,
+  };
 }

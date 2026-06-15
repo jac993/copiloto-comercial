@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Building2, Mic } from "lucide-react";
+import { Sun, Building2, Mic, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Secciones principales del copiloto
@@ -24,6 +24,12 @@ const navItems = [
     label: "Llamadas",
     icon: Mic,
     description: "Transcripciones y coaching",
+  },
+  {
+    href: "/rendimiento",
+    label: "Rendimiento",
+    icon: BarChart2,
+    description: "Evaluaciones semanales con IA",
   },
 ];
 

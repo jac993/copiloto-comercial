@@ -1,21 +1,16 @@
 "use client";
 
 // =============================================================
-// Tab "Consultar IA" — chat contextual por empresa.
-// El historial vive solo en memoria de sesión (no se persiste).
-// El vendedor puede preguntar cualquier cosa sobre la cuenta
-// y recibir respuestas específicas basadas en el contexto real.
+// Tab "Consultar IA" — chat contextual persistente por empresa.
+// El historial se guarda en la tabla chat_empresa y se recupera
+// al abrir el tab. Limpiar borra el historial del servidor.
 // =============================================================
 
-import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { Send, Trash2, Bot, User } from "lucide-react";
+import { useState, useEffect, useRef, KeyboardEvent } from "react";
+import { Send, Trash2, Bot, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-interface Mensaje {
-  rol: "user" | "ia";
-  texto: string;
-}
+import type { ChatEmpresa } from "@/lib/types";
 
 interface TabChatProps {
   empresaId: string;
@@ -29,46 +24,87 @@ const PREGUNTAS_RAPIDAS = [
   "¿Qué haría diferente en la próxima llamada?",
 ];
 
+function fechaHora(isoStr: string): string {
+  return new Intl.DateTimeFormat("es-CL", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(isoStr));
+}
+
 export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
-  const [mensajes, setMensajes] = useState<Mensaje[]>([]);
+  const [historial, setHistorial] = useState<ChatEmpresa[]>([]);
   const [input, setInput] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [cargandoHistorial, setCargandoHistorial] = useState(true);
+  const [limpiando, setLimpiando] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Scroll al fondo cuando llega un mensaje nuevo
+  // Cargar historial persistido al montar el tab
+  useEffect(() => {
+    async function cargar() {
+      try {
+        const res = await fetch(`/api/empresas/${empresaId}/chat`);
+        if (res.ok) {
+          const data = await res.json() as { historial: ChatEmpresa[] };
+          setHistorial(data.historial);
+        }
+      } finally {
+        setCargandoHistorial(false);
+      }
+    }
+    cargar();
+  }, [empresaId]);
+
+  // Scroll al fondo cuando llegan mensajes nuevos
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensajes, cargando]);
+  }, [historial, cargando]);
 
   const enviar = async (texto?: string) => {
     const msgTexto = (texto ?? input).trim();
     if (!msgTexto || cargando) return;
 
-    const mensajeUsuario: Mensaje = { rol: "user", texto: msgTexto };
-    const nuevosMensajes = [...mensajes, mensajeUsuario];
-    setMensajes(nuevosMensajes);
     setInput("");
     setCargando(true);
+
+    // Mensaje optimista temporal para UX inmediata
+    const tempId = `temp-${Date.now()}`;
+    const mensajeTemp: ChatEmpresa = {
+      id: tempId,
+      empresa_id: empresaId,
+      pregunta: msgTexto,
+      respuesta: "",
+      creado_en: new Date().toISOString(),
+    };
+    setHistorial((prev) => [...prev, mensajeTemp]);
 
     try {
       const res = await fetch(`/api/empresas/${empresaId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mensaje: msgTexto,
-          historial: mensajes, // historial previo (sin el mensaje actual)
-        }),
+        body: JSON.stringify({ mensaje: msgTexto }),
       });
 
       if (!res.ok) throw new Error("Error al consultar la IA");
-      const data = (await res.json()) as { respuesta: string };
-      setMensajes([...nuevosMensajes, { rol: "ia", texto: data.respuesta }]);
+      const data = await res.json() as { respuesta: string };
+
+      // Reemplazar el temp con la respuesta real
+      setHistorial((prev) =>
+        prev.map((m) =>
+          m.id === tempId ? { ...m, respuesta: data.respuesta } : m
+        )
+      );
     } catch {
-      setMensajes([
-        ...nuevosMensajes,
-        { rol: "ia", texto: "Hubo un error al consultar la IA. Intenta de nuevo." },
-      ]);
+      setHistorial((prev) =>
+        prev.map((m) =>
+          m.id === tempId
+            ? { ...m, respuesta: "Hubo un error. Intenta de nuevo." }
+            : m
+        )
+      );
     } finally {
       setCargando(false);
       inputRef.current?.focus();
@@ -82,57 +118,55 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
     }
   };
 
-  const limpiar = () => {
-    setMensajes([]);
-    setInput("");
-    inputRef.current?.focus();
+  const limpiar = async () => {
+    if (!confirm("¿Borrar todo el historial de esta cuenta?")) return;
+    setLimpiando(true);
+    try {
+      await fetch(`/api/empresas/${empresaId}/chat`, { method: "DELETE" });
+      setHistorial([]);
+    } finally {
+      setLimpiando(false);
+      inputRef.current?.focus();
+    }
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-280px)] min-h-[400px] pb-4">
-      {/* Barra superior con botón limpiar */}
+      {/* Barra superior */}
       <div className="flex items-center justify-between mb-3 px-1">
         <p className="text-xs text-muted-foreground">
-          Contexto completo de{" "}
+          Contexto de{" "}
           <span className="font-medium text-foreground">{empresaNombre}</span>{" "}
-          cargado
+          cargado · historial guardado
         </p>
-        {mensajes.length > 0 && (
+        {historial.length > 0 && (
           <button
             onClick={limpiar}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
+            disabled={limpiando}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
           >
-            <Trash2 className="h-3 w-3" />
+            {limpiando ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Trash2 className="h-3 w-3" />
+            )}
             Limpiar
           </button>
         )}
       </div>
 
       {/* Área de mensajes */}
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-        {mensajes.length === 0 && (
-          <EstadoVacio
-            empresaNombre={empresaNombre}
-            onPregunta={(p) => enviar(p)}
-          />
-        )}
-
-        {mensajes.map((msg, i) => (
-          <BurbujaMensaje key={i} mensaje={msg} />
-        ))}
-
-        {/* Skeleton mientras carga */}
-        {cargando && (
-          <div className="flex items-start gap-2.5">
-            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-              <Bot className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="space-y-1.5 flex-1 max-w-[80%]">
-              <div className="h-3.5 bg-muted rounded-full animate-pulse w-3/4" />
-              <div className="h-3.5 bg-muted rounded-full animate-pulse w-1/2" />
-              <div className="h-3.5 bg-muted rounded-full animate-pulse w-2/3" />
-            </div>
+      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+        {cargandoHistorial ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
+        ) : historial.length === 0 ? (
+          <EstadoVacio empresaNombre={empresaNombre} onPregunta={enviar} />
+        ) : (
+          historial.map((item) => (
+            <ParMensajes key={item.id} item={item} cargando={!item.respuesta && cargando} />
+          ))
         )}
 
         <div ref={bottomRef} />
@@ -145,7 +179,7 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={`Pregúntame algo sobre ${empresaNombre}...`}
+          placeholder={`Pregúntame sobre ${empresaNombre}...`}
           rows={1}
           disabled={cargando}
           className={cn(
@@ -161,7 +195,11 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
           disabled={!input.trim() || cargando}
           className="rounded-xl h-8 w-8 p-0 shrink-0"
         >
-          <Send className="h-3.5 w-3.5" />
+          {cargando ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Send className="h-3.5 w-3.5" />
+          )}
         </Button>
       </div>
       <p className="text-[11px] text-muted-foreground text-center mt-1.5">
@@ -171,37 +209,50 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
   );
 }
 
-// ── Burbuja de mensaje ───────────────────────────────────────
+// ── Par pregunta / respuesta ─────────────────────────────────
 
-function BurbujaMensaje({ mensaje }: { mensaje: Mensaje }) {
-  const esUsuario = mensaje.rol === "user";
-
+function ParMensajes({
+  item,
+  cargando,
+}: {
+  item: ChatEmpresa;
+  cargando: boolean;
+}) {
   return (
-    <div className={cn("flex items-start gap-2.5", esUsuario && "flex-row-reverse")}>
-      {/* Avatar */}
-      <div
-        className={cn(
-          "h-8 w-8 rounded-full flex items-center justify-center shrink-0",
-          esUsuario ? "bg-primary/15" : "bg-muted"
-        )}
-      >
-        {esUsuario ? (
-          <User className="h-4 w-4 text-primary" />
-        ) : (
-          <Bot className="h-4 w-4 text-muted-foreground" />
-        )}
+    <div className="space-y-2">
+      {/* Pregunta del vendedor */}
+      <div className="flex items-start gap-2.5 flex-row-reverse">
+        <div className="h-7 w-7 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+          <User className="h-3.5 w-3.5 text-primary" />
+        </div>
+        <div className="max-w-[82%]">
+          <div className="bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-sm leading-relaxed">
+            {item.pregunta}
+          </div>
+          <p className="text-[10px] text-muted-foreground text-right mt-0.5 pr-1">
+            {fechaHora(item.creado_en)}
+          </p>
+        </div>
       </div>
 
-      {/* Burbuja */}
-      <div
-        className={cn(
-          "max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
-          esUsuario
-            ? "bg-primary text-primary-foreground rounded-tr-sm"
-            : "bg-muted text-foreground rounded-tl-sm"
-        )}
-      >
-        {mensaje.texto}
+      {/* Respuesta de la IA */}
+      <div className="flex items-start gap-2.5">
+        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+          <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+        <div className="max-w-[82%]">
+          {cargando || !item.respuesta ? (
+            <div className="bg-muted rounded-2xl rounded-tl-sm px-3.5 py-3 space-y-1.5">
+              <div className="h-3 bg-muted-foreground/20 rounded-full animate-pulse w-3/4" />
+              <div className="h-3 bg-muted-foreground/20 rounded-full animate-pulse w-1/2" />
+              <div className="h-3 bg-muted-foreground/20 rounded-full animate-pulse w-2/3" />
+            </div>
+          ) : (
+            <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+              {item.respuesta}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -224,11 +275,9 @@ function EstadoVacio({
       <div className="text-center space-y-1 px-4">
         <p className="font-semibold text-sm">Consulta sobre {empresaNombre}</p>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Tengo el contexto completo de esta cuenta. Pregúntame lo que necesites.
+          Tengo el contexto completo de esta cuenta. El historial queda guardado.
         </p>
       </div>
-
-      {/* Preguntas rápidas */}
       <div className="w-full space-y-2 px-1">
         <p className="text-xs font-medium text-muted-foreground px-1">Preguntas frecuentes:</p>
         {PREGUNTAS_RAPIDAS.map((p) => (

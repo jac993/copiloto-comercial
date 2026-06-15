@@ -11,14 +11,22 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Sun, Zap, Target, TrendingUp, RefreshCw,
-  ChevronRight, Building2, AlertCircle,
+  ChevronRight, Building2, AlertCircle, CheckCircle2,
+  XCircle, MinusCircle, ClipboardCheck, Loader2,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Empresa } from "@/lib/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import type { Empresa, PrioridadCacheItem, ResultadoMision } from "@/lib/types";
 
 // ── Tipos de respuesta de las APIs ──────────────────────────
 
@@ -29,6 +37,15 @@ interface MetricasHoy {
   llamadas_hoy: number;
   ganados_mes: number;
   reactivaciones: Empresa[];
+  prioridades_cache: PrioridadCacheItem[] | null;
+  prioridades_generadas_en: string | null;
+  resumen_dia_cache: string | null;
+}
+
+// Subconjunto mínimo de empresa que necesita la tarjeta de prioridad
+interface EmpresaResumen {
+  nombre: string;
+  industria?: string | null;
 }
 
 interface PrioridadIA {
@@ -37,7 +54,7 @@ interface PrioridadIA {
   razon: string;
   accion_sugerida: string;
   urgencia: "alta" | "media" | "baja";
-  empresa: Empresa | null;
+  empresa: EmpresaResumen | null;
 }
 
 interface RespuestaPriorizar {
@@ -74,6 +91,11 @@ export function HoyClient() {
   const [resumenDia, setResumenDia] = useState<string | null>(null);
   const [cargandoPrioridades, setCargandoPrioridades] = useState(false);
   const [errorPrioridades, setErrorPrioridades] = useState<string | null>(null);
+  const [cacheTimestamp, setCacheTimestamp] = useState<string | null>(null);
+  const [dialogReporte, setDialogReporte] = useState(false);
+  const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
+  const [guardandoReporte, setGuardandoReporte] = useState(false);
+  const [reporteGuardado, setReporteGuardado] = useState(false);
   const prevContactosRef = useRef(0);
 
   const cargarMetricas = useCallback(async () => {
@@ -91,6 +113,21 @@ export function HoyClient() {
       }
       prevContactosRef.current = data.contactos_hoy;
       setMetricas(data);
+
+      // Hidratar prioridades desde el caché del día (evita llamar a la IA al abrir)
+      if (data.prioridades_cache && data.prioridades_cache.length > 0) {
+        const fromCache: PrioridadIA[] = data.prioridades_cache.map((item) => ({
+          empresa_id: item.empresa_id,
+          score: item.score,
+          razon: item.razon,
+          accion_sugerida: item.accion_sugerida,
+          urgencia: item.urgencia,
+          empresa: { nombre: item.nombre_empresa, industria: item.industria },
+        }));
+        setPrioridades(fromCache);
+        if (data.resumen_dia_cache) setResumenDia(data.resumen_dia_cache);
+        if (data.prioridades_generadas_en) setCacheTimestamp(data.prioridades_generadas_en);
+      }
     } catch {
       // No interrumpir la pantalla si falla
     } finally {
@@ -119,10 +156,43 @@ export function HoyClient() {
       const data: RespuestaPriorizar = await res.json();
       setPrioridades(data.prioridades);
       setResumenDia(data.resumen_dia);
+      setCacheTimestamp(new Date().toISOString());
     } catch {
       setErrorPrioridades("No se pudieron calcular las prioridades. Intenta de nuevo.");
     } finally {
       setCargandoPrioridades(false);
+    }
+  };
+
+  const abrirDialogReporte = () => {
+    // Pre-seleccionar "completada" para todas como punto de partida
+    const init: Record<string, ResultadoMision> = {};
+    prioridades.forEach((p) => { init[p.empresa_id] = "completada"; });
+    setResultados(init);
+    setReporteGuardado(false);
+    setDialogReporte(true);
+  };
+
+  const guardarReporte = async () => {
+    setGuardandoReporte(true);
+    try {
+      const misiones = prioridades.map((p) => ({
+        empresa_id: p.empresa_id,
+        accion_sugerida: p.accion_sugerida,
+        resultado: resultados[p.empresa_id] ?? "no_ejecutada",
+      }));
+      const res = await fetch("/api/misiones/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ misiones }),
+      });
+      if (!res.ok) throw new Error("Error al guardar");
+      setReporteGuardado(true);
+      setTimeout(() => setDialogReporte(false), 1200);
+    } catch {
+      // El error se maneja con el estado guardandoReporte falso
+    } finally {
+      setGuardandoReporte(false);
     }
   };
 
@@ -243,10 +313,17 @@ export function HoyClient() {
         {/* Prioridades del día */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-base flex items-center gap-2">
-              <Target className="h-4 w-4 text-primary" />
-              Prioridades de hoy
-            </h2>
+            <div>
+              <h2 className="font-semibold text-base flex items-center gap-2">
+                <Target className="h-4 w-4 text-primary" />
+                Prioridades de hoy
+              </h2>
+              {cacheTimestamp && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Actualizado a las {formatearHora(cacheTimestamp)}
+                </p>
+              )}
+            </div>
             <Badge variant="ai" className="text-xs">
               <Zap className="h-3 w-3 mr-1" /> usa IA
             </Badge>
@@ -289,16 +366,26 @@ export function HoyClient() {
               {prioridades.map((p, i) => (
                 <PrioridadCard key={p.empresa_id} prioridad={p} posicion={i + 1} />
               ))}
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-2 mt-2"
-                onClick={actualizarPrioridades}
-                disabled={cargandoPrioridades}
-              >
-                <Zap className="h-3.5 w-3.5" />
-                Recalcular prioridades
-              </Button>
+              <div className="flex gap-2 mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-1.5"
+                  onClick={actualizarPrioridades}
+                  disabled={cargandoPrioridades}
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Recalcular
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1 gap-1.5 bg-[#22C55E] hover:bg-[#16a34a] text-white"
+                  onClick={abrirDialogReporte}
+                >
+                  <ClipboardCheck className="h-3.5 w-3.5" />
+                  Reportar mi día
+                </Button>
+              </div>
               {errorPrioridades && (
                 <p className="text-xs text-destructive text-center">{errorPrioridades}</p>
               )}
@@ -331,6 +418,81 @@ export function HoyClient() {
           </div>
         </section>
       </div>
+
+      {/* Dialog: Reportar mi día */}
+      <Dialog open={dialogReporte} onOpenChange={setDialogReporte}>
+        <DialogContent className="max-w-sm mx-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardCheck className="h-5 w-5 text-[#22C55E]" />
+              ¿Cómo resultó el día?
+            </DialogTitle>
+          </DialogHeader>
+
+          {reporteGuardado ? (
+            <div className="py-8 flex flex-col items-center gap-3">
+              <div className="h-14 w-14 rounded-full bg-[#22C55E]/15 flex items-center justify-center">
+                <CheckCircle2 className="h-7 w-7 text-[#22C55E]" />
+              </div>
+              <p className="font-semibold text-sm">¡Reporte guardado!</p>
+              <p className="text-xs text-muted-foreground">Tus resultados quedan en el historial.</p>
+            </div>
+          ) : (
+            <div className="space-y-4 py-1 max-h-[60vh] overflow-y-auto pr-1">
+              {prioridades.map((p) => (
+                <div key={p.empresa_id} className="space-y-2">
+                  <div>
+                    <p className="font-semibold text-sm">{p.empresa?.nombre ?? "Empresa"}</p>
+                    <p className="text-xs text-muted-foreground leading-snug line-clamp-2">
+                      {p.accion_sugerida}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <ResultadoBtn
+                      activo={resultados[p.empresa_id] === "completada"}
+                      onClick={() => setResultados((prev) => ({ ...prev, [p.empresa_id]: "completada" }))}
+                      icon={<CheckCircle2 className="h-4 w-4" />}
+                      label="Hecha"
+                      colorActivo="bg-[#22C55E]/15 border-[#22C55E] text-[#16a34a] dark:text-[#22C55E]"
+                    />
+                    <ResultadoBtn
+                      activo={resultados[p.empresa_id] === "parcial"}
+                      onClick={() => setResultados((prev) => ({ ...prev, [p.empresa_id]: "parcial" }))}
+                      icon={<MinusCircle className="h-4 w-4" />}
+                      label="Parcial"
+                      colorActivo="bg-amber-50 border-amber-400 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                    />
+                    <ResultadoBtn
+                      activo={resultados[p.empresa_id] === "no_ejecutada"}
+                      onClick={() => setResultados((prev) => ({ ...prev, [p.empresa_id]: "no_ejecutada" }))}
+                      icon={<XCircle className="h-4 w-4" />}
+                      label="No hecha"
+                      colorActivo="bg-red-50 border-red-400 text-red-600 dark:bg-red-900/20 dark:text-red-400"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!reporteGuardado && (
+            <DialogFooter>
+              <Button
+                className="w-full gap-2"
+                onClick={guardarReporte}
+                disabled={guardandoReporte}
+              >
+                {guardandoReporte ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {guardandoReporte ? "Guardando..." : "Guardar resultados"}
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -504,6 +666,42 @@ function StatCard({
       </CardContent>
     </Card>
   );
+}
+
+// ── Botón de resultado para el dialog de reporte ────────────
+
+function ResultadoBtn({
+  activo,
+  onClick,
+  icon,
+  label,
+  colorActivo,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  colorActivo: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1 py-2 rounded-xl border text-xs font-medium transition-all active:scale-[0.97]
+        ${activo ? colorActivo : "border-border text-muted-foreground hover:border-primary/30 hover:bg-primary/5"}`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+// ── Formateador de hora para el timestamp del caché ─────────
+
+function formatearHora(isoStr: string): string {
+  return new Intl.DateTimeFormat("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(isoStr));
 }
 
 // ── Confeti al cumplir la meta ───────────────────────────────

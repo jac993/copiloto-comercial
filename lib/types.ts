@@ -265,8 +265,19 @@ export type PatronConversionUpdate = Partial<PatronConversionInsert>;
 
 // ─── TABLA: metricas_diarias ─────────────────────────────────
 
+// Item de prioridad guardado en cache (sin el objeto empresa completo)
+export interface PrioridadCacheItem {
+  empresa_id: string;
+  nombre_empresa: string;
+  industria: string | null;
+  score: number;
+  razon: string;
+  accion_sugerida: string;
+  urgencia: "alta" | "media" | "baja";
+}
+
 export interface MetricaDiaria {
-  fecha: string;                   // "YYYY-MM-DD" — es la PK
+  fecha: string;                          // "YYYY-MM-DD" — es la PK
   contactos_hechos: number;
   reuniones_logradas: number;
   cotizaciones_enviadas: number;
@@ -274,10 +285,74 @@ export interface MetricaDiaria {
   meta_cumplida: boolean;
   racha_dias: number;
   notas_dia: string | null;
+  prioridades_cache: PrioridadCacheItem[] | null;
+  prioridades_generadas_en: string | null; // ISO timestamp
 }
 
 export type MetricaDiariaInsert = MetricaDiaria;
 export type MetricaDiariaUpdate = Partial<Omit<MetricaDiaria, "fecha">>;
+
+// ─── TABLA: chat_empresa ──────────────────────────────────────
+
+export interface ChatEmpresa {
+  id: string;
+  empresa_id: string;
+  pregunta: string;
+  respuesta: string;
+  creado_en: string;
+}
+
+export type ChatEmpresaInsert = Omit<ChatEmpresa, "id" | "creado_en">;
+
+// ─── TABLA: misiones_diarias ──────────────────────────────────
+
+export type ResultadoMision = "completada" | "parcial" | "no_ejecutada";
+
+export interface MisionDiaria {
+  id: string;
+  empresa_id: string;
+  fecha: string;                  // "YYYY-MM-DD"
+  accion_sugerida: string;
+  resultado: ResultadoMision | null;
+  detalle_vendedor: string | null;
+  feedback_ia: string | null;
+  creado_en: string;
+}
+
+export type MisionDiariaInsert = Omit<MisionDiaria, "id" | "creado_en">;
+export type MisionDiariaUpdate = Partial<Omit<MisionDiaria, "id" | "empresa_id" | "creado_en">>;
+
+// ─── TABLA: evaluaciones_semanales ───────────────────────────
+
+export interface EvaluacionSemanal {
+  id: string;
+  semana_inicio: string;          // "YYYY-MM-DD"
+  semana_fin: string;             // "YYYY-MM-DD"
+  resumen_ia: string | null;
+  tasa_cumplimiento: number | null;
+  tasa_conversion: number | null;
+  fortalezas: string | null;
+  areas_mejora: string | null;
+  recomendaciones: Record<string, unknown>[] | null;
+  creado_en: string;
+}
+
+export type EvaluacionSemanalInsert = Omit<EvaluacionSemanal, "id" | "creado_en">;
+
+// ─── TABLA: rendimiento_ejecutivo ────────────────────────────
+
+export interface RendimientoEjecutivo {
+  id: 1;                          // siempre 1 — fila única
+  score_actual: number;
+  racha_record: number;
+  tasa_cumplimiento_historica: number;
+  tasa_conversion_historica: number;
+  canal_mas_efectivo: string | null;
+  tecnica_mas_efectiva: string | null;
+  ultimo_calculo: string | null;  // ISO timestamp
+}
+
+export type RendimientoEjecutivoUpdate = Partial<Omit<RendimientoEjecutivo, "id">>;
 
 // ─── TABLA: contexto_exportable ──────────────────────────────
 

@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import type { Empresa } from "@/lib/types";
+import type { Empresa, PrioridadCacheItem } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +108,17 @@ export async function GET() {
     .not("fecha_reactivacion", "is", null)
     .order("fecha_reactivacion", { ascending: true });
 
+  // Leer caché de prioridades del día (generado en la última llamada a /api/priorizar)
+  const { data: metricaHoy } = await supabase
+    .from("metricas_diarias")
+    .select("prioridades_cache, prioridades_generadas_en, notas_dia")
+    .eq("fecha", hoy)
+    .maybeSingle();
+
+  const prioridadesCache = metricaHoy?.prioridades_cache
+    ? (metricaHoy.prioridades_cache as unknown as PrioridadCacheItem[])
+    : null;
+
   return NextResponse.json({
     contactos_hoy: contactos,
     meta: META,
@@ -115,5 +126,8 @@ export async function GET() {
     llamadas_hoy: llamadas,
     ganados_mes: ganados,
     reactivaciones: (reactivaciones ?? []) as Empresa[],
+    prioridades_cache: prioridadesCache,
+    prioridades_generadas_en: metricaHoy?.prioridades_generadas_en ?? null,
+    resumen_dia_cache: metricaHoy?.notas_dia ?? null,
   });
 }

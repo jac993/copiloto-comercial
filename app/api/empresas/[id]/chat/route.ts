@@ -1,20 +1,43 @@
 // =============================================================
-// POST /api/empresas/[id]/chat — Chat contextual por empresa.
-// Recibe { mensaje, historial[] } y llama a Claude con el
-// contexto completo de la cuenta como system prompt.
-// El historial se mantiene solo en el cliente (memoria de sesión).
+// POST /api/empresas/[id]/chat — Chat contextual persistente.
+// Persiste cada pregunta/respuesta en chat_empresa.
+// DELETE /api/empresas/[id]/chat — Limpia el historial.
+// GET  /api/empresas/[id]/chat — Carga historial guardado.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getEmpresaCompleta, getHistorialResumido } from "@/lib/queries";
+import {
+  getEmpresaCompleta,
+  getHistorialResumido,
+  getChatHistorial,
+  insertChatMensaje,
+  limpiarChatEmpresa,
+} from "@/lib/queries";
 
 export const maxDuration = 60;
 
-interface MensajeHistorial {
-  rol: "user" | "ia";
-  texto: string;
+// ── GET — cargar historial guardado ──────────────────────────
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const historial = await getChatHistorial(params.id);
+  return NextResponse.json({ historial });
 }
+
+// ── DELETE — limpiar historial ────────────────────────────────
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  await limpiarChatEmpresa(params.id);
+  return NextResponse.json({ ok: true });
+}
+
+// ── POST — enviar mensaje y obtener respuesta ─────────────────
 
 export async function POST(
   req: NextRequest,
@@ -25,19 +48,17 @@ export async function POST(
   }
 
   const { id } = params;
-  const { mensaje, historial = [] } = (await req.json()) as {
-    mensaje: string;
-    historial: MensajeHistorial[];
-  };
+  const { mensaje } = (await req.json()) as { mensaje: string };
 
   if (!mensaje?.trim()) {
     return NextResponse.json({ error: "mensaje requerido" }, { status: 400 });
   }
 
-  // Cargar contexto completo de la empresa
-  const [empresa, historialInteracciones] = await Promise.all([
+  // Cargar contexto de la empresa + historial de chat guardado en paralelo
+  const [empresa, historialInteracciones, historialChat] = await Promise.all([
     getEmpresaCompleta(id),
     getHistorialResumido(id),
+    getChatHistorial(id, 20),
   ]);
 
   if (!empresa) {
@@ -46,7 +67,6 @@ export async function POST(
 
   const ficha = empresa.ficha_ia;
 
-  // Construir resumen de contactos registrados
   const contactosResumen =
     empresa.contactos.length > 0
       ? empresa.contactos
@@ -54,7 +74,6 @@ export async function POST(
           .join("\n")
       : "Sin contactos registrados aún.";
 
-  // Construir decisores de la ficha IA
   const decisoresResumen =
     ficha?.decisores && ficha.decisores.length > 0
       ? ficha.decisores
@@ -65,7 +84,6 @@ export async function POST(
           .join("\n")
       : "Sin análisis de decisores disponible.";
 
-  // System prompt con todo el contexto de la cuenta
   const systemPrompt = `Eres el copiloto comercial de un vendedor B2B de etiquetas autoadhesivas e imprenta industrial en Chile. Tienes acceso completo al historial y análisis de esta cuenta.
 
 Responde preguntas específicas sobre cómo avanzar con esta empresa. Sé directo, práctico y breve. Máximo 5 líneas por respuesta. Usa el contexto real de la cuenta — nunca respondas con generalidades.
@@ -110,13 +128,12 @@ ${
     : "Sin análisis de objeciones disponible."
 }`;
 
-  // Convertir historial de chat a formato Anthropic
-  const mensajesHistorial: Anthropic.MessageParam[] = historial.map((m) => ({
-    role: m.rol === "user" ? "user" : "assistant",
-    content: m.texto,
-  }));
+  // Reconstruir historial de chat guardado como mensajes Anthropic
+  const mensajesHistorial: Anthropic.MessageParam[] = historialChat.flatMap((h) => [
+    { role: "user" as const, content: h.pregunta },
+    { role: "assistant" as const, content: h.respuesta },
+  ]);
 
-  // Agregar el mensaje nuevo
   const mensajes: Anthropic.MessageParam[] = [
     ...mensajesHistorial,
     { role: "user", content: mensaje.trim() },
@@ -133,6 +150,13 @@ ${
   const textContent = response.content.find((c) => c.type === "text");
   const respuesta =
     textContent?.type === "text" ? textContent.text : "Sin respuesta de la IA.";
+
+  // Persistir pregunta + respuesta
+  await insertChatMensaje({
+    empresa_id: id,
+    pregunta: mensaje.trim(),
+    respuesta,
+  });
 
   return NextResponse.json({ respuesta });
 }
