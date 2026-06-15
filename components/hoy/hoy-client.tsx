@@ -209,13 +209,13 @@ export function HoyClient() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Header con gradiente violeta→fucsia */}
-      <header className="gradient-hoy px-5 pt-10 pb-8 md:pt-8">
-        <div className="flex items-start justify-between">
+      {/* Header con gradiente violeta→fucsia — compacto */}
+      <header className="gradient-hoy px-4 pt-6 pb-4 md:pt-5">
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-white/80 text-sm font-medium capitalize">{hoy}</p>
-            <div className="flex items-center gap-2 mt-1">
-              <h1 className="text-white text-2xl md:text-3xl font-extrabold">Buenos días 👋</h1>
+            <p className="text-white/70 text-xs font-medium capitalize">{hoy}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <h1 className="text-white text-xl font-extrabold">Buenos días 👋</h1>
               <HelpTooltip
                 titulo="¿Para qué sirve esta pantalla?"
                 explicacion="Es tu agenda diaria. Muestra las 5 cuentas más importantes para contactar hoy, ordenadas por prioridad. Cada mañana revísala antes de empezar a trabajar."
@@ -230,19 +230,19 @@ export function HoyClient() {
 
         {/* Resumen de IA (aparece después de priorizar) */}
         {resumenDia && (
-          <div className="mt-4 bg-white/15 rounded-xl px-4 py-2.5">
-            <p className="text-white/90 text-sm leading-relaxed">✨ {resumenDia}</p>
+          <div className="mt-2 bg-white/15 rounded-xl px-3 py-2">
+            <p className="text-white/90 text-xs leading-relaxed">✨ {resumenDia}</p>
           </div>
         )}
 
         {/* Barra de progreso del día */}
-        <div className="mt-5">
-          <div className="flex justify-between text-white/80 text-xs font-medium mb-2">
-            <div className="flex items-center gap-1.5">
+        <div className="mt-3">
+          <div className="flex justify-between text-white/80 text-xs font-medium mb-1.5">
+            <div className="flex items-center gap-1">
               <span>
                 {cargandoMetricas
                   ? "Cargando..."
-                  : `Meta diaria: ${contactos} / ${meta} contactos`}
+                  : `Meta: ${contactos} / ${meta} contactos`}
               </span>
               <HelpTooltip
                 titulo="Meta diaria de contactos"
@@ -252,9 +252,9 @@ export function HoyClient() {
             </div>
             <span>{porcentaje}%</span>
           </div>
-          <div className="h-2 rounded-full bg-white/20">
+          <div className="h-1.5 rounded-full bg-white/20">
             <div
-              className="h-2 rounded-full bg-white transition-all duration-700"
+              className="h-1.5 rounded-full bg-white transition-all duration-700"
               style={{ width: `${porcentaje}%` }}
             />
           </div>
@@ -262,12 +262,12 @@ export function HoyClient() {
       </header>
 
       {/* Contenido principal */}
-      <div className="flex-1 px-4 py-6 space-y-6">
+      <div className="flex-1 px-4 py-4 space-y-4">
 
         {/* Racha de días */}
         <Card className="border-0 bg-gradient-to-r from-brand-50 to-purple-50 dark:from-brand-900/20 dark:to-purple-900/10">
-          <CardContent className="pt-5 pb-5 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-primary/15 flex items-center justify-center text-2xl">
+          <CardContent className="pt-3 pb-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-primary/15 flex items-center justify-center text-xl">
               🔥
             </div>
             <div className="flex-1 min-w-0">

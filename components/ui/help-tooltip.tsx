@@ -23,33 +23,20 @@ export function HelpTooltip({ titulo, explicacion, ejemplo }: HelpTooltipProps) 
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: 20,
-          width: 20,
-          borderRadius: "50%",
-          border: "1px solid rgba(124,58,237,0.3)",
-          background: "#EDE9FE",
+          background: "none",
+          border: "none",
+          padding: 0,
           color: "#7C3AED",
-          fontSize: 11,
-          fontWeight: 700,
+          fontSize: 16,
+          fontWeight: 900,
           lineHeight: 1,
+          cursor: "pointer",
           flexShrink: 0,
           userSelect: "none",
-          cursor: "pointer",
-          transition: "background 200ms, color 200ms, border-color 200ms",
+          transition: "color 200ms",
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "#7C3AED";
-          e.currentTarget.style.color = "#fff";
-          e.currentTarget.style.borderColor = "#7C3AED";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "#EDE9FE";
-          e.currentTarget.style.color = "#7C3AED";
-          e.currentTarget.style.borderColor = "rgba(124,58,237,0.3)";
-        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "#5B21B6"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = "#7C3AED"; }}
         aria-label={`Ayuda: ${titulo}`}
       >
         ?
@@ -57,7 +44,7 @@ export function HelpTooltip({ titulo, explicacion, ejemplo }: HelpTooltipProps) 
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="max-w-sm font-sans"
+          className="max-w-sm"
           style={{ borderTop: "3px solid #7C3AED", borderRadius: "0.75rem" }}
         >
           <DialogHeader>
