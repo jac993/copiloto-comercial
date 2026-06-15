@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { CuentasClient } from "@/components/cuentas/cuentas-client";
 import { getEmpresas, getInteraccionesConProximoPaso } from "@/lib/queries";
 import type { Empresa } from "@/lib/types";
@@ -32,7 +33,14 @@ export default async function CuentasPage() {
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="flex h-16 items-center justify-between px-5">
           <div>
-            <h1 className="text-lg font-semibold">Cuentas</h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-lg font-semibold">Cuentas</h1>
+              <HelpTooltip
+                titulo="¿Qué son las cuentas?"
+                explicacion="Son las empresas que estás prospectando o que ya son tus clientes. Cada cuenta tiene su ficha completa con análisis de IA, decisores y todo el historial de contacto."
+                ejemplo={"Agrega una cuenta nueva pegando la URL de la empresa. La IA investiga todo en 30 segundos."}
+              />
+            </div>
             {empresas.length > 0 && (
               <p className="text-xs text-muted-foreground">{activas} activas</p>
             )}

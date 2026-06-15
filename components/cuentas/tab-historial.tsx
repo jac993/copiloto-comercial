@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,6 +72,16 @@ export function TabHistorial({ interacciones: interaccionesIniciales, empresaId 
 
   return (
     <div className="space-y-3 pb-24">
+      {/* Encabezado con ayuda */}
+      <div className="flex items-center gap-1.5 px-1">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Historial de interacciones</p>
+        <HelpTooltip
+          titulo="¿Qué es el historial?"
+          explicacion="Registro cronológico de todas tus interacciones con esta empresa. Cada llamada, correo, WhatsApp o LinkedIn que analices queda guardado aquí con su transcripción, coaching y próximo paso."
+          ejemplo={"Antes de llamar, revisa el historial para recordar qué se habló en la última conversación y qué comprometiste."}
+        />
+      </div>
+
       {lista.length === 0 ? (
         <div className="text-center py-10 space-y-3">
           <Clock className="h-10 w-10 mx-auto text-muted-foreground opacity-30" />

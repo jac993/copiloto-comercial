@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import type { Empresa, EstadoEmpresa } from "@/lib/types";
 
 // Colores semánticos por estado — reflejan la etapa del pipeline
@@ -120,9 +121,14 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
               {/* Barra de score */}
               <div className="mt-2.5">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs text-muted-foreground">
-                    Prioridad
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">Prioridad</span>
+                    <HelpTooltip
+                      titulo="Score de prioridad"
+                      explicacion="La IA calcula qué tan urgente es contactar esta empresa hoy. Considera señales recientes, tiempo sin contacto y compromisos pendientes."
+                      ejemplo={"Score 90-100: contactar hoy.\nScore 50-70: esta semana.\nScore menor a 50: puede esperar."}
+                    />
+                  </div>
                   <span className="text-xs font-semibold text-foreground">
                     {empresa.score_prioridad}
                   </span>

@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, ChevronLeft, X } from "lucide-react";
 import { PerdidoDialog } from "@/components/cuentas/perdido-dialog";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import type { Empresa, EstadoEmpresa } from "@/lib/types";
 
 // Columnas visibles en orden
@@ -76,9 +77,19 @@ export function VistaKanban({ empresas, empresasVencidasIds }: VistaKanbanProps)
 
   return (
     <>
+      {/* Encabezado del pipeline con ayuda contextual */}
+      <div className="flex items-center gap-1.5 px-5 pt-4 pb-1">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pipeline de ventas</p>
+        <HelpTooltip
+          titulo="¿Cómo funciona el pipeline?"
+          explicacion="Muestra en qué etapa está cada empresa del proceso de venta. El estado cambia automáticamente cuando la IA detecta avances en tus interacciones, o puedes cambiarlo tú manualmente desde la ficha."
+          ejemplo={"Prospecto → la investigaste.\nContactado → hiciste el primer contacto.\nEn conversación → hay intercambio activo.\nReunión agendada → confirmaron reunión.\nCotizado → enviaste propuesta.\nGanado → cerraste el negocio."}
+        />
+      </div>
+
       {/* Tablero con scroll horizontal en móvil */}
       <div
-        className="flex gap-3 px-4 pt-4 pb-6 overflow-x-auto"
+        className="flex gap-3 px-4 pt-2 pb-6 overflow-x-auto"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
         {/* Columnas principales */}

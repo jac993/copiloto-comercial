@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Phone, Mail, Briefcase, MessageCircle, PhoneOff } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { UploadLlamada } from "./upload-llamada";
 import { PanelTexto } from "./panel-texto";
 import { SinRespuesta } from "./sin-respuesta";
@@ -109,7 +110,14 @@ export function LlamadasClient({ empresas }: LlamadasClientProps) {
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="flex h-16 items-center justify-between px-5">
-          <h1 className="text-lg font-semibold">Interacciones</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-lg font-semibold">Interacciones</h1>
+            <HelpTooltip
+              titulo="¿Para qué sirve esta sección?"
+              explicacion="Aquí registras todas tus interacciones comerciales para que la IA las analice y te dé coaching. Puedes subir llamadas grabadas o pegar conversaciones de correo, WhatsApp y LinkedIn."
+              ejemplo={"Después de cada llamada importante, grábala con tu celular y súbela aquí. La IA te dirá qué hiciste bien y qué mejorar."}
+            />
+          </div>
           <ThemeToggle />
         </div>
       </header>
@@ -149,6 +157,16 @@ export function LlamadasClient({ empresas }: LlamadasClientProps) {
             <IconAccion id={id} />
           </button>
         ))}
+
+        {/* Ayuda contextual "Sin respuesta" */}
+        <div className="flex items-center gap-1.5 px-1 -mt-1">
+          <p className="text-xs text-muted-foreground">¿Para qué registrar sin respuesta?</p>
+          <HelpTooltip
+            titulo="¿Para qué registrar sin respuesta?"
+            explicacion="Cuando mandas un mensaje y no te responden, regístralo aquí. La app crea un recordatorio automático en 5 días hábiles para hacer seguimiento."
+            ejemplo={"Le escribiste a Juan por LinkedIn el lunes y no respondió. Registras 'sin respuesta' y el viernes te aparece en la pantalla Hoy: 'Hacer seguimiento a Juan de Coexpan'."}
+          />
+        </div>
 
         {/* Explicación breve */}
         <div className="pt-4 pb-2">

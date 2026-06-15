@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { Sun, Zap, Target, TrendingUp, RefreshCw } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,9 +33,16 @@ export default async function HoyPage() {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-white/80 text-sm font-medium capitalize">{hoy}</p>
-            <h1 className="text-white text-2xl font-semibold mt-1">
-              Buenos días 👋
-            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <h1 className="text-white text-2xl font-semibold">
+                Buenos días 👋
+              </h1>
+              <HelpTooltip
+                titulo="¿Para qué sirve esta pantalla?"
+                explicacion="Es tu agenda diaria. Muestra las 5 cuentas más importantes para contactar hoy, ordenadas por prioridad. Cada mañana revísala antes de empezar a trabajar."
+                ejemplo={"Si ves una cuenta con badge naranja, tiene una señal de oportunidad fresca — contactarla hoy puede marcar la diferencia."}
+              />
+            </div>
           </div>
           <div className="bg-white/20 rounded-xl p-1">
             <ThemeToggle />
@@ -44,7 +52,14 @@ export default async function HoyPage() {
         {/* Barra de progreso del día */}
         <div className="mt-6">
           <div className="flex justify-between text-white/80 text-xs font-medium mb-2">
-            <span>Meta diaria: 0 / 5 contactos</span>
+            <div className="flex items-center gap-1.5">
+              <span>Meta diaria: 0 / 5 contactos</span>
+              <HelpTooltip
+                titulo="Meta diaria de contactos"
+                explicacion="Tu objetivo es hacer 5 contactos comerciales por día. Cada llamada, correo, WhatsApp o LinkedIn que registres en la app cuenta como un contacto."
+                ejemplo={"Si registras 5 interacciones hoy, la barra llega al 100% y tu racha sube en 1."}
+              />
+            </div>
             <span>0%</span>
           </div>
           <div className="h-2 rounded-full bg-white/20">
@@ -63,7 +78,14 @@ export default async function HoyPage() {
               🔥
             </div>
             <div>
-              <p className="font-semibold">Racha: 0 días</p>
+              <div className="flex items-center gap-1.5">
+                <p className="font-semibold">Racha: 0 días</p>
+                <HelpTooltip
+                  titulo="¿Qué es la racha?"
+                  explicacion="Cuenta los días seguidos que cumples tu meta de 5 contactos. Es como Duolingo — si un día no llegas a 5, la racha vuelve a cero."
+                  ejemplo={"Una racha de 20 días significa que contactaste al menos 5 empresas durante 20 días hábiles seguidos. Los vendedores más exitosos mantienen rachas largas."}
+                />
+              </div>
               <p className="text-sm text-muted-foreground">
                 Completa tu meta hoy para empezar tu racha
               </p>

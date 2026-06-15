@@ -108,10 +108,17 @@ export function TabPreparacion({ ficha, ultimaInteraccion, notasVendedor }: TabP
 
       {/* Borrador de mensaje */}
       <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
-          <MessageSquare className="h-3.5 w-3.5" />
-          Borrador de apertura
-        </p>
+        <div className="flex items-center gap-1.5 mb-2 px-1">
+          <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Borrador de apertura
+          </p>
+          <HelpTooltip
+            titulo="¿Cómo usar el borrador?"
+            explicacion="Es un mensaje de primer contacto generado por la IA basado en el análisis de la empresa. Úsalo como punto de partida — adáptalo con tu propio estilo antes de enviarlo."
+            ejemplo={"Nunca copies y pegues directo. Lee el borrador, personalízalo con algo que solo tú sabes, y envíalo desde tu correo o WhatsApp habitual."}
+          />
+        </div>
         <Card>
           <CardContent className="pt-4">
             {notasVendedor?.trim() && (
