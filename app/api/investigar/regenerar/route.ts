@@ -17,7 +17,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "Falta ANTHROPIC_API_KEY" }, { status: 500 });
   }
 
-  const { empresaId } = (await request.json()) as { empresaId?: string };
+  const { empresaId, contexto_nuevo } = (await request.json()) as {
+    empresaId?: string;
+    contexto_nuevo?: string;
+  };
 
   if (!empresaId) {
     return Response.json({ error: "empresaId requerido" }, { status: 400 });
@@ -26,6 +29,20 @@ export async function POST(request: Request) {
   const empresa = await getEmpresaById(empresaId);
   if (!empresa?.ficha_ia) {
     return Response.json({ error: "Empresa sin ficha de IA" }, { status: 404 });
+  }
+
+  // Combinar notas existentes con el nuevo contexto (acumulativo)
+  const notasExistentes = empresa.notas_vendedor?.trim() ?? "";
+  const notasCombinadas = contexto_nuevo?.trim()
+    ? notasExistentes
+      ? `${notasExistentes}\n\n[Actualización ${new Date().toLocaleDateString("es-CL")}]: ${contexto_nuevo.trim()}`
+      : contexto_nuevo.trim()
+    : notasExistentes;
+
+  // Guardar las notas combinadas antes de llamar a Claude
+  if (contexto_nuevo?.trim()) {
+    const { guardarNotasVendedor } = await import("@/lib/queries");
+    await guardarNotasVendedor(empresaId, notasCombinadas);
   }
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -45,8 +62,8 @@ Industria: ${empresa.ficha_ia.industria}
 Técnica actual: ${empresa.ficha_ia.tecnica_recomendada} — ${empresa.ficha_ia.razon_tecnica}
 Preguntas SPIN actuales: ${JSON.stringify(empresa.ficha_ia.preguntas_spin)}
 
-NOTAS DEL VENDEDOR:
-${empresa.notas_vendedor?.trim() || "(el vendedor no ha agregado notas aún — mantén el ángulo pero reescríbelo de forma más directa)"}`,
+NOTAS DEL VENDEDOR (úsalas para personalizar el análisis):
+${notasCombinadas || "(el vendedor no ha agregado notas aún — mantén el ángulo pero reescríbelo de forma más directa)"}`,
       },
     ],
   });

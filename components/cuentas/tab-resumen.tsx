@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Zap, Tag, AlertTriangle, RefreshCw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,21 +35,24 @@ interface TabResumenProps {
 
 export function TabResumen({ ficha, empresaId, notasVendedor }: TabResumenProps) {
   const router = useRouter();
+  const { toast } = useToast();
 
   // Estado local para campos regenerables (se actualizan sin recargar la página)
   const [anguloActual, setAnguloActual] = useState(ficha.angulo_entrada);
   const [razonActual, setRazonActual] = useState(ficha.razon_tecnica);
   const [regenerando, setRegenerando] = useState(false);
   const [errorRegen, setErrorRegen] = useState<string | null>(null);
+  const [contextoNuevo, setContextoNuevo] = useState("");
 
   const regenerar = async () => {
+    if (!contextoNuevo.trim()) return;
     setRegenerando(true);
     setErrorRegen(null);
     try {
       const res = await fetch("/api/investigar/regenerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresaId }),
+        body: JSON.stringify({ empresaId, contexto_nuevo: contextoNuevo.trim() }),
       });
       const data = (await res.json()) as { ok: boolean; ficha_ia?: FichaIA; error?: string };
       if (!res.ok || !data.ok) {
@@ -58,6 +62,8 @@ export function TabResumen({ ficha, empresaId, notasVendedor }: TabResumenProps)
       if (data.ficha_ia) {
         setAnguloActual(data.ficha_ia.angulo_entrada);
         setRazonActual(data.ficha_ia.razon_tecnica);
+        setContextoNuevo("");
+        toast({ title: "Análisis actualizado con tu contexto" });
         // Refresca preguntas_spin en tab Preparación (server component re-render)
         router.refresh();
       }
@@ -129,12 +135,25 @@ export function TabResumen({ ficha, empresaId, notasVendedor }: TabResumenProps)
             <p className="text-xs text-destructive">{errorRegen}</p>
           )}
 
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Agrega contexto nuevo
+            </label>
+            <textarea
+              value={contextoNuevo}
+              onChange={(e) => setContextoNuevo(e.target.value)}
+              placeholder="Ej: hablé con su jefe de calidad, me dijo que tuvieron 3 rechazos este mes, están evaluando cambiar de proveedor..."
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/60"
+            />
+          </div>
+
           <Button
             size="sm"
             variant="outline"
             className="w-full gap-1.5 text-xs"
             onClick={regenerar}
-            disabled={regenerando}
+            disabled={regenerando || !contextoNuevo.trim()}
           >
             <Zap className="h-3.5 w-3.5 text-amber-500" />
             ⚡ Regenerar con mi contexto
