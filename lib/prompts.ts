@@ -106,11 +106,46 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
   ],
   "decisores": [
     {
-      "cargo": "Cargo específico (ej: Jefa de Aseguramiento de Calidad)",
-      "area": "adquisiciones|calidad|operaciones|gerencia|compras|otro",
-      "por_que_es_clave": "Por qué esta persona nos importa para esta venta",
-      "dolor_especifico": "Qué problema concreto tiene esta persona en esta empresa",
-      "query_linkedin": "Query para buscar en LinkedIn (ej: 'Jefa Calidad Carozzi Chile')"
+      "cargo": "Jefe/a de Calidad",
+      "area": "calidad",
+      "por_que_es_clave": "Por qué el Jefe de Calidad de ESTA empresa necesita etiquetas perfectas (menciona su industria y producto)",
+      "dolor_especifico": "Qué problema concreto de etiquetado genera no conformidades, rechazos o auditorías fallidas EN ESTA empresa",
+      "query_linkedin": "Jefe Calidad [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/Gerente de Operaciones",
+      "area": "operaciones",
+      "por_que_es_clave": "Por qué el Jefe de Operaciones de ESTA empresa depende de etiquetas para no parar la línea",
+      "dolor_especifico": "Qué impacto operacional concreto tiene un fallo de etiquetado en la producción de ESTA empresa",
+      "query_linkedin": "Jefe Operaciones [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/a de Logística o Despacho",
+      "area": "operaciones",
+      "por_que_es_clave": "Por qué el Jefe de Logística de ESTA empresa necesita etiquetas logísticas fiables",
+      "dolor_especifico": "Qué problema de despacho, picking o trazabilidad causa un error de etiquetado en ESTA empresa",
+      "query_linkedin": "Jefe Logística [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Gerente de Planta",
+      "area": "operaciones",
+      "por_que_es_clave": "Por qué el Gerente de Planta de ESTA empresa aprueba o bloquea un cambio de proveedor de etiquetas",
+      "dolor_especifico": "Qué KPI de planta se ve afectado por problemas de etiquetado en ESTA empresa",
+      "query_linkedin": "Gerente Planta [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/Gerente de Compras o Adquisiciones",
+      "area": "compras",
+      "por_que_es_clave": "Por qué el Jefe de Compras de ESTA empresa es el guardián formal del cambio de proveedor",
+      "dolor_especifico": "Qué presión de costos y riesgo de suministro enfrenta el área de compras de ESTA empresa en etiquetas",
+      "query_linkedin": "Jefe Compras [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Gerente General o Dueño",
+      "area": "gerencia",
+      "por_que_es_clave": "Por qué el Gerente General de ESTA empresa se preocupa del etiquetado (riesgo reputacional, regulatorio o de mercado)",
+      "dolor_especifico": "Qué riesgo de negocio concreto representa un problema de etiquetado para ESTA empresa a nivel gerencial",
+      "query_linkedin": "Gerente General [NombreEmpresa] Chile"
     }
   ],
   "angulo_entrada": "3-4 líneas concretas: por qué contactar AHORA, qué problema específico tienen hoy, qué hace urgente el contacto",
@@ -285,38 +320,65 @@ Responde ÚNICAMENTE con JSON, sin texto adicional.
 export const PROMPT_REGENERAR_DECISORES = `
 Eres un analista comercial B2B especializado en etiquetas autoadhesivas e imprenta industrial en Chile.
 
-Tienes la ficha completa de una empresa chilena. Tu tarea es generar EXACTAMENTE 6 decisores
-adaptados al rubro específico de esa empresa, siguiendo los 6 cargos estándar del mapa de decisores.
+Tienes la ficha completa de una empresa chilena. Tu tarea es completar los campos variables
+de los 6 decisores estándar, adaptándolos al rubro específico de ESTA empresa.
 
 ${CONTEXTO_DOMINIO}
 
-REGLA CRÍTICA: Cada decisor debe tener un "dolor_especifico" que mencione el rubro, los productos
-o el proceso de ESA empresa en particular. NUNCA genérico. No "puede tener problemas de calidad".
-Sí: "En una empresa vitivinícola como ésta, una contraetiqueta fuera de especificación de color
-(Pantone incorrecto) genera rechazo de la DOC y devuelución del lote completo al mercado chileno."
+REGLA CRÍTICA: "dolor_especifico" y "por_que_es_clave" deben mencionar el rubro, los productos
+o el proceso de ESA empresa. NUNCA genérico.
+MAL: "puede tener problemas de calidad con las etiquetas"
+BIEN: "En esta planta de conservas, una etiqueta de nutrición con dato incorrecto obliga a retirar
+el lote completo del mercado y enfrentar una denuncia SEREMI Salud."
 
-Los 6 cargos obligatorios son:
-1. Jefe/a de Calidad o Aseguramiento de Calidad → area: "calidad"
-2. Jefe/Gerente de Operaciones o Producción → area: "operaciones"
-3. Jefe/a de Logística o Despacho → area: "operaciones"
-4. Gerente de Planta → area: "gerencia"
-5. Jefe/Gerente de Compras o Adquisiciones → area: "compras"
-6. Gerente General o Dueño → area: "gerencia"
-
-Para el campo "query_linkedin": usa el nombre de la empresa y el cargo.
-Ejemplo: "Jefa Calidad Viña Santa Carolina Chile"
+Los cargos, areas y query_linkedin base ya están fijos — solo genera "por_que_es_clave" y
+"dolor_especifico" adaptados. Para "query_linkedin" usa: "[cargo corto] [nombre empresa] Chile".
 
 Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional.
-La estructura EXACTA es:
 
 {
   "decisores": [
     {
-      "cargo": "Título exacto del cargo (ej: Jefa de Aseguramiento de Calidad)",
-      "area": "calidad|operaciones|gerencia|compras",
-      "por_que_es_clave": "Por qué esta persona importa para vender etiquetas A ESTA empresa específica",
-      "dolor_especifico": "El dolor concreto que tiene esta persona en el contexto del rubro de esta empresa",
-      "query_linkedin": "Query para buscar en LinkedIn (nombre empresa + cargo + Chile)"
+      "cargo": "Jefe/a de Calidad",
+      "area": "calidad",
+      "por_que_es_clave": "adaptado a esta empresa",
+      "dolor_especifico": "adaptado a esta empresa",
+      "query_linkedin": "Jefe Calidad [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/Gerente de Operaciones",
+      "area": "operaciones",
+      "por_que_es_clave": "adaptado a esta empresa",
+      "dolor_especifico": "adaptado a esta empresa",
+      "query_linkedin": "Jefe Operaciones [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/a de Logística o Despacho",
+      "area": "operaciones",
+      "por_que_es_clave": "adaptado a esta empresa",
+      "dolor_especifico": "adaptado a esta empresa",
+      "query_linkedin": "Jefe Logística [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Gerente de Planta",
+      "area": "operaciones",
+      "por_que_es_clave": "adaptado a esta empresa",
+      "dolor_especifico": "adaptado a esta empresa",
+      "query_linkedin": "Gerente Planta [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/Gerente de Compras o Adquisiciones",
+      "area": "compras",
+      "por_que_es_clave": "adaptado a esta empresa",
+      "dolor_especifico": "adaptado a esta empresa",
+      "query_linkedin": "Jefe Compras [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Gerente General o Dueño",
+      "area": "gerencia",
+      "por_que_es_clave": "adaptado a esta empresa",
+      "dolor_especifico": "adaptado a esta empresa",
+      "query_linkedin": "Gerente General [NombreEmpresa] Chile"
     }
   ]
 }
