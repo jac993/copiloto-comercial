@@ -78,6 +78,8 @@ export async function POST(req: NextRequest) {
         coaching_ia: null,
         proximo_paso: "Intentar contacto nuevamente",
         proximo_paso_fecha: sumarDiasHabiles(5),
+        badge_estado: "sin_respuesta",
+        decision_sugerida: null,
       });
 
       return NextResponse.json({ ok: true, interaccion_id: interaccion.id, resultado: null });
@@ -195,6 +197,8 @@ ${encabezadoEmail}${texto.trim()}
       }),
       proximo_paso: proximoPasoTexto,
       proximo_paso_fecha: proximoPasoFecha,
+      badge_estado: resultado.badge_estado ?? null,
+      decision_sugerida: resultado.decision_sugerida ?? null,
     };
 
     const interaccion = await insertInteraccion(interaccionData);

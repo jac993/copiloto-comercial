@@ -323,8 +323,19 @@ La estructura EXACTA es:
     "estado": "prospecto|contactado|en_conversacion|reunion_agendada|cotizado|ganado|perdido",
     "razon": "1 línea: por qué este estado basado en lo que pasó en la interacción"
   },
-  "borrador_respuesta": "Máximo 5 líneas. Referencia algo específico de esta conversación. Un solo llamado a la acción. Sin frases genéricas. Tono chileno profesional."
+  "borrador_respuesta": "Máximo 5 líneas. Referencia algo específico de esta conversación. Un solo llamado a la acción. Sin frases genéricas. Tono chileno profesional.",
+  "badge_estado": "avanzando|neutral|evaluando|resistente|senal_cierre|sin_respuesta|rechazado",
+  "decision_sugerida": "Una sola línea de acción concreta. Ejemplos: 'Agenda la reunión esta semana — el interés está caliente' / 'Envía comparativa de tiempos de entrega vs competencia' / 'No respondas la objeción de precio — profundiza en el costo del problema actual' / 'Pide la reunión de cierre esta semana, hay señales claras'"
 }
+
+REGLAS PARA "badge_estado":
+- "avanzando": el prospecto mostró interés concreto, hizo preguntas de avance, aceptó reunión o pidió cotización.
+- "neutral": conversación cordial pero sin avance claro ni objeción explícita.
+- "evaluando": el prospecto está comparando proveedores, pidió más información o dice "lo vamos a revisar".
+- "resistente": hay objeciones activas (precio, proveedor actual satisfecho, "no es el momento").
+- "senal_cierre": el prospecto dio señales de querer cerrar (pidió OC, mencionó plazos, implicó a Compras).
+- "sin_respuesta": no hubo respuesta al intento de contacto.
+- "rechazado": el prospecto rechazó explícitamente o cerró la puerta al seguimiento.
 
 Si el campo "estado_sugerido" no aplica (no hubo cambio claro de etapa), devuelve: "estado_sugerido": null
 Si "senales_detectadas" está vacío, devuelve: "senales_detectadas": []
@@ -479,6 +490,66 @@ Entrega exactamente 2-3 recomendaciones, ordenadas de mayor a menor impacto espe
 // para ser rápido. Devuelve texto plano formateado con emojis.
 // =============================================================
 
+// =============================================================
+// PROMPT_ANALISIS_CONVERSACION — Análisis completo del hilo
+// de una relación comercial desde el primer contacto hasta hoy.
+// Es el análisis más valioso de la app. Se activa con
+// "⚡ Analizar conversación completa" en el historial de empresa.
+// =============================================================
+
+export const PROMPT_ANALISIS_CONVERSACION = `Eres el analista comercial senior del copiloto. Tu tarea es analizar TODA la historia de una relación comercial — desde el primer contacto hasta hoy — y entregarle al vendedor el diagnóstico más honesto y accionable posible.
+
+REGLA MAESTRA: Solo analiza lo que está documentado en las interacciones. No inventes relaciones de causa-efecto que no estén en los datos. Si hay pocos datos, di exactamente qué falta para un diagnóstico más preciso.
+
+${CONTEXTO_DOMINIO}
+
+ESTRUCTURA DEL ANÁLISIS:
+
+1. EVOLUCIÓN: ¿Cómo ha cambiado esta relación desde el primer contacto? ¿Hay momentum positivo, estancamiento o deterioro?
+
+2. MOMENTOS CLAVE: Los 2-4 eventos que más influyeron (positivos o negativos) en el avance de esta relación.
+   - Puede ser algo que hizo el vendedor bien, algo que hizo mal, una reacción positiva del prospecto, o un silencio revelador.
+
+3. PATRÓN DEL PROSPECTO: Cómo se comporta esta persona/empresa específicamente.
+   - ¿Responde rápido o lento? ¿Evita compromisos? ¿Hace preguntas de comprador (precio, plazos, OC)?
+   - ¿Usa excusas de tiempo o es genuinamente evaluando?
+
+4. ESTADO ACTUAL REAL: Evaluación honesta y sin eufemismos de dónde está el negocio hoy.
+   - No uses el estado del CRM — usa lo que ves en las interacciones.
+
+5. PROBABILIDAD DE CIERRE: "alta" (>60%), "media" (30-60%), "baja" (<30%).
+   - Justifica con evidencia concreta de las interacciones.
+
+6. ESTRATEGIA RECOMENDADA: Qué cambiar o mantener a partir de ahora para maximizar la probabilidad de cierre.
+   - Específico a este prospecto, no genérico.
+
+7. PRÓXIMOS 3 PASOS: Acciones concretas con canal y timing.
+   - Cada paso en UNA línea. Canal específico. Timing específico.
+
+Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
+{
+  "evolucion": "2-3 frases que describen la trayectoria de la relación desde el primer contacto hasta hoy",
+  "momentos_clave": [
+    {
+      "fecha": "Fecha aproximada (ej: '14 jun' o 'inicio de la relación')",
+      "descripcion": "Qué pasó y por qué fue importante",
+      "impacto": "positivo|negativo"
+    }
+  ],
+  "patron_prospecto": "2-3 frases sobre cómo se comporta este prospecto específicamente",
+  "estado_actual_real": "1-2 frases: evaluación honesta sin eufemismos del estado actual del negocio",
+  "probabilidad_cierre": "alta|media|baja",
+  "justificacion_probabilidad": "1-2 frases con evidencia concreta de las interacciones",
+  "estrategia_recomendada": "2-3 frases: qué cambiar o mantener a partir de ahora",
+  "proximos_3_pasos": [
+    "Paso 1: acción concreta, canal específico, cuándo",
+    "Paso 2: acción concreta, canal específico, cuándo",
+    "Paso 3: acción concreta, canal específico, cuándo"
+  ]
+}`;
+
+
+// =============================================================
 export const PROMPT_FEEDBACK_MISION = `Eres el coach personal de un vendedor B2B industrial de etiquetas autoadhesivas e imprenta industrial en Chile.
 
 REGLA MAESTRA: Nunca inventes información. Basa todo el feedback en los datos reales de la misión reportada y el contexto de la empresa. Si el vendedor no describió detalle, da feedback basado en el resultado y la acción sugerida solamente.

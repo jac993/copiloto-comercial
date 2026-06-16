@@ -1,15 +1,19 @@
 "use client";
 
+// =============================================================
+// Tab Historial — timeline visual tipo WhatsApp con badge de
+// diagnóstico por interacción. Incluye panel "Nueva interacción"
+// y análisis completo de la conversación.
+// =============================================================
+
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
-  Phone, Users, Mail, MessageCircle,
-  ChevronDown, ChevronUp, Upload, Zap, Clock, Trash2,
+  Phone, Mail, MessageCircle, Briefcase, PhoneOff,
+  Trash2, ChevronDown, ChevronUp, Loader2, Plus, Zap,
+  TrendingUp, Minus, Brain, AlertCircle, Clock,
+  CheckCircle2, XCircle, AlertTriangle,
 } from "lucide-react";
-import type { CorreoDetectado } from "@/lib/types";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,54 +24,86 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { Interaccion } from "@/lib/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { NuevaInteraccionSheet } from "@/components/cuentas/nueva-interaccion-sheet";
+import type { Interaccion, BadgeEstado, AnalisisConversacion, CorreoDetectado, Contacto } from "@/lib/types";
 
-const TIPO_CONFIG: Record<
-  string,
-  { label: string; Icon: React.ElementType; color: string }
-> = {
-  llamada: { label: "Llamada", Icon: Phone, color: "text-blue-600 dark:text-blue-400" },
-  reunion: { label: "Reunión", Icon: Users, color: "text-purple-600 dark:text-purple-400" },
-  email: { label: "Email", Icon: Mail, color: "text-amber-600 dark:text-amber-400" },
-  whatsapp: { label: "WhatsApp", Icon: MessageCircle, color: "text-green-600 dark:text-green-400" },
+// ── Configuración visual de badges ───────────────────────────
+
+interface BadgeConf {
+  label: string;
+  dot: string;        // color del punto en el timeline
+  bg: string;         // fondo del badge
+  text: string;       // color del texto
+  Icon: React.ElementType;
+}
+
+const BADGE_CONF: Record<BadgeEstado, BadgeConf> = {
+  avanzando:    { label: "Avanzando",       dot: "#22C55E", bg: "bg-green-100 dark:bg-green-900/20",   text: "text-green-700 dark:text-green-400",   Icon: TrendingUp },
+  neutral:      { label: "Neutral",         dot: "#F59E0B", bg: "bg-amber-100 dark:bg-amber-900/20",   text: "text-amber-700 dark:text-amber-400",   Icon: Minus },
+  evaluando:    { label: "Evaluando",       dot: "#3B82F6", bg: "bg-blue-100 dark:bg-blue-900/20",     text: "text-blue-700 dark:text-blue-400",     Icon: Brain },
+  resistente:   { label: "Resistente",      dot: "#F97316", bg: "bg-orange-100 dark:bg-orange-900/20", text: "text-orange-700 dark:text-orange-400", Icon: AlertTriangle },
+  senal_cierre: { label: "Señal de cierre", dot: "#DC2626", bg: "bg-red-100 dark:bg-red-900/20",       text: "text-red-600 dark:text-red-400",       Icon: CheckCircle2 },
+  sin_respuesta:{ label: "Sin respuesta",   dot: "#6B7280", bg: "bg-gray-100 dark:bg-gray-800",        text: "text-gray-500 dark:text-gray-400",     Icon: Clock },
+  rechazado:    { label: "Rechazado",       dot: "#7F1D1D", bg: "bg-red-200 dark:bg-red-950/40",       text: "text-red-900 dark:text-red-300",       Icon: XCircle },
 };
 
-const SENTIMIENTO_BORDE: Record<string, string> = {
-  positivo: "border-l-4 border-l-[#22C55E]",
-  neutro: "border-l-4 border-l-gray-300 dark:border-l-gray-600",
-  negativo: "border-l-4 border-l-destructive",
+const DEFAULT_DOT = "#A78BFA";
+
+// ── Icono por tipo ────────────────────────────────────────────
+
+const TIPO_CONF: Record<string, { emoji: string; Icon: React.ElementType; label: string }> = {
+  llamada:      { emoji: "📞", Icon: Phone,        label: "Llamada" },
+  email:        { emoji: "📧", Icon: Mail,         label: "Correo" },
+  whatsapp:     { emoji: "💬", Icon: MessageCircle, label: "WhatsApp" },
+  linkedin:     { emoji: "💼", Icon: Briefcase,    label: "LinkedIn" },
+  sin_respuesta:{ emoji: "⏰", Icon: PhoneOff,     label: "Sin respuesta" },
 };
 
-function fechaLegible(fechaStr: string): string {
-  return new Intl.DateTimeFormat("es-CL", {
+function fechaCorta(iso: string) {
+  return new Date(iso).toLocaleString("es-CL", {
     day: "numeric",
     month: "short",
-    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(fechaStr));
+  });
 }
+
+// ── Props ─────────────────────────────────────────────────────
 
 interface TabHistorialProps {
   interacciones: Interaccion[];
   empresaId: string;
+  contactos: Contacto[];
 }
 
-export function TabHistorial({ interacciones: interaccionesIniciales, empresaId }: TabHistorialProps) {
-  const router = useRouter();
-  const [lista, setLista] = useState(interaccionesIniciales);
+// ── Componente principal ──────────────────────────────────────
+
+export function TabHistorial({ interacciones: inicial, empresaId, contactos }: TabHistorialProps) {
+  const [lista, setLista] = useState<Interaccion[]>(inicial);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
+  const [analizandoId, setAnalizandoId] = useState<string | null>(null);
+  const [sheetAbierto, setSheetAbierto] = useState(false);
+  const [analizandoTodo, setAnalizandoTodo] = useState(false);
+  const [analisisTodo, setAnalisisTodo] = useState<AnalisisConversacion | null>(null);
+  const [errorTodo, setErrorTodo] = useState<string | null>(null);
   const [correos, setCorreos] = useState<CorreoDetectado[]>([]);
 
   useEffect(() => {
     fetch(`/api/correos/${empresaId}`)
       .then((r) => r.json())
       .then((d) => setCorreos(d.correos ?? []))
-      .catch(() => {/* ignorar silenciosamente */});
+      .catch(() => {/* silencioso */});
   }, [empresaId]);
 
-  const eliminar = async () => {
+  // ── Eliminar ────────────────────────────────────────────────
+  async function eliminar() {
     if (!confirmandoId) return;
     setEliminandoId(confirmandoId);
     setConfirmandoId(null);
@@ -77,66 +113,121 @@ export function TabHistorial({ interacciones: interaccionesIniciales, empresaId 
     } finally {
       setEliminandoId(null);
     }
-  };
+  }
+
+  // ── Analizar interacción existente ───────────────────────────
+  async function analizarExistente(id: string) {
+    setAnalizandoId(id);
+    try {
+      const res = await fetch(`/api/interacciones/${id}/analizar`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setLista((prev) => prev.map((i) => i.id === id ? data.interaccion : i));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Error al analizar");
+    } finally {
+      setAnalizandoId(null);
+    }
+  }
+
+  // ── Analizar toda la conversación ────────────────────────────
+  async function analizarTodo() {
+    setAnalizandoTodo(true);
+    setErrorTodo(null);
+    try {
+      const res = await fetch(`/api/empresas/${empresaId}/analizar-todo`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setAnalisisTodo(data.analisis);
+    } catch (e) {
+      setErrorTodo(e instanceof Error ? e.message : "Error al analizar");
+    } finally {
+      setAnalizandoTodo(false);
+    }
+  }
+
+  // ── Nueva interacción guardada ───────────────────────────────
+  function handleCreada(nueva: Interaccion) {
+    setLista((prev) => [nueva, ...prev]);
+  }
 
   return (
-    <div className="space-y-3 pb-24">
-      {/* Banner correos detectados por Gmail */}
+    <div className="space-y-3 pb-28">
+
+      {/* Banner correos detectados */}
       {correos.length > 0 && (
-        <div className="bg-[#FFFBEB] border border-amber-200 rounded-xl p-3 space-y-1.5">
+        <div className="bg-[#FFFBEB] border border-amber-200 rounded-xl p-3 space-y-1">
           <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
             <Mail className="w-3.5 h-3.5" />
             {correos.length} correo{correos.length > 1 ? "s" : ""} detectado{correos.length > 1 ? "s" : ""} en Gmail
           </p>
-          {correos.slice(0, 3).map((c) => (
-            <div key={c.id} className="text-xs text-amber-800 pl-5">
+          {correos.slice(0, 2).map((c) => (
+            <p key={c.id} className="text-xs text-amber-800 pl-5 truncate">
               <span className="font-medium">{c.asunto ?? "(sin asunto)"}</span>
-              {c.snippet && <span className="text-amber-600 ml-1">— {c.snippet.slice(0, 80)}</span>}
-            </div>
+              {c.snippet && <span className="text-amber-600"> — {c.snippet.slice(0, 70)}</span>}
+            </p>
           ))}
-          {correos.length > 3 && (
-            <p className="text-xs text-amber-600 pl-5">+{correos.length - 3} más</p>
-          )}
+          {correos.length > 2 && <p className="text-xs text-amber-600 pl-5">+{correos.length - 2} más</p>}
         </div>
       )}
 
-      {/* Encabezado con ayuda */}
-      <div className="flex items-center gap-1.5 px-1">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Historial de interacciones</p>
-        <HelpTooltip
-          titulo="¿Qué es el historial?"
-          explicacion="Registro cronológico de todas tus interacciones con esta empresa. Cada llamada, correo, WhatsApp o LinkedIn que analices queda guardado aquí con su transcripción, coaching y próximo paso."
-          ejemplo={"Antes de llamar, revisa el historial para recordar qué se habló en la última conversación y qué comprometiste."}
-        />
+      {/* Header con botón de análisis completo */}
+      <div className="flex items-center justify-between px-0.5">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Historial
+        </p>
+        {lista.length >= 2 && (
+          <button
+            onClick={analizarTodo}
+            disabled={analizandoTodo}
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED] hover:text-[#6D28D9] transition-colors disabled:opacity-50"
+          >
+            {analizandoTodo
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Zap className="w-3.5 h-3.5" />}
+            Analizar conversación completa
+          </button>
+        )}
       </div>
 
-      {lista.length === 0 ? (
-        <div className="text-center py-10 space-y-3">
+      {/* Lista vacía */}
+      {lista.length === 0 && (
+        <div className="text-center py-12 space-y-3">
           <Clock className="h-10 w-10 mx-auto text-muted-foreground opacity-30" />
           <p className="text-sm text-muted-foreground">Sin interacciones aún</p>
           <p className="text-xs text-muted-foreground">
-            Registra tu primera llamada o reunión
+            Toca el botón + para registrar la primera
           </p>
         </div>
-      ) : (
-        lista.map((interaccion) => (
-          <EntradaTimeline
-            key={interaccion.id}
-            interaccion={interaccion}
-            eliminando={eliminandoId === interaccion.id}
-            onEliminar={() => setConfirmandoId(interaccion.id)}
-          />
-        ))
       )}
 
+      {/* Timeline */}
+      <div className="relative">
+        {/* Línea vertical del timeline */}
+        {lista.length > 0 && (
+          <div className="absolute left-[11px] top-4 bottom-4 w-px bg-border" />
+        )}
+
+        <div className="space-y-4">
+          {lista.map((interaccion) => (
+            <EntradaTimeline
+              key={interaccion.id}
+              interaccion={interaccion}
+              eliminando={eliminandoId === interaccion.id}
+              analizando={analizandoId === interaccion.id}
+              onEliminar={() => setConfirmandoId(interaccion.id)}
+              onAnalizar={() => analizarExistente(interaccion.id)}
+            />
+          ))}
+        </div>
+      </div>
+
       {/* Dialog de confirmación de eliminación */}
-      <AlertDialog open={confirmandoId !== null} onOpenChange={(open: boolean) => { if (!open) setConfirmandoId(null); }}>
+      <AlertDialog open={confirmandoId !== null} onOpenChange={(open) => { if (!open) setConfirmandoId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar esta interacción?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -150,159 +241,293 @@ export function TabHistorial({ interacciones: interaccionesIniciales, empresaId 
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Botón flotante para subir nueva llamada */}
+      {/* Modal análisis completo */}
+      <Dialog open={analisisTodo !== null || errorTodo !== null} onOpenChange={(open) => { if (!open) { setAnalisisTodo(null); setErrorTodo(null); } }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-extrabold">
+              ⚡ Análisis de la conversación completa
+            </DialogTitle>
+          </DialogHeader>
+          {errorTodo && (
+            <div className="flex items-start gap-2 bg-destructive/10 rounded-xl p-3">
+              <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive">{errorTodo}</p>
+            </div>
+          )}
+          {analisisTodo && <AnalisisTodoView analisis={analisisTodo} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* Panel nueva interacción */}
+      <NuevaInteraccionSheet
+        abierto={sheetAbierto}
+        onCerrar={() => setSheetAbierto(false)}
+        empresaId={empresaId}
+        contactos={contactos}
+        onCreada={handleCreada}
+      />
+
+      {/* FAB + Nueva interacción */}
       <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
         <Button
           size="lg"
           className="rounded-2xl shadow-xl shadow-primary/30 gap-2 pr-5 h-14"
-          onClick={() => router.push(`/llamadas?empresa=${empresaId}`)}
+          onClick={() => setSheetAbierto(true)}
         >
-          <Upload className="h-5 w-5" />
-          Subir llamada
+          <Plus className="h-5 w-5" />
+          Nueva interacción
         </Button>
       </div>
     </div>
   );
 }
 
+// ── Entrada individual del timeline ──────────────────────────
+
 function EntradaTimeline({
   interaccion,
   eliminando,
+  analizando,
   onEliminar,
+  onAnalizar,
 }: {
   interaccion: Interaccion;
   eliminando: boolean;
+  analizando: boolean;
   onEliminar: () => void;
+  onAnalizar: () => void;
 }) {
-  const [expandida, setExpandida] = useState(false);
-  const tipoConf = TIPO_CONFIG[interaccion.tipo] ?? TIPO_CONFIG.llamada;
-  const Icon = tipoConf.Icon;
-  const bordeSentimiento =
-    interaccion.sentimiento
-      ? SENTIMIENTO_BORDE[interaccion.sentimiento]
-      : "border-l-4 border-l-gray-200";
+  const [expandido, setExpandido] = useState(false);
+
+  const badgeConf = interaccion.badge_estado ? BADGE_CONF[interaccion.badge_estado] : null;
+  const tipoConf = TIPO_CONF[interaccion.tipo] ?? TIPO_CONF.llamada;
+  const dotColor = badgeConf?.dot ?? DEFAULT_DOT;
+
+  // Parsear coaching_ia si existe
+  let coaching: { coaching?: { bien?: string; mejorar?: string; oportunidad_perdida?: string }; borrador_respuesta?: string; lo_que_no_respondio?: string } | null = null;
+  if (interaccion.coaching_ia) {
+    try { coaching = JSON.parse(interaccion.coaching_ia); } catch { /* ignorar */ }
+  }
+
+  const analizado = !!interaccion.resumen_ia;
 
   return (
-    <Card className={`overflow-hidden transition-opacity ${eliminando ? "opacity-40 pointer-events-none" : ""} ${bordeSentimiento}`}>
-      <CardContent className="pt-4 pb-3">
-        {/* Cabecera de la entrada */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-2.5">
-            <div className="h-8 w-8 rounded-xl bg-muted flex items-center justify-center shrink-0">
-              <Icon className={`h-4 w-4 ${tipoConf.color}`} />
-            </div>
+    <div
+      className={`relative pl-7 transition-opacity ${eliminando ? "opacity-40 pointer-events-none" : ""}`}
+    >
+      {/* Punto del timeline */}
+      <div
+        className="absolute left-0 top-3.5 w-5 h-5 rounded-full border-2 border-background flex items-center justify-center z-10"
+        style={{ backgroundColor: dotColor }}
+      />
+
+      {/* Tarjeta */}
+      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+        {/* Cabecera */}
+        <div className="px-4 pt-3.5 pb-2">
+          <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold">{tipoConf.label}</p>
-              <p className="text-xs text-muted-foreground">
-                {fechaLegible(interaccion.fecha)}
+              <p className="text-sm font-semibold text-foreground">
+                {tipoConf.emoji} {tipoConf.label}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {fechaCorta(interaccion.fecha)}
               </p>
             </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={onEliminar}
+                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
+                aria-label="Eliminar"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-destructive/60 hover:text-destructive" />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {interaccion.tecnica_usada && (
-              <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
-                {interaccion.tecnica_usada}
-              </span>
-            )}
-            <button
-              onClick={onEliminar}
-              className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
-              aria-label="Eliminar interacción"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-destructive/60 hover:text-destructive transition-colors" />
-            </button>
-            <button
-              onClick={() => setExpandida(!expandida)}
-              className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors"
-            >
-              {expandida ? (
-                <ChevronUp className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-            </button>
-          </div>
+
+          {/* Badge de estado */}
+          {badgeConf && (
+            <div className={`mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badgeConf.bg} ${badgeConf.text}`}>
+              <badgeConf.Icon className="w-3 h-3" />
+              {badgeConf.label}
+            </div>
+          )}
+
+          {/* Decisión sugerida */}
+          {interaccion.decision_sugerida && (
+            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+              {interaccion.decision_sugerida}
+            </p>
+          )}
+
+          {/* Resumen (si fue analizado) */}
+          {interaccion.resumen_ia && (
+            <p className="text-xs text-foreground/80 mt-2 line-clamp-2 leading-relaxed">
+              {interaccion.resumen_ia}
+            </p>
+          )}
+
+          {/* Próximo paso */}
+          {interaccion.proximo_paso && (
+            <div className="mt-2 flex items-start gap-1.5 text-xs">
+              <span className="text-primary font-medium shrink-0">→</span>
+              <span className="text-foreground/80">{interaccion.proximo_paso}</span>
+            </div>
+          )}
         </div>
 
-        {/* Resumen breve siempre visible */}
-        {interaccion.resumen_ia && (
-          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-            {interaccion.resumen_ia}
-          </p>
-        )}
+        {/* Botones de acción */}
+        <div className="px-4 pb-3 pt-1 flex items-center gap-2 border-t border-border/50">
+          {analizado ? (
+            <button
+              onClick={() => setExpandido(!expandido)}
+              className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              {expandido
+                ? <><ChevronUp className="w-3.5 h-3.5" /> Ocultar análisis</>
+                : <><ChevronDown className="w-3.5 h-3.5" /> Ver análisis completo</>
+              }
+            </button>
+          ) : (
+            <button
+              onClick={onAnalizar}
+              disabled={analizando}
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED] hover:text-[#6D28D9] transition-colors disabled:opacity-50"
+            >
+              {analizando
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Zap className="w-3.5 h-3.5" />
+              }
+              {analizando ? "Analizando…" : "⚡ Analizar ahora"}
+            </button>
+          )}
+        </div>
 
-        {/* Próximo paso */}
-        {interaccion.proximo_paso && (
-          <div className="mt-2 flex items-center gap-1.5 text-xs">
-            <span className="text-primary font-medium">→ Próximo paso:</span>
-            <span className="text-foreground">{interaccion.proximo_paso}</span>
-            {interaccion.proximo_paso_fecha && (
-              <span className="text-muted-foreground ml-1">
-                ({interaccion.proximo_paso_fecha})
-              </span>
+        {/* Sección expandida de coaching */}
+        {expandido && coaching && (
+          <div className="px-4 pb-4 pt-2 border-t border-border space-y-3">
+            {coaching.coaching && (
+              <>
+                {coaching.coaching.bien && (
+                  <div>
+                    <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1">✅ Qué hiciste bien</p>
+                    <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.bien}</p>
+                  </div>
+                )}
+                {coaching.coaching.mejorar && (
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">🎯 Qué mejorar</p>
+                    <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.mejorar}</p>
+                  </div>
+                )}
+                {coaching.coaching.oportunidad_perdida && (
+                  <div>
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-1">💡 Oportunidad perdida</p>
+                    <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.oportunidad_perdida}</p>
+                  </div>
+                )}
+              </>
             )}
-          </div>
-        )}
-
-        {/* Contenido expandido */}
-        {expandida && (
-          <div className="mt-4 space-y-3 border-t border-border pt-3">
-            {/* Transcripción */}
-            {interaccion.transcripcion && (
+            {coaching.lo_que_no_respondio && (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1.5">
-                  Transcripción
-                </p>
-                <div className="bg-muted/50 rounded-xl p-3 max-h-48 overflow-y-auto">
-                  <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                    {interaccion.transcripcion}
-                  </p>
-                </div>
+                <p className="text-xs font-semibold text-orange-700 dark:text-orange-400 mb-1">🔍 Lo que no respondió</p>
+                <p className="text-xs text-foreground/80 leading-relaxed">{coaching.lo_que_no_respondio}</p>
               </div>
             )}
-
-            {/* Coaching de IA */}
-            {interaccion.coaching_ia && (
-              <div>
-                <p className="text-xs font-semibold text-primary mb-1.5 flex items-center gap-1">
-                  <Zap className="h-3 w-3" /> Coaching
-                </p>
-                <div className="bg-primary/5 rounded-xl p-3">
-                  <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                    {interaccion.coaching_ia}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Compromisos detectados */}
-            {interaccion.compromisos && interaccion.compromisos.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1.5">
-                  Compromisos
-                </p>
-                <div className="space-y-1.5">
-                  {interaccion.compromisos.map((c, i) => (
-                    <div
-                      key={i}
-                      className="flex items-start gap-2 text-xs"
-                    >
-                      <span className="text-primary mt-0.5">✓</span>
-                      <div>
-                        <span className="font-medium">{c.responsable}:</span>{" "}
-                        {c.descripcion}
-                        {c.fecha && (
-                          <span className="text-muted-foreground"> · {c.fecha}</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {coaching.borrador_respuesta && (
+              <div className="bg-[#F5F3FF] dark:bg-[#1E1B4B]/30 border border-violet-200 dark:border-violet-800/40 rounded-xl p-3">
+                <p className="text-xs font-semibold text-[#7C3AED] mb-1.5">✉️ Borrador de respuesta</p>
+                <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{coaching.borrador_respuesta}</p>
               </div>
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal análisis completo ───────────────────────────────────
+
+function AnalisisTodoView({ analisis }: { analisis: AnalisisConversacion }) {
+  const probConf: Record<string, { color: string; label: string }> = {
+    alta:  { color: "text-green-600 bg-green-100",  label: "Alta" },
+    media: { color: "text-amber-600 bg-amber-100",  label: "Media" },
+    baja:  { color: "text-red-600 bg-red-100",      label: "Baja" },
+  };
+  const prob = probConf[analisis.probabilidad_cierre] ?? probConf.media;
+
+  return (
+    <div className="space-y-5">
+      {/* Probabilidad */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-muted-foreground">Probabilidad de cierre</p>
+        <span className={`text-sm font-bold px-3 py-1 rounded-full ${prob.color}`}>
+          {prob.label}
+        </span>
+      </div>
+
+      {/* Evolución */}
+      <section>
+        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Evolución de la relación</p>
+        <p className="text-sm text-foreground/80 leading-relaxed">{analisis.evolucion}</p>
+      </section>
+
+      {/* Justificación probabilidad */}
+      <section>
+        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Justificación</p>
+        <p className="text-sm text-foreground/80 leading-relaxed">{analisis.justificacion_probabilidad}</p>
+      </section>
+
+      {/* Momentos clave */}
+      {analisis.momentos_clave.length > 0 && (
+        <section>
+          <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-2">Momentos clave</p>
+          <div className="space-y-2">
+            {analisis.momentos_clave.map((m, i) => (
+              <div key={i} className={`rounded-xl p-3 flex items-start gap-2.5 ${m.impacto === "positivo" ? "bg-green-50 dark:bg-green-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
+                <span className="text-base shrink-0">{m.impacto === "positivo" ? "✅" : "⚠️"}</span>
+                <div>
+                  <p className="text-xs font-semibold">{m.fecha}</p>
+                  <p className="text-xs text-foreground/80 mt-0.5">{m.descripcion}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Patrón del prospecto */}
+      <section>
+        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Patrón del prospecto</p>
+        <p className="text-sm text-foreground/80 leading-relaxed">{analisis.patron_prospecto}</p>
+      </section>
+
+      {/* Estado actual real */}
+      <section>
+        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Estado actual real</p>
+        <p className="text-sm text-foreground/80 leading-relaxed">{analisis.estado_actual_real}</p>
+      </section>
+
+      {/* Estrategia */}
+      <section>
+        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Estrategia recomendada</p>
+        <p className="text-sm text-foreground/80 leading-relaxed">{analisis.estrategia_recomendada}</p>
+      </section>
+
+      {/* Próximos 3 pasos */}
+      <section>
+        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-2">Próximos 3 pasos</p>
+        <div className="space-y-2">
+          {analisis.proximos_3_pasos.map((paso, i) => (
+            <div key={i} className="flex items-start gap-2.5 bg-[#F5F3FF] dark:bg-[#1E1B4B]/30 rounded-xl p-3">
+              <span className="text-xs font-extrabold text-[#7C3AED] shrink-0 mt-0.5">{i + 1}</span>
+              <p className="text-sm text-foreground/80">{paso}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }

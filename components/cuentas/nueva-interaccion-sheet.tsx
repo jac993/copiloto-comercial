@@ -1,0 +1,442 @@
+"use client";
+
+// =============================================================
+// Panel "Nueva interacción" — se abre desde el tab Historial.
+// Tipo llamada: upload audio → AssemblyAI → guardar + analizar.
+// Tipos texto: textarea → guardar sin analizar o ⚡ guardar y analizar.
+// Sin respuesta: registro directo, gratis.
+// =============================================================
+
+import { useState, useRef } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Phone, Mail, MessageCircle, Briefcase, PhoneOff,
+  Upload, Loader2, CheckCircle2,
+} from "lucide-react";
+import type { Contacto, Interaccion, TipoInteraccion } from "@/lib/types";
+
+type Fase = "tipos" | "form" | "transcribiendo" | "ok";
+
+const TIPOS = [
+  { id: "llamada" as TipoInteraccion,      emoji: "📞", label: "Llamada",    Icon: Phone,       ia: true },
+  { id: "email" as TipoInteraccion,        emoji: "📧", label: "Correo",     Icon: Mail,        ia: false },
+  { id: "whatsapp" as TipoInteraccion,     emoji: "💬", label: "WhatsApp",   Icon: MessageCircle, ia: false },
+  { id: "linkedin" as TipoInteraccion,     emoji: "💼", label: "LinkedIn",   Icon: Briefcase,   ia: false },
+  { id: "sin_respuesta" as TipoInteraccion, emoji: "⏰", label: "Sin respuesta", Icon: PhoneOff, ia: false },
+];
+
+interface Props {
+  abierto: boolean;
+  onCerrar: () => void;
+  empresaId: string;
+  contactos: Contacto[];
+  onCreada: (interaccion: Interaccion) => void;
+}
+
+export function NuevaInteraccionSheet({
+  abierto, onCerrar, empresaId, contactos, onCreada,
+}: Props) {
+  const [fase, setFase] = useState<Fase>("tipos");
+  const [tipo, setTipo] = useState<TipoInteraccion | null>(null);
+  const [texto, setTexto] = useState("");
+  const [contactoId, setContactoId] = useState<string>("");
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [mensajeCarga, setMensajeCarga] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function reset() {
+    setFase("tipos");
+    setTipo(null);
+    setTexto("");
+    setContactoId("");
+    setArchivo(null);
+    setCargando(false);
+    setMensajeCarga("");
+    setError(null);
+  }
+
+  function cerrar() {
+    reset();
+    onCerrar();
+  }
+
+  function seleccionarTipo(t: TipoInteraccion) {
+    setTipo(t);
+    setFase("form");
+    setError(null);
+  }
+
+  // ── Registrar sin respuesta ──────────────────────────────────
+  async function registrarSinRespuesta() {
+    setCargando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/interacciones/crear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresa_id: empresaId, tipo: "sin_respuesta", contacto_id: contactoId || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onCreada(data.interaccion);
+      setFase("ok");
+      setTimeout(cerrar, 1200);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al registrar");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  // ── Guardar texto sin análisis ───────────────────────────────
+  async function guardarSinAnalizar() {
+    if (!texto.trim()) { setError("Pega el texto antes de guardar."); return; }
+    setCargando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/interacciones/crear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          tipo,
+          texto: texto.trim(),
+          contacto_id: contactoId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onCreada(data.interaccion);
+      setFase("ok");
+      setTimeout(cerrar, 1200);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  // ── Guardar texto + analizar con Claude ──────────────────────
+  async function guardarYAnalizar() {
+    if (!texto.trim()) { setError("Pega el texto antes de analizar."); return; }
+    setCargando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/analizar-interaccion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          tipo,
+          texto: texto.trim(),
+          contacto_id: contactoId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      onCreada(data.interaccion_id
+        // El endpoint devuelve interaccion_id, no el objeto completo.
+        // Construimos un objeto mínimo para actualizar la lista.
+        ? { ...data.resultado, id: data.interaccion_id, empresa_id: empresaId, tipo, fecha: new Date().toISOString(), contacto_id: contactoId || null, audio_url: null, transcripcion: tipo === "llamada" ? texto : null, resumen_ia: data.resultado?.resumen ?? null, compromisos: null, sentimiento: data.resultado?.sentimiento_prospecto ?? null, tecnica_usada: data.resultado?.tecnica_recomendada ?? null, coaching_ia: JSON.stringify(data.resultado), proximo_paso: data.resultado?.proximo_paso ?? null, proximo_paso_fecha: null, badge_estado: data.resultado?.badge_estado ?? null, decision_sugerida: data.resultado?.decision_sugerida ?? null, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() } as Interaccion
+        : data.interaccion
+      );
+      setFase("ok");
+      setTimeout(cerrar, 1200);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al analizar");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  // ── Subir llamada (AssemblyAI → análisis) ───────────────────
+  async function subirYAnalizar() {
+    if (!archivo) { setError("Selecciona un archivo de audio."); return; }
+    setCargando(true);
+    setError(null);
+    try {
+      setMensajeCarga("Subiendo audio... ⚡");
+      setFase("transcribiendo");
+
+      const formData = new FormData();
+      formData.append("file", archivo);
+      const resT = await fetch("/api/transcribir", { method: "POST", body: formData });
+      const dataT = await resT.json();
+      if (!resT.ok) throw new Error(dataT.error);
+
+      setMensajeCarga("Analizando con IA... ⚡");
+
+      const resA = await fetch("/api/analizar-interaccion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          tipo: "llamada",
+          texto: dataT.transcripcion,
+          audio_url: dataT.audio_url,
+          contacto_id: contactoId || undefined,
+        }),
+      });
+      const dataA = await resA.json();
+      if (!resA.ok) throw new Error(dataA.error);
+
+      // Para la lista, creamos objeto Interaccion mínimo con los datos disponibles
+      const interaccionCreada: Interaccion = {
+        id: dataA.interaccion_id,
+        empresa_id: empresaId,
+        contacto_id: contactoId || null,
+        tipo: "llamada",
+        fecha: new Date().toISOString(),
+        audio_url: dataT.audio_url ?? null,
+        transcripcion: dataT.transcripcion,
+        resumen_ia: dataA.resultado?.resumen ?? null,
+        compromisos: null,
+        sentimiento: dataA.resultado?.sentimiento_prospecto ?? null,
+        tecnica_usada: dataA.resultado?.tecnica_recomendada ?? null,
+        coaching_ia: JSON.stringify(dataA.resultado),
+        proximo_paso: dataA.resultado?.proximo_paso ?? null,
+        proximo_paso_fecha: null,
+        badge_estado: dataA.resultado?.badge_estado ?? null,
+        decision_sugerida: dataA.resultado?.decision_sugerida ?? null,
+        creado_en: new Date().toISOString(),
+        actualizado_en: new Date().toISOString(),
+      };
+
+      onCreada(interaccionCreada);
+      setFase("ok");
+      setTimeout(cerrar, 1200);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al procesar el audio");
+      setFase("form");
+    } finally {
+      setCargando(false);
+      setMensajeCarga("");
+    }
+  }
+
+  const tipoConf = TIPOS.find((t) => t.id === tipo);
+
+  return (
+    <Dialog open={abierto} onOpenChange={(open) => { if (!open) cerrar(); }}>
+      <DialogContent className="max-w-md rounded-2xl p-0 overflow-hidden gap-0">
+
+        {/* ── FASE: Selección de tipo ── */}
+        {fase === "tipos" && (
+          <>
+            <DialogHeader className="px-5 pt-5 pb-3">
+              <DialogTitle className="text-base font-extrabold">Nueva interacción</DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">¿Qué tipo de contacto fue?</p>
+            </DialogHeader>
+            <div className="px-4 pb-5 space-y-2">
+              {TIPOS.map(({ id, emoji, label, ia }) => (
+                <button
+                  key={id}
+                  onClick={() => seleccionarTipo(id)}
+                  className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-left active:scale-[0.98]"
+                >
+                  <span className="text-xl">{emoji}</span>
+                  <span className="flex-1 font-medium text-sm">{label}</span>
+                  {ia && (
+                    <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-medium">
+                      ⚡ usa IA
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ── FASE: Formulario ── */}
+        {fase === "form" && tipoConf && (
+          <>
+            <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
+              <button
+                onClick={() => setFase("tipos")}
+                className="text-xs text-muted-foreground hover:text-foreground mb-1"
+              >
+                ← Volver
+              </button>
+              <DialogTitle className="text-base font-extrabold">
+                {tipoConf.emoji} {tipoConf.label}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="px-5 py-4 space-y-4">
+              {/* Selector de contacto */}
+              {contactos.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                    Contacto (opcional)
+                  </label>
+                  <select
+                    value={contactoId}
+                    onChange={(e) => setContactoId(e.target.value)}
+                    className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    <option value="">Sin contacto específico</option>
+                    {contactos.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}{c.cargo ? ` — ${c.cargo}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Llamada: file upload */}
+              {tipo === "llamada" && (
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                    Archivo de audio
+                  </label>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".mp3,.mp4,.m4a,.wav,.ogg,.flac,.webm"
+                    className="hidden"
+                    onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+                  />
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-border hover:border-primary/40 hover:bg-muted/40 transition-all"
+                  >
+                    <Upload className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {archivo ? archivo.name : "Seleccionar MP3, M4A, WAV…"}
+                    </span>
+                  </button>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    ⚡ Transcribe con AssemblyAI y analiza con Claude
+                  </p>
+                </div>
+              )}
+
+              {/* Sin respuesta: solo selector de contacto (ya arriba) */}
+              {tipo === "sin_respuesta" && (
+                <div className="bg-muted/40 rounded-xl p-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Registra que enviaste un mensaje o llamaste y no obtuviste respuesta.
+                    El copiloto lo recordará para hacerte seguimiento en 5 días hábiles.
+                  </p>
+                </div>
+              )}
+
+              {/* Tipos texto: textarea */}
+              {tipo !== "llamada" && tipo !== "sin_respuesta" && (
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                    Pega el texto de la conversación
+                  </label>
+                  <Textarea
+                    value={texto}
+                    onChange={(e) => setTexto(e.target.value)}
+                    placeholder={
+                      tipo === "email"
+                        ? "Pega el correo (con el asunto si puedes)…"
+                        : tipo === "whatsapp"
+                        ? "Pega la conversación de WhatsApp…"
+                        : "Pega el hilo de LinkedIn…"
+                    }
+                    className="min-h-[140px] text-sm rounded-xl resize-none"
+                  />
+                </div>
+              )}
+
+              {/* Error */}
+              {error && (
+                <p className="text-xs text-destructive bg-destructive/10 rounded-xl p-3">
+                  {error}
+                </p>
+              )}
+
+              {/* Botones de acción */}
+              <div className="flex gap-2 pt-1">
+                {tipo === "llamada" && (
+                  <Button
+                    className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-11 rounded-xl text-sm"
+                    onClick={subirYAnalizar}
+                    disabled={cargando || !archivo}
+                  >
+                    {cargando ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+                    ⚡ Subir y analizar
+                  </Button>
+                )}
+
+                {tipo === "sin_respuesta" && (
+                  <Button
+                    className="flex-1 h-11 rounded-xl text-sm"
+                    onClick={registrarSinRespuesta}
+                    disabled={cargando}
+                  >
+                    {cargando ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+                    Registrar
+                  </Button>
+                )}
+
+                {tipo !== "llamada" && tipo !== "sin_respuesta" && (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-11 rounded-xl text-sm"
+                      onClick={guardarSinAnalizar}
+                      disabled={cargando}
+                    >
+                      Guardar
+                    </Button>
+                    <Button
+                      className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-11 rounded-xl text-sm"
+                      onClick={guardarYAnalizar}
+                      disabled={cargando}
+                    >
+                      {cargando ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+                      ⚡ Guardar y analizar
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── FASE: Transcribiendo/Analizando (llamada larga) ── */}
+        {fase === "transcribiendo" && (
+          <div className="px-5 py-12 flex flex-col items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#EDE9FE] flex items-center justify-center">
+              <Loader2 className="w-7 h-7 text-[#7C3AED] animate-spin" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="font-semibold text-sm">{mensajeCarga || "Procesando…"}</p>
+              <p className="text-xs text-muted-foreground">Esto puede tomar 2-5 minutos</p>
+            </div>
+            {error && (
+              <p className="text-xs text-destructive bg-destructive/10 rounded-xl p-3 text-center">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── FASE: Éxito ── */}
+        {fase === "ok" && (
+          <div className="px-5 py-12 flex flex-col items-center gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center">
+              <CheckCircle2 className="w-7 h-7 text-green-600" />
+            </div>
+            <p className="font-semibold text-sm text-center">¡Interacción guardada!</p>
+          </div>
+        )}
+
+      </DialogContent>
+    </Dialog>
+  );
+}

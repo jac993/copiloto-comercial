@@ -85,6 +85,26 @@ export interface ResultadoAnalisis {
   estado_sugerido: EstadoSugerido | null;
   borrador_respuesta: string;
   proximo_paso?: string;
+  badge_estado?: BadgeEstado | null;
+  decision_sugerida?: string | null;
+}
+
+// Análisis completo de la conversación con una empresa (todos los contactos)
+export interface MomentoClave {
+  fecha: string;
+  descripcion: string;
+  impacto: "positivo" | "negativo";
+}
+
+export interface AnalisisConversacion {
+  evolucion: string;
+  momentos_clave: MomentoClave[];
+  patron_prospecto: string;
+  estado_actual_real: string;
+  probabilidad_cierre: "alta" | "media" | "baja";
+  justificacion_probabilidad: string;
+  estrategia_recomendada: string;
+  proximos_3_pasos: [string, string, string];
 }
 
 // ─── ENUMS ────────────────────────────────────────────────────
@@ -118,6 +138,16 @@ export type SentimientoInteraccion =
   | "neutro"
   | "negativo"
   | "sin_respuesta";
+
+// Los 7 estados de diagnóstico que la IA asigna a cada interacción
+export type BadgeEstado =
+  | "avanzando"
+  | "neutral"
+  | "evaluando"
+  | "resistente"
+  | "senal_cierre"
+  | "sin_respuesta"
+  | "rechazado";
 
 export type TipoSenal =
   | "lanzamiento_producto"
@@ -203,6 +233,8 @@ export interface Interaccion {
   coaching_ia: string | null;
   proximo_paso: string | null;
   proximo_paso_fecha: string | null;
+  badge_estado: BadgeEstado | null;
+  decision_sugerida: string | null;
   creado_en: string;
   actualizado_en: string;
 }

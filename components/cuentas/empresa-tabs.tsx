@@ -12,7 +12,7 @@ import { TabDecisores } from "@/components/cuentas/tab-decisores";
 import { TabHistorial } from "@/components/cuentas/tab-historial";
 import { TabPreparacion } from "@/components/cuentas/tab-preparacion";
 import { TabChat } from "@/components/cuentas/tab-chat";
-import type { EmpresaCompleta, EstadoEmpresa, Interaccion } from "@/lib/types";
+import type { EmpresaCompleta, EstadoEmpresa, Interaccion, Contacto } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // Acción flotante según la etapa del pipeline
@@ -161,6 +161,7 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
           <TabHistorial
             interacciones={interacciones}
             empresaId={empresa.id}
+            contactos={empresa.contactos as Contacto[]}
           />
         )}
 
@@ -181,7 +182,7 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
         )}
       </div>
 
-      {/* Botón flotante de acción principal — oculto en chat para no tapar el input */}
+      {/* Botón flotante de acción principal — oculto en historial (tiene su propio FAB) y en chat */}
       {tabActivo !== "historial" && tabActivo !== "chat" && (
         <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
           <Button
