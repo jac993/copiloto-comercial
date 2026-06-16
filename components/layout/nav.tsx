@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Building2, Mic, BarChart2 } from "lucide-react";
+import { Sun, Building2, Mic, BarChart2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Secciones principales del copiloto
@@ -30,6 +30,12 @@ const navItems = [
     label: "Rendimiento",
     icon: BarChart2,
     description: "Evaluaciones semanales con IA",
+  },
+  {
+    href: "/configuracion",
+    label: "Configuración",
+    icon: Settings,
+    description: "Integraciones y preferencias",
   },
 ];
 

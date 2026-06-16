@@ -383,3 +383,32 @@ export interface EmpresaResumen extends Empresa {
   total_interacciones: number;
   senales_activas: number;
 }
+
+// ─── TABLA: integraciones ─────────────────────────────────────
+
+export interface Integracion {
+  id: string;
+  tipo: string;                  // "gmail"
+  access_token: string;
+  refresh_token: string | null;
+  email: string | null;
+  activo: boolean;
+  expira_en: string | null;      // ISO timestamp
+  creado_en: string;
+  actualizado_en: string;
+}
+
+// ─── TABLA: correos_detectados ────────────────────────────────
+
+export interface CorreoDetectado {
+  id: string;
+  empresa_id: string;
+  gmail_thread_id: string;
+  gmail_message_id: string;
+  asunto: string | null;
+  remitente: string | null;
+  fecha: string;                 // ISO timestamp
+  snippet: string | null;
+  analizado: boolean;
+  creado_en: string;
+}

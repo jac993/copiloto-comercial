@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Phone, Users, Mail, MessageCircle,
   ChevronDown, ChevronUp, Upload, Zap, Clock, Trash2,
 } from "lucide-react";
+import type { CorreoDetectado } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -57,6 +58,14 @@ export function TabHistorial({ interacciones: interaccionesIniciales, empresaId 
   const [lista, setLista] = useState(interaccionesIniciales);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
+  const [correos, setCorreos] = useState<CorreoDetectado[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/correos/${empresaId}`)
+      .then((r) => r.json())
+      .then((d) => setCorreos(d.correos ?? []))
+      .catch(() => {/* ignorar silenciosamente */});
+  }, [empresaId]);
 
   const eliminar = async () => {
     if (!confirmandoId) return;
@@ -72,6 +81,25 @@ export function TabHistorial({ interacciones: interaccionesIniciales, empresaId 
 
   return (
     <div className="space-y-3 pb-24">
+      {/* Banner correos detectados por Gmail */}
+      {correos.length > 0 && (
+        <div className="bg-[#FFFBEB] border border-amber-200 rounded-xl p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
+            <Mail className="w-3.5 h-3.5" />
+            {correos.length} correo{correos.length > 1 ? "s" : ""} detectado{correos.length > 1 ? "s" : ""} en Gmail
+          </p>
+          {correos.slice(0, 3).map((c) => (
+            <div key={c.id} className="text-xs text-amber-800 pl-5">
+              <span className="font-medium">{c.asunto ?? "(sin asunto)"}</span>
+              {c.snippet && <span className="text-amber-600 ml-1">— {c.snippet.slice(0, 80)}</span>}
+            </div>
+          ))}
+          {correos.length > 3 && (
+            <p className="text-xs text-amber-600 pl-5">+{correos.length - 3} más</p>
+          )}
+        </div>
+      )}
+
       {/* Encabezado con ayuda */}
       <div className="flex items-center gap-1.5 px-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Historial de interacciones</p>
