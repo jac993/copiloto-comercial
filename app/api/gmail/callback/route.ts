@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       expira_en: expiraEn,
     });
 
-    return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/configuracion?connected=gmail`);
+    return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/configuracion?connected=true`);
   } catch (err) {
     console.error("[gmail/callback]", err);
     return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/configuracion?error=fallo_oauth`);

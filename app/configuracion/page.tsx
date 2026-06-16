@@ -58,12 +58,16 @@ function ConfiguracionContent() {
   };
 
   useEffect(() => {
-    cargarEstado();
-
-    // Mostrar toast si viene de callback OAuth
     const connected = searchParams.get("connected");
     const error = searchParams.get("error");
-    if (connected === "gmail") mostrarToast("✅ Gmail conectado correctamente");
+
+    if (connected === "true") {
+      // Viene del callback OAuth: refrescar estado hasta confirmar conexión
+      cargarEstado().then(() => mostrarToast("✅ Gmail conectado correctamente"));
+    } else {
+      cargarEstado();
+    }
+
     if (error === "acceso_denegado") mostrarToast("⚠️ Acceso denegado por Google");
     if (error === "fallo_oauth") mostrarToast("❌ Error al conectar Gmail. Intenta de nuevo.");
   }, [searchParams]);
