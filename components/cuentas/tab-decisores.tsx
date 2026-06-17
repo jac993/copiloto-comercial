@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw, Copy, Phone } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -33,6 +35,8 @@ interface TabDecisoresProps {
 }
 
 export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReales = [] }: TabDecisoresProps) {
+  const router = useRouter();
+  const { toast } = useToast();
   const [actualizando, setActualizando] = useState(false);
 
   const actualizarDecisores = async () => {
@@ -42,17 +46,29 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
         `/api/empresas/${empresaId}/regenerar-decisores`,
         { method: "POST" }
       );
-      const data = await res.json();
+      const data = await res.json() as { ok: boolean; error?: string };
 
-      alert(JSON.stringify({
-        ok: data.ok,
-        error: data.error,
-        contactos: data.contactosTexto?.slice(0, 200) ?? "vacío",
-        inteligencia: data.inteligenciaTexto?.slice(0, 200) ?? "vacío",
-      }, null, 2));
+      if (!data.ok) {
+        toast({
+          variant: "destructive",
+          title: "No se pudo actualizar",
+          description: data.error ?? "Error desconocido",
+        });
+        return;
+      }
+
+      toast({
+        title: "¡Actualizado con Perplexity!",
+        description: "Contactos e inteligencia comercial actualizados.",
+      });
+      router.refresh();
 
     } catch (err) {
-      alert("Error: " + String(err));
+      toast({
+        variant: "destructive",
+        title: "Error de conexión",
+        description: String(err),
+      });
     } finally {
       setActualizando(false);
     }

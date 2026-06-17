@@ -504,6 +504,62 @@ Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional.
 }
 `;
 
+// =============================================================
+// PROMPT_BUSCAR_CONTACTOS — Extrae contactos_reales e inteligencia_comercial
+// a partir del texto crudo de Perplexity.
+// INPUT: texto de búsqueda de contactos + texto de inteligencia comercial
+// OUTPUT: JSON con exactamente { contactos_reales, inteligencia_comercial }
+// =============================================================
+export const PROMPT_BUSCAR_CONTACTOS = `
+Eres un analista comercial B2B especializado en etiquetas autoadhesivas e imprenta industrial en Chile.
+
+Recibirás dos bloques de texto extraídos de una búsqueda en internet sobre una empresa chilena.
+Tu tarea es extraer estructuradamente la información en JSON.
+
+${CONTEXTO_DOMINIO}
+
+Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto adicional.
+
+{
+  "contactos_reales": [
+    {
+      "nombre": "Nombre real o null si no se encontró",
+      "cargo": "Cargo real o null",
+      "email": "email@empresa.cl o null",
+      "telefono": "+56 9 XXXX XXXX o null",
+      "linkedin_url": "https://linkedin.com/in/... o null",
+      "como_contactar": "Instrucción concreta: 'Buscar en LinkedIn: [query]' o 'Llamar a central [número]'",
+      "fuente": "URL o descripción de dónde se encontró",
+      "confianza": "alta|media|baja",
+      "relevancia_venta": "alta|media|baja"
+    }
+  ],
+  "inteligencia_comercial": {
+    "situacion_mercado": "Cómo le está yendo a la empresa según fuentes recientes",
+    "prioridades_actuales": "En qué está enfocada la empresa este año",
+    "dolores_probables": "Qué problemas tiene que las etiquetas resuelven directamente",
+    "clientes_y_exigencias": "A quiénes le venden y qué les exigen en calidad, trazabilidad o etiquetado",
+    "debilidades_proveedor_actual": "Señales de insatisfacción con su proveedor actual de etiquetas",
+    "propuesta_valor_especifica": "Cómo posicionar la oferta para ESTA empresa — concreto y basado en evidencia",
+    "fuentes": ["https://fuente1.cl"]
+  }
+}
+
+REGLAS para contactos_reales:
+- NUNCA inventes nombres, cargos, emails o teléfonos.
+- Si no hay personas reales en el texto, devuelve "contactos_reales": [].
+- "confianza" alta: nombre + cargo confirmado en LinkedIn o sitio oficial.
+  Media: mencionado en artículo o directorio reciente (2022+). Baja: solo nombre sin cargo verificado.
+- "relevancia_venta" alta: área Calidad, Operaciones o Gerente de Planta.
+  Media: Compras/Adquisiciones o Gerencia General. Baja: área no relevante para etiquetas.
+- Máximo 6 contactos, ordenados de mayor a menor relevancia_venta.
+
+REGLAS para inteligencia_comercial:
+- NUNCA inventes datos de mercado ni situaciones que no aparezcan en las fuentes.
+- Si no hay información, usa "Sin información pública disponible para esta empresa en 2024-2025."
+- "fuentes": solo URLs reales del texto. Si no hay, devuelve [].
+`;
+
 
 // =============================================================
 // PROMPT_EVALUAR — Evaluación semanal de desempeño del vendedor.

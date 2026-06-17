@@ -503,6 +503,37 @@ export async function actualizarCamposRegenerados(
   return data;
 }
 
+// Guarda contactos_reales e inteligencia_comercial en ficha_ia
+// sin tocar el resto de la ficha. Llamado por regenerar-decisores.
+export async function actualizarContactosReales(
+  id: string,
+  contactosReales: FichaIA["contactos_reales"],
+  inteligenciaComercial: FichaIA["inteligencia_comercial"]
+): Promise<void> {
+  const { data: row, error: fetchError } = await getSupabase()
+    .from("empresas")
+    .select("ficha_ia")
+    .eq("id", id)
+    .single();
+
+  if (fetchError || !row) {
+    throw new Error(`actualizarContactosReales: ${fetchError?.message ?? "empresa no encontrada"}`);
+  }
+
+  const fichaActualizada: FichaIA = {
+    ...(row.ficha_ia as FichaIA),
+    contactos_reales: contactosReales ?? [],
+    inteligencia_comercial: inteligenciaComercial ?? null,
+  };
+
+  const { error } = await getSupabase()
+    .from("empresas")
+    .update({ ficha_ia: fichaActualizada } as unknown as Record<string, unknown>)
+    .eq("id", id);
+
+  if (error) throw new Error(`actualizarContactosReales: ${error.message}`);
+}
+
 // ─── BÚSQUEDA Y CONTEXTO PARA /llamadas ──────────────────────
 
 // Busca empresas por nombre para el selector de empresa en /llamadas
