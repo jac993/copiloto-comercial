@@ -628,6 +628,8 @@ export async function guardarEmpresaDesdeFicha(
     notas_vendedor: contextoVendedor ?? null,
     razon_perdido: null,
     fecha_reactivacion: null,
+    busqueda_web_raw: null,
+    busqueda_web_analisis: null,
   };
 
   // Buscar si ya existe una empresa con esta URL

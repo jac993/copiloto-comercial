@@ -199,6 +199,41 @@ export type TipoAprendizaje =
   | "perfil_cliente"
   | "patron_conversion";
 
+// ─── BÚSQUEDA WEB (tab Búsqueda Web) ─────────────────────────
+
+// Resultado crudo de Perplexity guardado en empresas.busqueda_web_raw
+export interface BusquedaWebRaw {
+  contactosTexto: string;
+  inteligenciaTexto: string;
+  fuentes: string[];
+  buscado_en: string; // ISO timestamp
+}
+
+// Persona real encontrada por Perplexity + Claude en la búsqueda web
+export interface PersonaWebEncontrada {
+  nombre: string;
+  cargo: string;
+  linkedin_url: string | null;
+  email: string | null;
+  telefono: string | null;
+  fuente: string;
+  confianza: "alta" | "media" | "baja";
+}
+
+export interface InteligenciaComercialWeb {
+  situacion_actual: string;
+  noticias_relevantes: string[];
+  licitaciones: string[];
+  oportunidad_detectada: string;
+}
+
+// Análisis de Claude sobre los resultados de Perplexity
+export interface AnalisisWeb {
+  personas_encontradas: PersonaWebEncontrada[];
+  inteligencia_comercial: InteligenciaComercialWeb;
+  recomendacion_accion: string;
+}
+
 // ─── TABLA: empresas ─────────────────────────────────────────
 
 export interface Empresa {
@@ -218,6 +253,8 @@ export interface Empresa {
   notas_vendedor: string | null;
   razon_perdido: string | null;
   fecha_reactivacion: string | null;
+  busqueda_web_raw: BusquedaWebRaw | null;
+  busqueda_web_analisis: AnalisisWeb | null;
   creado_en: string;
   actualizado_en: string;
 }
