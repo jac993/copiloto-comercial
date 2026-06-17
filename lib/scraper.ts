@@ -82,6 +82,13 @@ export async function buscarConPerplexity(
   const c = resContactos.status === "fulfilled" ? resContactos.value : { texto: "", fuentes: [] };
   const i = resInteligencia.status === "fulfilled" ? resInteligencia.value : { texto: "", fuentes: [] };
 
+  console.log("[Perplexity] empresa:", nombreEmpresa, "| dominio:", dominio);
+  console.log("[Perplexity] contactos status:", resContactos.status, "| chars:", c.texto.length);
+  console.log("[Perplexity] contactos preview:", c.texto.slice(0, 500));
+  console.log("[Perplexity] inteligencia status:", resInteligencia.status, "| chars:", i.texto.length);
+  console.log("[Perplexity] inteligencia preview:", i.texto.slice(0, 500));
+  console.log("[Perplexity] fuentes:", c.fuentes.length + i.fuentes.length, "total");
+
   return {
     contactosTexto: c.texto.slice(0, 4000),
     inteligenciaTexto: i.texto.slice(0, 4000),

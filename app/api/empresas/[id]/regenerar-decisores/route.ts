@@ -33,6 +33,8 @@ export async function POST(
 
   const ficha = empresa.ficha_ia;
 
+  console.log("[regenerar-decisores] Iniciando búsqueda Perplexity para:", ficha.nombre);
+
   // Perplexity + Claude en paralelo
   const dominio = empresa.url
     ? (() => { try { return new URL(empresa.url!).hostname.replace(/^www\./, ""); } catch { return ""; } })()
