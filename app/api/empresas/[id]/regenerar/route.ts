@@ -5,6 +5,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getEmpresaById, actualizarFichaCompleta } from "@/lib/queries";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
 import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
@@ -150,6 +151,9 @@ export async function POST(
     if (busquedaWebRaw) {
       await supabase.from("empresas").update({ busqueda_web_raw: busquedaWebRaw }).eq("id", params.id);
     }
+
+    // Invalidar caché de Next.js para que router.refresh() sirva datos frescos
+    revalidatePath(`/cuentas/${params.id}`);
 
     return Response.json({ ok: true, nombre: ficha.nombre });
   } catch (error) {

@@ -107,7 +107,9 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
       if (!data.ok) throw new Error(data.error ?? "Error desconocido");
       toast({ title: "✅ Ficha actualizada", description: "La empresa fue reinvestigada con éxito." });
       setSheetAbierto(false);
-      router.refresh();
+      // router.push al mismo path fuerza remount del Server Component con datos frescos.
+      // revalidatePath en el endpoint garantiza que no se sirva caché.
+      router.push(`/cuentas/${empresa.id}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error desconocido";
       console.error("[analizarDeNuevo] error:", msg, e);
