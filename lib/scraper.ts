@@ -31,30 +31,37 @@ interface PerplexityResponse {
 
 async function llamarPerplexity(query: string): Promise<{ texto: string; fuentes: string[] }> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
+  console.log("PERPLEXITY KEY existe:", !!apiKey);
+  console.log("PERPLEXITY KEY primeros 8 chars:", apiKey?.slice(0, 8));
   if (!apiKey) return { texto: "", fuentes: [] };
 
   try {
-    const res = await fetch(PERPLEXITY_API, {
+    const respuesta = await fetch(PERPLEXITY_API, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "sonar-pro",
+        model: "sonar",
         messages: [{ role: "user", content: query }],
         max_tokens: 1500,
       }),
       signal: AbortSignal.timeout(20_000),
     });
 
-    if (!res.ok) return { texto: "", fuentes: [] };
-    const data = (await res.json()) as PerplexityResponse;
+    console.log("Perplexity status:", respuesta.status);
+    const textoRaw = await respuesta.text();
+    console.log("Perplexity respuesta cruda:", textoRaw.slice(0, 500));
+
+    if (!respuesta.ok) return { texto: "", fuentes: [] };
+    const data = JSON.parse(textoRaw) as PerplexityResponse;
     return {
       texto: data.choices[0]?.message?.content ?? "",
       fuentes: data.citations ?? [],
     };
-  } catch {
+  } catch (err) {
+    console.log("Perplexity error catch:", String(err));
     return { texto: "", fuentes: [] };
   }
 }
