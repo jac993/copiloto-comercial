@@ -1,14 +1,18 @@
 // POST /api/empresas/[id]/regenerar
-// Reinvestiga la empresa: scraping + Perplexity + Claude.
+// Reinvestiga la empresa: scraping + Perplexity + Claude (2 llamadas).
 // Acepta campos opcionales para actualizar URL, razón social, notas.
 // REGLA: requiere clic explícito del usuario (⚡ usa créditos).
+//
+// Divide la llamada en dos para evitar truncamiento JSON:
+//   Llamada 1: PROMPT_FICHA_BASICA  → ficha base sin decisores (2500 tokens)
+//   Llamada 2: PROMPT_DECISORES_PERPLEXITY → decisores + inteligencia (2500 tokens)
 
 import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { getEmpresaById, actualizarFichaCompleta } from "@/lib/queries";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
-import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
+import { PROMPT_FICHA_BASICA, PROMPT_DECISORES_PERPLEXITY } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
 import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
 
@@ -20,7 +24,10 @@ function getSupabaseAdmin() {
   );
 }
 
-export const maxDuration = 120;
+export const maxDuration = 180;
+
+type FichaBasicaIA = Omit<FichaIA, "decisores" | "inteligencia_comercial">;
+type DecisoresIA = Pick<FichaIA, "decisores" | "inteligencia_comercial">;
 
 function limpiarUrl(url: string): string {
   return url.split("?")[0].split("#")[0].trim();
@@ -62,8 +69,9 @@ export async function POST(
     }
     console.log(`[regenerar] empresa encontrada: ${empresa.nombre} | url actual: ${empresa.url}`);
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.error("[regenerar] falta ANTHROPIC_API_KEY");
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    console.log("[regenerar] ANTHROPIC_API_KEY presente:", !!apiKey, "| longitud:", apiKey?.length ?? 0);
+    if (!apiKey) {
       return Response.json({ error: "Falta ANTHROPIC_API_KEY" }, { status: 500 });
     }
 
@@ -80,10 +88,10 @@ export async function POST(
       body = await req.json();
       console.log("[regenerar] body recibido:", JSON.stringify(body));
     } catch (bodyErr) {
-      console.log("[regenerar] body vacío o inválido (normal si se llama sin body):", String(bodyErr));
+      console.log("[regenerar] body vacío o inválido:", String(bodyErr));
     }
 
-    // Resolver URL a usar (preferir la del body si viene; limpiar parámetros)
+    // Resolver URL a usar
     const urlUsada = limpiarUrl(body.url?.trim() || empresa.url || "");
     if (!urlUsada) {
       console.error("[regenerar] empresa sin URL y body sin url");
@@ -130,21 +138,13 @@ export async function POST(
       }),
     ]);
 
-    console.log(`[regenerar] scraping completo: ${scrapeResult.texto?.length ?? 0} chars | nombreDetectado: "${scrapeResult.nombreDetectado}"`);
-    console.log(`[regenerar] Perplexity: contactos ${perplexityResult.contactosTexto.length} chars | inteligencia ${perplexityResult.inteligenciaTexto.length} chars | fuentes: ${perplexityResult.fuentes.length}`);
-
     const { texto, nombreDetectado } = scrapeResult;
+    console.log(`[regenerar] scraping: ${texto?.length ?? 0} chars | nombreDetectado: "${nombreDetectado}"`);
+    console.log(`[regenerar] Perplexity: contactos ${perplexityResult.contactosTexto.length} chars | inteligencia ${perplexityResult.inteligenciaTexto.length} chars`);
+
     if (!texto || texto.length < 50) {
       console.error(`[regenerar] texto scrapeado demasiado corto: ${texto?.length ?? 0} chars`);
       return Response.json({ error: "No se pudo leer el sitio web. Verifica que la URL sea accesible." }, { status: 422 });
-    }
-
-    // ── Claude con todo el contexto ───────────────────────────
-    // Verificar key antes de inicializar el cliente (el SDK lanza error síncrono si es undefined)
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    console.log("[regenerar] ANTHROPIC_API_KEY presente:", !!apiKey, "| longitud:", apiKey?.length ?? 0);
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY no está disponible en el entorno de ejecución.");
     }
 
     const anthropic = new Anthropic({ apiKey });
@@ -154,7 +154,7 @@ export async function POST(
     const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000);
 
     const perplexityBloque = contactosLimpio || inteligenciaLimpia
-      ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+      ? `--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
       : "";
 
     const notasBloque = (body.notas_vendedor?.trim() || empresa.notas_vendedor)
@@ -169,52 +169,87 @@ export async function POST(
     ].filter(Boolean).join("\n");
     const datosExtraBloque = datosExtra ? `DATOS ADICIONALES PROVISTOS:\n${datosExtra}\n\n` : "";
 
-    const promptCompleto =
-      `${PROMPT_INVESTIGADOR}\n\nURL: ${urlUsada}\nNombre detectado: ${nombreDetectado || empresa.nombre}\nDominio: ${dominio}\n\n` +
-      `${datosExtraBloque}${notasBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}${perplexityBloque}`;
+    // ── Llamada 1: ficha base (sin decisores) ─────────────────
+    const prompt1 =
+      `${PROMPT_FICHA_BASICA}\n\n` +
+      `URL: ${urlUsada}\nNombre detectado: ${nombreDetectado || empresa.nombre}\nDominio: ${dominio}\n\n` +
+      `${datosExtraBloque}${notasBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}`;
 
-    console.log(`[regenerar] llamando a Claude... modelo: claude-sonnet-4-6 | max_tokens: 4000 | prompt: ${promptCompleto.length} chars`);
+    console.log(`[regenerar] llamada 1 Claude (ficha base) | prompt: ${prompt1.length} chars`);
 
-    // Try/catch explícito para que errores del SDK de Anthropic sean visibles en Vercel logs
-    let mensaje: Awaited<ReturnType<typeof anthropic.messages.create>>;
+    let msg1: Awaited<ReturnType<typeof anthropic.messages.create>>;
     try {
-      mensaje = await anthropic.messages.create({
+      msg1 = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 4000,
-        messages: [{ role: "user", content: promptCompleto }],
+        max_tokens: 2500,
+        messages: [{ role: "user", content: prompt1 }],
       });
     } catch (claudeErr) {
-      console.error("[regenerar] ERROR en anthropic.messages.create:", claudeErr);
-      console.error("[regenerar] tipo de error:", Object.prototype.toString.call(claudeErr));
-      if (claudeErr instanceof Error) {
-        console.error("[regenerar] message:", claudeErr.message);
-        console.error("[regenerar] name:", claudeErr.name);
-        console.error("[regenerar] stack:", claudeErr.stack);
-      } else {
-        console.error("[regenerar] error raw:", JSON.stringify(claudeErr));
-      }
+      console.error("[regenerar] ERROR llamada 1 Claude:", claudeErr instanceof Error ? claudeErr.message : claudeErr);
       throw claudeErr;
     }
 
-    const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
-    console.log(`[regenerar] Claude respondió: ${textoRespuesta.length} chars | stop_reason: ${mensaje.stop_reason} | tokens usados: ${mensaje.usage?.output_tokens ?? "?"}`);
-    console.log("[regenerar] primeros 300 chars de respuesta:", textoRespuesta.slice(0, 300));
+    const texto1 = msg1.content[0]?.type === "text" ? msg1.content[0].text : "";
+    console.log(`[regenerar] llamada 1 respondió: ${texto1.length} chars | stop_reason: ${msg1.stop_reason} | tokens: ${msg1.usage?.output_tokens ?? "?"}`);
+    console.log("[regenerar] llamada 1 primeros 300 chars:", texto1.slice(0, 300));
 
-    const fichaParseada = extraerJsonSeguro<FichaIA>(textoRespuesta);
-    if (!fichaParseada) {
-      console.error("[regenerar] extraerJsonSeguro retornó null — JSON malformado o truncado. Usando fichaFallback.");
-      console.error("[regenerar] últimos 300 chars de respuesta:", textoRespuesta.slice(-300));
+    const fichaBasica = extraerJsonSeguro<FichaBasicaIA>(texto1);
+    if (!fichaBasica) {
+      console.error("[regenerar] llamada 1: JSON no parseado. Últimos 300 chars:", texto1.slice(-300));
     } else {
-      console.log(`[regenerar] JSON parseado OK: nombre="${fichaParseada.nombre}" | decisores: ${fichaParseada.decisores?.length ?? 0}`);
+      console.log(`[regenerar] llamada 1 OK: nombre="${fichaBasica.nombre}"`);
     }
-    const ficha = fichaParseada ?? fichaFallback(empresa.nombre, urlUsada);
 
-    // Guardar raw de Perplexity si hubo resultados
+    // ── Llamada 2: decisores + inteligencia ───────────────────
+    const nombreEmpresa = fichaBasica?.nombre || nombreDetectado || empresa.nombre;
+    const industriaEmpresa = fichaBasica?.industria || body.rubro?.trim() || "Por determinar";
+
+    const prompt2 =
+      `${PROMPT_DECISORES_PERPLEXITY}\n\n` +
+      `Empresa: ${nombreEmpresa}\n` +
+      `Industria: ${industriaEmpresa}\n` +
+      `Qué fabrican/venden: ${fichaBasica?.que_fabrican_o_venden || "Por determinar"}\n\n` +
+      (perplexityBloque || "Sin resultados de búsqueda en internet.");
+
+    console.log(`[regenerar] llamada 2 Claude (decisores) | prompt: ${prompt2.length} chars`);
+
+    let msg2: Awaited<ReturnType<typeof anthropic.messages.create>>;
+    try {
+      msg2 = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2500,
+        messages: [{ role: "user", content: prompt2 }],
+      });
+    } catch (claudeErr) {
+      console.error("[regenerar] ERROR llamada 2 Claude:", claudeErr instanceof Error ? claudeErr.message : claudeErr);
+      throw claudeErr;
+    }
+
+    const texto2 = msg2.content[0]?.type === "text" ? msg2.content[0].text : "";
+    console.log(`[regenerar] llamada 2 respondió: ${texto2.length} chars | stop_reason: ${msg2.stop_reason} | tokens: ${msg2.usage?.output_tokens ?? "?"}`);
+
+    const decisoresParsed = extraerJsonSeguro<DecisoresIA>(texto2);
+    if (!decisoresParsed) {
+      console.error("[regenerar] llamada 2: JSON no parseado. Últimos 300 chars:", texto2.slice(-300));
+    } else {
+      console.log(`[regenerar] llamada 2 OK: decisores: ${decisoresParsed.decisores?.length ?? 0}`);
+    }
+
+    // ── Fusionar ambos JSONs ───────────────────────────────────
+    const fichaBase = fichaBasica ?? fichaFallback(empresa.nombre, urlUsada);
+    const ficha: FichaIA = {
+      ...fichaBase,
+      decisores: decisoresParsed?.decisores ?? [],
+      inteligencia_comercial: decisoresParsed?.inteligencia_comercial ?? undefined,
+    };
+    console.log(`[regenerar] ficha fusionada: nombre="${ficha.nombre}" | decisores: ${ficha.decisores.length}`);
+
+    // Guardar raw de Perplexity
     const busquedaWebRaw: BusquedaWebRaw | null = contactosLimpio || inteligenciaLimpia
       ? { contactosTexto: perplexityResult.contactosTexto, inteligenciaTexto: perplexityResult.inteligenciaTexto, fuentes: perplexityResult.fuentes, buscado_en: new Date().toISOString() }
       : null;
 
-    console.log("[regenerar] guardando ficha en DB con actualizarFichaCompleta...");
+    console.log("[regenerar] guardando ficha en DB...");
     await actualizarFichaCompleta(params.id, ficha);
     console.log("[regenerar] actualizarFichaCompleta OK");
 
@@ -224,9 +259,7 @@ export async function POST(
       else console.log("[regenerar] busqueda_web_raw guardado OK");
     }
 
-    // Invalidar caché de Next.js para que router.refresh() sirva datos frescos
     revalidatePath(`/cuentas/${params.id}`);
-    console.log(`[regenerar] revalidatePath /cuentas/${params.id} OK`);
     console.log(`[regenerar] completado exitosamente: nombre="${ficha.nombre}"`);
 
     return Response.json({ ok: true, nombre: ficha.nombre });
