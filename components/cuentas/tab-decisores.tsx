@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw, Copy, Phone } from "lucide-react";
+import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw, Copy, Phone, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,13 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
   const router = useRouter();
   const { toast } = useToast();
   const [actualizando, setActualizando] = useState(false);
+  const [limpiando, setLimpiando] = useState(false);
+  // Estado local para permitir eliminar contactos sin recargar la página
+  const [contactosVisibles, setContactosVisibles] = useState<typeof contactosReales>(contactosReales);
+
+  const eliminarContactoLocal = (index: number) => {
+    setContactosVisibles((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const actualizarDecisores = async () => {
     setActualizando(true);
@@ -46,7 +53,12 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
         `/api/empresas/${empresaId}/regenerar-decisores`,
         { method: "POST" }
       );
-      const data = await res.json() as { ok: boolean; error?: string };
+      const data = await res.json() as {
+        ok: boolean;
+        error?: string;
+        totalContactos?: number;
+        noEncontrados?: string | null;
+      };
 
       if (!data.ok) {
         toast({
@@ -57,10 +69,17 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
         return;
       }
 
-      toast({
-        title: "¡Actualizado con Perplexity!",
-        description: "Contactos e inteligencia comercial actualizados.",
-      });
+      if (data.noEncontrados) {
+        toast({
+          title: "Búsqueda completada",
+          description: data.noEncontrados,
+        });
+      } else {
+        toast({
+          title: "¡Actualizado con Perplexity!",
+          description: `${data.totalContactos ?? 0} contacto${(data.totalContactos ?? 0) !== 1 ? "s" : ""} encontrado${(data.totalContactos ?? 0) !== 1 ? "s" : ""}.`,
+        });
+      }
       router.refresh();
 
     } catch (err) {
@@ -71,6 +90,30 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
       });
     } finally {
       setActualizando(false);
+    }
+  };
+
+  const limpiarContactos = async () => {
+    setLimpiando(true);
+    try {
+      const res = await fetch(
+        `/api/empresas/${empresaId}/limpiar-contactos`,
+        { method: "POST" }
+      );
+      const data = await res.json() as { ok: boolean; eliminados?: number; error?: string };
+      if (!data.ok) {
+        toast({ variant: "destructive", title: "Error al limpiar", description: data.error });
+        return;
+      }
+      toast({
+        title: data.eliminados === 0 ? "Sin contactos para limpiar" : `${data.eliminados} contacto${data.eliminados !== 1 ? "s" : ""} eliminado${data.eliminados !== 1 ? "s" : ""}`,
+        description: data.eliminados === 0 ? "No hay contactos sin nombre en esta empresa." : "Se eliminaron los contactos sin nombre real.",
+      });
+      if ((data.eliminados ?? 0) > 0) router.refresh();
+    } catch (err) {
+      toast({ variant: "destructive", title: "Error de conexión", description: String(err) });
+    } finally {
+      setLimpiando(false);
     }
   };
 
@@ -147,20 +190,33 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
 
       {/* Contactos encontrados en internet (Perplexity) */}
       <div>
-        <div className="flex items-center gap-1.5 mb-2 px-1">
+        <div className="flex items-center justify-between mb-2 px-1">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             🔍 Contactos encontrados en internet
           </p>
+          <button
+            onClick={limpiarContactos}
+            disabled={limpiando}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+          >
+            <Trash2 className="h-3 w-3" />
+            {limpiando ? "Limpiando..." : "Limpiar sin nombre"}
+          </button>
         </div>
-        {contactosReales.length > 0 ? (
+        {contactosVisibles.length > 0 ? (
           <div className="space-y-2">
-            {contactosReales.map((c, i) => (
-              <ContactoRealCard key={i} contacto={c} empresaId={empresaId} />
+            {contactosVisibles.map((c, i) => (
+              <ContactoRealCard
+                key={i}
+                contacto={c}
+                empresaId={empresaId}
+                onEliminar={() => eliminarContactoLocal(i)}
+              />
             ))}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground px-1">
-            No se encontraron contactos públicos. Pulsa &ldquo;↻ Actualizar decisores&rdquo; para buscar en internet.
+            No se encontraron contactos públicos. Pulsa &ldquo;↻ Actualizar con Perplexity&rdquo; para buscar en internet.
           </p>
         )}
       </div>
@@ -381,10 +437,19 @@ const RELEVANCIA_BADGE: Record<string, { label: string; cls: string }> = {
   baja:  { label: "Baja relevancia",  cls: "bg-muted text-muted-foreground" },
 };
 
-function ContactoRealCard({ contacto, empresaId }: { contacto: ContactoReal; empresaId: string }) {
+function ContactoRealCard({
+  contacto,
+  empresaId,
+  onEliminar,
+}: {
+  contacto: ContactoReal;
+  empresaId: string;
+  onEliminar: () => void;
+}) {
   const [agregado, setAgregado] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
 
   const copiarEmail = () => {
     if (!contacto.email) return;
@@ -494,8 +559,8 @@ function ContactoRealCard({ contacto, empresaId }: { contacto: ContactoReal; emp
           ) : contacto.fuente}
         </p>
 
-        {/* Botón agregar */}
-        <div className="mt-3">
+        {/* Acciones: agregar + eliminar */}
+        <div className="mt-3 space-y-2">
           {agregado ? (
             <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
               <CheckCircle className="h-3.5 w-3.5" />
@@ -512,6 +577,33 @@ function ContactoRealCard({ contacto, empresaId }: { contacto: ContactoReal; emp
               <UserPlus className="h-3.5 w-3.5" />
               {guardando ? "Guardando..." : "➕ Agregar a decisores"}
             </Button>
+          )}
+
+          {/* Eliminar con confirmación inline */}
+          {confirmarEliminar ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground flex-1">¿Eliminar este contacto?</span>
+              <button
+                onClick={onEliminar}
+                className="text-xs font-medium text-destructive hover:underline"
+              >
+                Eliminar
+              </button>
+              <button
+                onClick={() => setConfirmarEliminar(false)}
+                className="text-xs text-muted-foreground hover:underline"
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmarEliminar(true)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <Trash2 className="h-3 w-3" />
+              Eliminar de la lista
+            </button>
           )}
         </div>
       </CardContent>

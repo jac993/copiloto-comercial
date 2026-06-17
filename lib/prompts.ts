@@ -514,7 +514,14 @@ export const PROMPT_BUSCAR_CONTACTOS = `
 Eres un analista comercial B2B especializado en etiquetas autoadhesivas e imprenta industrial en Chile.
 
 Recibirás bloques de texto de búsquedas en internet sobre una empresa chilena (LinkedIn, emails, directorio, noticias).
-Tu tarea: extraer TODA la información de personas y contexto comercial disponible.
+
+REGLA ABSOLUTA — LEE ANTES DE HACER CUALQUIER COSA:
+NUNCA inventes datos. Si no encontraste el nombre real de una persona, NO incluyas ese contacto.
+Si no encontraste un email real en el texto, NO sugieras emails probables — esto confunde al vendedor.
+Si no encontraste un teléfono real en el texto, NO incluyas números genéricos ni de central.
+Para incluir un contacto necesitas AL MENOS: nombre real + cargo real, ambos encontrados
+explícitamente en las fuentes. Un contacto sin nombre o sin cargo no se incluye.
+Es mejor devolver 0 contactos reales que 5 contactos inventados o de baja calidad.
 
 ${CONTEXTO_DOMINIO}
 
@@ -523,17 +530,18 @@ Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto adicional.
 {
   "contactos_reales": [
     {
-      "nombre": "Nombre real o null",
-      "cargo": "Cargo real o null",
-      "email": "email@empresa.cl o null",
-      "telefono": "+56 9 XXXX XXXX o null",
-      "linkedin_url": "https://linkedin.com/in/... o null",
-      "como_contactar": "Instrucción concreta de contacto",
-      "fuente": "URL o descripción de dónde se encontró",
+      "nombre": "Nombre real encontrado en las fuentes (no null — si no tienes nombre, no incluyas el contacto)",
+      "cargo": "Cargo real encontrado en las fuentes (no null — si no tienes cargo, no incluyas el contacto)",
+      "email": "email@empresa.cl encontrado explícitamente en el texto, o null",
+      "telefono": "número real encontrado en el texto, o null",
+      "linkedin_url": "https://linkedin.com/in/... encontrado en el texto, o null",
+      "como_contactar": "Instrucción concreta basada en datos reales: 'Escribir a [email]', 'Llamar al [número]', o 'Buscar en LinkedIn: [nombre] [empresa] Chile'",
+      "fuente": "URL o descripción exacta de dónde se encontró este contacto",
       "confianza": "alta|media|baja",
       "relevancia_venta": "alta|media|baja"
     }
   ],
+  "no_encontrados": "null si encontraste contactos. Si no hay suficiente info pública: 'No se encontró información pública suficiente sobre ejecutivos de esta empresa. Se recomienda buscar manualmente en LinkedIn.'",
   "inteligencia_comercial": {
     "situacion_mercado": "Cómo le está yendo a la empresa según fuentes recientes",
     "prioridades_actuales": "En qué está enfocada la empresa este año",
@@ -547,47 +555,33 @@ Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto adicional.
 
 ═══ INSTRUCCIONES PARA contactos_reales ═══
 
-EXTRACCIÓN AGRESIVA — busca activamente estos patrones en el texto:
+SOLO incluir lo que está explícitamente en el texto:
 
-NOMBRES: Extrae TODOS los nombres de personas mencionados, aunque sea solo el nombre sin cargo.
-  Incluye: ejecutivos, directores, jefes, gerentes, encargados, dueños, fundadores.
+EMAILS: Solo emails que aparezcan literalmente en el texto (formato nombre@dominio).
+  NO inferir ni construir emails basados en patrones.
 
-EMAILS: Busca cualquier patrón nombre@dominio o dirección de correo en el texto.
-  Si encuentras el patrón del email corporativo (ej: jrodriguez@empresa.cl), documéntalo.
+TELÉFONOS: Solo números que aparezcan en el texto. NO incluir si no está en las fuentes.
 
-TELÉFONOS: Extrae cualquier número con formato chileno: +56, 56-2, (2), 2 XXXX XXXX, 9 XXXX XXXX.
-  Incluye teléfonos de central/recepción aunque no sean directos.
+LINKEDIN: Extrae URLs completas con linkedin.com/in/ si aparecen en el texto.
+  Si no hay URL pero tienes nombre + cargo, pon en como_contactar: "Buscar en LinkedIn: [nombre] [empresa] Chile"
 
-LINKEDIN: Extrae URLs completas que contengan linkedin.com/in/ o linkedin.com/company/.
-
-CAMPO como_contactar — SIEMPRE completa este campo con una de estas opciones:
-  a) Si hay email directo: "Escribir a [email]"
-  b) Si hay teléfono: "Llamar al [número]"
-  c) Si hay LinkedIn: "Conectar en LinkedIn: [url o query exacta]"
-  d) Si no hay datos directos pero tienes nombre + dominio: sugiere el email probable.
-     Ejemplo: si el dominio es coexpan.cl y el nombre es Juan Pérez, escribe:
-     "Email probable: jperez@coexpan.cl o juan.perez@coexpan.cl — intentar ambos"
-  e) Si solo tienes nombre: "Buscar en LinkedIn: [nombre] [empresa] Chile"
-
-NIVEL MÍNIMO ACEPTABLE:
-- Al menos 3 contactos si hay nombres en el texto (con o sin cargo)
-- Al menos 1 teléfono (directo o central de la empresa)
-- Al menos 1 sugerencia de email probable basada en el dominio
-- Al menos 1 link de LinkedIn si aparece en el texto
+CAMPO como_contactar — en orden de prioridad con datos reales:
+  1. Si hay email real: "Escribir a [email]"
+  2. Si hay teléfono real: "Llamar al [número]"
+  3. Si hay URL de LinkedIn real: "Ver perfil LinkedIn: [url]"
+  4. Si solo tienes nombre + cargo: "Buscar en LinkedIn: [nombre] [empresa] Chile"
 
 CONFIANZA:
-  alta = nombre + cargo confirmado en LinkedIn o sitio oficial de la empresa
-  media = mencionado en artículo, noticia o directorio reciente (2022+)
-  baja = solo nombre sin cargo verificado, o cargo sin nombre completo
+  alta = nombre + cargo confirmado en LinkedIn o sitio oficial
+  media = mencionado en artículo, noticia o directorio (2022+)
+  baja = mencionado solo de pasada sin cargo verificado
 
 RELEVANCIA PARA LA VENTA:
   alta = área Calidad, Operaciones, Gerente de Planta
   media = Compras/Adquisiciones, Gerencia General
-  baja = área no relevante para etiquetas (RRHH, finanzas, marketing)
+  baja = área no relevante para etiquetas
 
 Máximo 8 contactos, ordenados de mayor a menor relevancia_venta.
-NUNCA inventes nombres, cargos, emails o teléfonos que no aparezcan en el texto.
-Si realmente no hay ninguna persona en el texto, devuelve "contactos_reales": [].
 
 ═══ INSTRUCCIONES PARA inteligencia_comercial ═══
 

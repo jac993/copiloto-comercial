@@ -23,6 +23,7 @@ function sanitizar(t: string): string {
 
 interface ContactosResult {
   contactos_reales: ContactoReal[];
+  no_encontrados?: string | null;
   inteligencia_comercial: InteligenciaComercial | null;
 }
 
@@ -116,7 +117,11 @@ FUENTES: ${perplexity.fuentes.join(", ") || "ninguna"}
       resultado.inteligencia_comercial ?? null
     );
 
-    return Response.json({ ok: true });
+    return Response.json({
+      ok: true,
+      totalContactos: (resultado.contactos_reales ?? []).length,
+      noEncontrados: resultado.no_encontrados ?? null,
+    });
 
   } catch (error) {
     console.error("[regenerar-decisores] error:", error);
