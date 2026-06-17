@@ -1,38 +1,41 @@
 // POST /api/empresas/[id]/regenerar-decisores
-// Re-investiga la empresa completa: scraping + Perplexity + Claude.
-// Actualiza ficha_ia completa incluyendo resumen ejecutivo, decisores con
-// persona_encontrada e inteligencia_comercial.
+// Re-investiga la empresa completa: scraping + Perplexity + 2 llamadas Claude paralelas.
 // REGLA: requiere clic explícito del usuario.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 import { getEmpresaById, actualizarFichaCompleta } from "@/lib/queries";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
-import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
-import type { FichaIA } from "@/lib/types";
+import { PROMPT_FICHA_BASICA, PROMPT_DECISORES_PERPLEXITY } from "@/lib/prompts";
+import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
+import type { FichaIA, DecisorIA, InteligenciaComercial } from "@/lib/types";
 
 export const maxDuration = 120;
 
-function sanitizar(t: string): string {
-  return t
-    .replace(/[\x00-\x1F\x7F]/g, " ")
-    .replace(/"/g, "'")
-    .replace(/\\/g, "/")
-    .slice(0, 3000);
+interface FichaDecisores {
+  decisores: DecisorIA[];
+  inteligencia_comercial: InteligenciaComercial | null;
 }
 
-function extraerJson(texto: string): FichaIA {
-  try { return JSON.parse(texto) as FichaIA; } catch {}
-  const md = texto.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (md) { try { return JSON.parse(md[1]) as FichaIA; } catch {} }
-  const match = texto.match(/\{[\s\S]*\}/);
-  if (match) {
-    try { return JSON.parse(match[0]) as FichaIA; } catch {
-      const s = match[0].replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\t/g, " ");
-      return JSON.parse(s) as FichaIA;
-    }
-  }
-  throw new Error("No se pudo extraer JSON de la respuesta de Claude");
+function fichaFallback(nombre: string, url: string): Omit<FichaIA, "decisores" | "inteligencia_comercial"> {
+  return {
+    nombre,
+    industria: "Por determinar",
+    descripcion: "Análisis pendiente.",
+    que_fabrican_o_venden: "Por determinar",
+    por_que_necesitan_etiquetas: "Por determinar",
+    productos_etiquetas: [],
+    tamano_estimado: "mediana",
+    region: "Por determinar",
+    senales_oportunidad: [],
+    angulo_entrada: `Reinvestigar en ${url}`,
+    tecnica_recomendada: "consultiva",
+    razon_tecnica: "Por determinar",
+    preguntas_spin: ["Por determinar", "Por determinar", "Por determinar"],
+    objeciones_probables: [],
+    resumen_ejecutivo: "No se pudo generar la ficha. Vuelve a intentarlo.",
+    verificacion_contexto: [],
+  };
 }
 
 export async function POST(
@@ -56,43 +59,74 @@ export async function POST(
     const urlNorm = normalizarUrl(empresa.url);
     let dominio = "";
     try { dominio = new URL(urlNorm).hostname.replace(/^www\./, ""); } catch { dominio = empresa.url; }
+    const nombreBase = dominio.split(".")[0];
 
     // Scraping + Perplexity en paralelo
     const [scrapeResult, perplexityResult] = await Promise.all([
       scrapeEmpresa(empresa.url, () => {}),
-      buscarConPerplexity(empresa.nombre, dominio, "Chile"),
+      buscarConPerplexity(empresa.nombre || nombreBase, dominio, "Chile"),
     ]);
 
-    const { texto } = scrapeResult;
+    const { texto, nombreDetectado } = scrapeResult;
     if (!texto || texto.length < 50) {
       return Response.json({ error: "No se pudo leer el sitio web. Verifica que la URL sea accesible." }, { status: 422 });
     }
 
-    const perplexityBloque = perplexityResult.contactosTexto || perplexityResult.inteligenciaTexto
-      ? `\n\n--- CONTACTOS (Perplexity) ---\n${sanitizar(perplexityResult.contactosTexto || "Sin resultados.")}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${sanitizar(perplexityResult.inteligenciaTexto || "Sin resultados.")}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
-      : "";
-
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const mensaje = await anthropic.messages.create({
+    // Sanitizar textos externos
+    const textoWeb = sanitizarTexto(texto, 15000);
+    const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto || "", 3000);
+    const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto || "", 3000);
+
+    const perplexityBloque = contactosLimpio || inteligenciaLimpia
+      ? `--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+      : "";
+
+    // Llamada 1: ficha básica desde sitio web
+    const llamada1 = anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 5000,
-      messages: [
-        {
-          role: "user",
-          content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${empresa.url}\nNombre detectado: ${empresa.nombre}\n\n--- TEXTO DEL SITIO WEB ---\n${texto}${perplexityBloque}`,
-        },
-      ],
+      max_tokens: 2000,
+      messages: [{
+        role: "user",
+        content: `${PROMPT_FICHA_BASICA}\n\nURL: ${empresa.url}\nNombre detectado: ${nombreDetectado || empresa.nombre}\n\n--- TEXTO DEL SITIO WEB ---\n${textoWeb}`,
+      }],
     });
 
-    const contenido = mensaje.content[0];
-    if (contenido.type !== "text") throw new Error("Respuesta inesperada de Claude");
+    // Llamada 2: decisores + inteligencia desde Perplexity
+    const llamada2 = perplexityBloque
+      ? anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2000,
+          messages: [{
+            role: "user",
+            content: `${PROMPT_DECISORES_PERPLEXITY}\n\nEmpresa: ${nombreDetectado || empresa.nombre}\nDominio: ${dominio}\n\n${perplexityBloque}`,
+          }],
+        })
+      : Promise.resolve(null);
 
-    const ficha = extraerJson(contenido.text);
+    const [res1, res2] = await Promise.all([llamada1, llamada2]);
 
-    await actualizarFichaCompleta(params.id, ficha);
+    // Combinar resultados
+    const texto1 = res1.content[0]?.type === "text" ? res1.content[0].text : "";
+    const texto2 = res2?.content[0]?.type === "text" ? res2.content[0].text : "";
 
-    return Response.json({ ok: true, nombre: ficha.nombre });
+    const fichaBasica = extraerJsonSeguro<Omit<FichaIA, "decisores" | "inteligencia_comercial">>(texto1)
+      ?? fichaFallback(empresa.nombre || nombreBase, empresa.url);
+
+    const fichaDecisores = texto2
+      ? (extraerJsonSeguro<FichaDecisores>(texto2) ?? null)
+      : null;
+
+    const fichaFinal: FichaIA = {
+      ...fichaBasica,
+      decisores: fichaDecisores?.decisores ?? [],
+      inteligencia_comercial: fichaDecisores?.inteligencia_comercial ?? null,
+    };
+
+    await actualizarFichaCompleta(params.id, fichaFinal);
+
+    return Response.json({ ok: true, nombre: fichaFinal.nombre });
 
   } catch (error) {
     console.error("[regenerar-decisores] error:", error);

@@ -264,6 +264,163 @@ INSTRUCCIONES PARA inteligencia_comercial:
 - "fuentes": URLs reales de las Perplexity citations. Si no hay, devuelve [].
 `;
 
+// ─── PROMPT_FICHA_BASICA ──────────────────────────────────────
+// LLAMADA 1 del flujo dividido (investigar + regenerar).
+// INPUT: solo texto del sitio web — sin Perplexity.
+// OUTPUT: JSON con la ficha básica SIN decisores ni inteligencia_comercial.
+// Máximo ~2000 tokens de salida.
+export const PROMPT_FICHA_BASICA = `
+Eres un analista comercial B2B especializado en la industria de etiquetas autoadhesivas y packaging en Chile.
+Tu tarea es analizar el texto del sitio web de una empresa chilena y generar una ficha comercial ACCIONABLE.
+
+REGLA MAESTRA: Solo genera lo que puedes sustentar con información real del sitio web. No inventes datos.
+
+${CONTEXTO_DOMINIO}
+
+REGLAS CRÍTICAS:
+1. NUNCA seas genérico. Salmón → trazabilidad SERNAPESCA + congelados. Vino → contraetiquetas + tax stamps.
+   Químicos → GHS/SGA + DS43 Chile. Alimentos → REGSANITARIO + GS1. Logística → ZPL + Zebra.
+2. "angulo_entrada": por qué llamar a ESTA empresa HOY. Algo concreto.
+   ÚLTIMA LÍNEA OBLIGATORIA: "El primer paso es buscar al Jefe de Calidad (o Operaciones) en LinkedIn: [NombreEmpresa] jefe calidad Chile"
+3. "preguntas_spin": 3 preguntas usando el nombre de su industria y productos específicos.
+4. "resumen_ejecutivo": 3 líneas — quiénes son + oportunidad + cómo entrar.
+5. "objeciones_probables": máximo 2, de SU industria específica.
+6. "productos_etiquetas": máximo 3 tipos concretos.
+
+Responde ÚNICAMENTE con JSON. Sin markdown, sin texto adicional.
+
+{
+  "nombre": "Nombre oficial de la empresa",
+  "industria": "Industria principal",
+  "descripcion": "2 frases máximo: qué hace y en qué región opera",
+  "que_fabrican_o_venden": "Productos o servicios principales, específico",
+  "por_que_necesitan_etiquetas": "Razonamiento concreto basado en su industria",
+  "productos_etiquetas": [
+    { "tipo": "Tipo exacto", "aplicacion": "Dónde se aplica", "volumen_estimado": "alto|medio|bajo", "urgencia": "alta|media|baja" }
+  ],
+  "tamano_estimado": "pequeña|mediana|grande",
+  "region": "Región de Chile principal",
+  "senales_oportunidad": [
+    { "tipo": "lanzamiento_producto|cambio_ejecutivo|importacion|licitacion|otro", "descripcion": "Señal concreta del sitio", "fuente": "Origen" }
+  ],
+  "angulo_entrada": "3-4 líneas concretas. ÚLTIMA LÍNEA: búsqueda LinkedIn",
+  "tecnica_recomendada": "consultiva|relacional|SPIN|challenger",
+  "razon_tecnica": "1 línea: por qué esta técnica",
+  "preguntas_spin": [
+    "Pregunta Situación con su industria y productos",
+    "Pregunta Problema con su proceso productivo",
+    "Pregunta Implicación con impacto financiero u operacional"
+  ],
+  "objeciones_probables": [
+    { "objecion": "Objeción de SU industria", "como_responderla": "Respuesta concreta con datos de su industria" }
+  ],
+  "resumen_ejecutivo": "Línea 1: quiénes son. Línea 2: la oportunidad. Línea 3: cómo entrar.",
+  "verificacion_contexto": [
+    { "dato_vendedor": "Lo que dijo el vendedor", "estado": "confirmado|inconsistente|no_verificable", "observacion": "Qué encontraste en el sitio" }
+  ]
+}
+
+INSTRUCCIONES PARA verificacion_contexto:
+- Incluir SOLO si el mensaje tiene sección "CONTEXTO PREVIO DEL VENDEDOR". Si no hay, devolver [].
+- Un ítem por dato o afirmación del vendedor.
+`;
+
+// ─── PROMPT_DECISORES_PERPLEXITY ──────────────────────────────
+// LLAMADA 2 del flujo dividido (investigar + regenerar).
+// INPUT: nombre y rubro de la empresa + texto de Perplexity (contactos + inteligencia).
+// OUTPUT: JSON con los 6 decisores fijos (persona_encontrada incluida) + inteligencia_comercial.
+// Máximo ~2000 tokens de salida.
+export const PROMPT_DECISORES_PERPLEXITY = `
+Eres un analista comercial B2B especializado en etiquetas autoadhesivas e imprenta industrial en Chile.
+
+Recibirás el nombre y rubro de una empresa chilena, más texto de búsqueda en internet (Perplexity).
+Tu tarea: generar los 6 decisores fijos (adaptados a la empresa) e inteligencia comercial.
+
+${CONTEXTO_DOMINIO}
+
+REGLA ABSOLUTA: No inventes personas. Solo incluir persona_encontrada si aparece explícitamente
+en el texto de Perplexity con nombre real + cargo verificable. Si no hay match claro: null.
+
+Responde ÚNICAMENTE con JSON. Sin markdown, sin texto adicional.
+
+{
+  "decisores": [
+    {
+      "cargo": "Jefe/a de Calidad",
+      "area": "calidad",
+      "por_que_es_clave": "Dolor concreto de Calidad en ESTA empresa (menciona su industria/producto)",
+      "dolor_especifico": "Qué problema de etiquetado genera NC, rechazos o auditorías EN ESTA empresa",
+      "tecnica_recomendada": "SPIN",
+      "persona_encontrada": { "nombre": "Nombre real o null", "linkedin_url": "URL o null", "fuente": "Fuente o null", "confianza": "alta|media|baja|null" },
+      "query_linkedin": "Jefe Calidad [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/Gerente de Operaciones",
+      "area": "operaciones",
+      "por_que_es_clave": "Dolor concreto de Operaciones en ESTA empresa",
+      "dolor_especifico": "Impacto operacional concreto de un fallo de etiquetado EN ESTA empresa",
+      "tecnica_recomendada": "consultiva",
+      "persona_encontrada": { "nombre": null, "linkedin_url": null, "fuente": null, "confianza": null },
+      "query_linkedin": "Jefe Operaciones [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/a de Logística o Despacho",
+      "area": "operaciones",
+      "por_que_es_clave": "Dolor de Logística en ESTA empresa",
+      "dolor_especifico": "Problema de despacho o trazabilidad por etiquetado EN ESTA empresa",
+      "tecnica_recomendada": "consultiva",
+      "persona_encontrada": { "nombre": null, "linkedin_url": null, "fuente": null, "confianza": null },
+      "query_linkedin": "Jefe Logística [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Gerente de Planta",
+      "area": "operaciones",
+      "por_que_es_clave": "Por qué el Gerente de Planta de ESTA empresa aprueba cambio de proveedor",
+      "dolor_especifico": "KPI de planta afectado por etiquetado EN ESTA empresa",
+      "tecnica_recomendada": "challenger",
+      "persona_encontrada": { "nombre": null, "linkedin_url": null, "fuente": null, "confianza": null },
+      "query_linkedin": "Gerente Planta [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Jefe/Gerente de Compras o Adquisiciones",
+      "area": "compras",
+      "por_que_es_clave": "Por qué Compras de ESTA empresa es el guardián del cambio de proveedor",
+      "dolor_especifico": "Presión de costos y riesgo de suministro en etiquetas EN ESTA empresa",
+      "tecnica_recomendada": "relacional",
+      "persona_encontrada": { "nombre": null, "linkedin_url": null, "fuente": null, "confianza": null },
+      "query_linkedin": "Jefe Compras [NombreEmpresa] Chile"
+    },
+    {
+      "cargo": "Gerente General o Dueño",
+      "area": "gerencia",
+      "por_que_es_clave": "Riesgo reputacional o regulatorio de etiquetado para el Gerente General de ESTA empresa",
+      "dolor_especifico": "Riesgo de negocio concreto que representa un fallo de etiquetado EN ESTA empresa",
+      "tecnica_recomendada": "challenger",
+      "persona_encontrada": { "nombre": null, "linkedin_url": null, "fuente": null, "confianza": null },
+      "query_linkedin": "Gerente General [NombreEmpresa] Chile"
+    }
+  ],
+  "inteligencia_comercial": {
+    "situacion_mercado": "Situación actual según fuentes recientes o 'Sin información pública disponible en 2024-2025.'",
+    "prioridades_actuales": "Foco de la empresa este año o 'Sin información.'",
+    "dolores_probables": "Problemas que tus etiquetas resuelven o 'Sin información.'",
+    "clientes_y_exigencias": "A quiénes venden y qué les exigen o 'Sin información.'",
+    "debilidades_proveedor_actual": "Señales de insatisfacción con proveedor actual o 'Sin información.'",
+    "propuesta_valor_especifica": "Cómo posicionar la oferta basado en evidencia real — nunca genérico.",
+    "fuentes": ["https://fuente-real.cl"]
+  }
+}
+
+INSTRUCCIONES PARA persona_encontrada:
+- Buscar en sección "CONTACTOS (Perplexity)" del mensaje.
+- Solo rellenar si aparece nombre real + cargo para ese rol exacto. Si no: todos los campos null.
+- confianza "alta": nombre + cargo en LinkedIn oficial o sitio web. "media": artículo/directorio (2022+). "baja": mencionado de pasada.
+
+INSTRUCCIONES PARA inteligencia_comercial:
+- Usar EXCLUSIVAMENTE sección "INTELIGENCIA COMERCIAL (Perplexity)" del mensaje.
+- Si no hay información, escribir "Sin información pública disponible para esta empresa en 2024-2025."
+- "fuentes": solo URLs reales del texto. Si no hay, devolver [].
+`;
 
 // ─── PROMPT_REGENERAR ────────────────────────────────────────
 // Se usa en POST /api/investigar/regenerar

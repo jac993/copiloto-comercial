@@ -1,21 +1,21 @@
 // =============================================================
 // POST /api/investigar — Investiga una empresa con IA
-// Usa Server-Sent Events para enviar progreso en tiempo real.
+// Flujo dividido en 2 llamadas paralelas a Claude para evitar
+// JSONs demasiado grandes que fallan al parsear.
 // REGLA: Solo se activa cuando el usuario aprieta "Investigar".
 // =============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
 import { guardarEmpresaDesdeFicha } from "@/lib/queries";
-import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
-import type { FichaIA } from "@/lib/types";
+import { PROMPT_FICHA_BASICA, PROMPT_DECISORES_PERPLEXITY } from "@/lib/prompts";
+import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
+import type { FichaIA, DecisorIA, InteligenciaComercial } from "@/lib/types";
 
-// Tiempo máximo de la función serverless (en segundos)
 export const maxDuration = 300;
 
 const encoder = new TextEncoder();
 
-// Envía un evento SSE al stream
 function enviarEvento(
   controller: ReadableStreamDefaultController,
   tipo: string,
@@ -25,55 +25,8 @@ function enviarEvento(
   controller.enqueue(encoder.encode(`data: ${data}\n\n`));
 }
 
-// Limpia texto de entrada antes de enviarlo a Claude para evitar que
-// caracteres especiales rompan el JSON que Claude genera en su respuesta.
-function sanitizarTexto(texto: string, maxChars = 3000): string {
-  return texto
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")  // control chars excepto \t \n \r
-    .replace(/\r\n/g, " ")
-    .replace(/\n/g, " ")
-    .replace(/\r/g, " ")
-    .replace(/\t/g, " ")
-    .replace(/"/g, "'")
-    .replace(/\\/g, "/")
-    .replace(/[^\x20-\x7E\xA0-\xFF]/g, "")               // fuera del rango ASCII imprimible + latin-1
-    .slice(0, maxChars)
-    .trim();
-}
-
-// Extrae JSON de la respuesta de Claude con 4 intentos progresivamente más agresivos.
-// Si todo falla devuelve null en vez de lanzar excepción — el caller decide qué hacer.
-function extraerJsonSeguro(texto: string): FichaIA | null {
-  // Intento 1: parse directo
-  try { return JSON.parse(texto) as FichaIA; } catch {}
-
-  // Intento 2: extraer de bloque markdown ```json ... ```
-  const mdMatch = texto.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (mdMatch) {
-    try { return JSON.parse(mdMatch[1]) as FichaIA; } catch {}
-  }
-
-  // Intento 3: primer objeto JSON del texto
-  const jsonMatch = texto.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    try { return JSON.parse(jsonMatch[0]) as FichaIA; } catch {}
-
-    // Intento 4: limpiar el JSON extraído y reintentar
-    try {
-      const limpio = jsonMatch[0]
-        .replace(/[\x00-\x1F]/g, " ")          // todos los control chars → espacio
-        .replace(/,(\s*[}\]])/g, "$1")          // comas finales antes de } o ]
-        .replace(/([{,]\s*)(\w+)(\s*):/g, '$1"$2"$3:');  // claves sin comillas → con comillas
-      return JSON.parse(limpio) as FichaIA;
-    } catch {}
-  }
-
-  return null;
-}
-
 // Ficha mínima de fallback cuando Claude devuelve JSON inválido.
-// Permite guardar la empresa aunque el análisis esté incompleto.
-function fichaFallback(nombreDetectado: string, urlSitio: string): FichaIA {
+function fichaFallback(nombreDetectado: string, urlSitio: string): Omit<FichaIA, "decisores" | "inteligencia_comercial"> {
   return {
     nombre: nombreDetectado || urlSitio,
     industria: "Por determinar",
@@ -84,7 +37,6 @@ function fichaFallback(nombreDetectado: string, urlSitio: string): FichaIA {
     tamano_estimado: "mediana",
     region: "Por determinar",
     senales_oportunidad: [],
-    decisores: [],
     angulo_entrada: "Investigación incompleta. Vuelve a investigar esta empresa.",
     tecnica_recomendada: "consultiva",
     razon_tecnica: "Por determinar",
@@ -95,13 +47,14 @@ function fichaFallback(nombreDetectado: string, urlSitio: string): FichaIA {
   };
 }
 
+interface FichaDecisores {
+  decisores: DecisorIA[];
+  inteligencia_comercial: InteligenciaComercial | null;
+}
+
 export async function POST(request: Request) {
-  // Validar que hay API key de Anthropic
   if (!process.env.ANTHROPIC_API_KEY) {
-    return Response.json(
-      { error: "Falta ANTHROPIC_API_KEY en .env.local" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Falta ANTHROPIC_API_KEY en .env.local" }, { status: 500 });
   }
 
   const { url, contexto_vendedor } = (await request.json()) as {
@@ -113,14 +66,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "URL requerida" }, { status: 400 });
   }
 
-  // Stream SSE — el cliente lee este stream para mostrar progreso
   const stream = new ReadableStream({
     async start(controller) {
       const send = (tipo: string, payload: Record<string, unknown>) =>
         enviarEvento(controller, tipo, payload);
 
       try {
-        // PASO A: Scraping + Perplexity en paralelo
+        // ── PASO A: Scraping + Perplexity en paralelo ─────────
         const urlNorm = normalizarUrl(url.trim());
         let dominio = "";
         try { dominio = new URL(urlNorm).hostname.replace(/^www\./, ""); } catch { dominio = url.trim(); }
@@ -136,66 +88,81 @@ export async function POST(request: Request) {
         const { texto, nombreDetectado } = scrapeResult;
 
         if (!texto || texto.length < 50) {
-          throw new Error(
-            "No se pudo leer el sitio web. Verifica que la URL sea correcta y accesible."
-          );
+          throw new Error("No se pudo leer el sitio web. Verifica que la URL sea correcta y accesible.");
         }
 
-        // PASO B: Análisis con Claude (sitio web + Perplexity)
-        send("progreso", { mensaje: "Analizando con IA..." });
+        // ── PASO B: Dos llamadas Claude en paralelo ────────────
+        send("progreso", { mensaje: "Analizando empresa con IA..." });
 
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
         const contextoBloque = contexto_vendedor?.trim()
-          ? `CONTEXTO PREVIO DEL VENDEDOR (priorizar esta información sobre lo que dice el sitio web):\n${contexto_vendedor.trim()}\n\n`
+          ? `CONTEXTO PREVIO DEL VENDEDOR:\n${contexto_vendedor.trim()}\n\n`
           : "";
 
-        // Sanitizar TODOS los textos externos antes de inyectarlos en el prompt
+        // Sanitizar todos los textos externos antes de inyectarlos
         const textoWeb = sanitizarTexto(texto, 15000);
         const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto || "", 3000);
         const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto || "", 3000);
 
         const perplexityBloque = contactosLimpio || inteligenciaLimpia
-          ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+          ? `--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
           : "";
 
-        const mensaje = await anthropic.messages.create({
+        // Llamada 1: ficha básica desde sitio web (sin Perplexity)
+        const llamada1 = anthropic.messages.create({
           model: "claude-sonnet-4-6",
-          max_tokens: 5000,
-          messages: [
-            {
-              role: "user",
-              content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${url.trim()}\nNombre detectado: ${nombreDetectado}\n\n${contextoBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}${perplexityBloque}`,
-            },
-          ],
+          max_tokens: 2000,
+          messages: [{
+            role: "user",
+            content: `${PROMPT_FICHA_BASICA}\n\nURL: ${url.trim()}\nNombre detectado: ${nombreDetectado}\n\n${contextoBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}`,
+          }],
         });
 
-        const contenido = mensaje.content[0];
-        if (contenido.type !== "text") {
-          throw new Error("Respuesta inesperada de Claude");
-        }
+        // Llamada 2: decisores + inteligencia desde Perplexity (en paralelo)
+        const llamada2 = perplexityBloque
+          ? anthropic.messages.create({
+              model: "claude-sonnet-4-6",
+              max_tokens: 2000,
+              messages: [{
+                role: "user",
+                content: `${PROMPT_DECISORES_PERPLEXITY}\n\nEmpresa: ${nombreDetectado || nombreBase}\nDominio: ${dominio}\n\n${perplexityBloque}`,
+              }],
+            })
+          : Promise.resolve(null);
 
-        // Usar parser robusto con fallback — nunca crashear por JSON inválido
-        const ficha = extraerJsonSeguro(contenido.text) ?? fichaFallback(nombreDetectado, url.trim());
+        const [res1, res2] = await Promise.all([llamada1, llamada2]);
 
-        // PASO C: Guardar en Supabase (contexto_vendedor se guarda en notas_vendedor)
+        // ── PASO C: Combinar resultados ────────────────────────
+        const texto1 = res1.content[0]?.type === "text" ? res1.content[0].text : "";
+        const texto2 = res2?.content[0]?.type === "text" ? res2.content[0].text : "";
+
+        const fichaBasica = extraerJsonSeguro<Omit<FichaIA, "decisores" | "inteligencia_comercial">>(texto1)
+          ?? fichaFallback(nombreDetectado, url.trim());
+
+        const fichaDecisores = texto2
+          ? (extraerJsonSeguro<FichaDecisores>(texto2) ?? null)
+          : null;
+
+        const fichaFinal: FichaIA = {
+          ...fichaBasica,
+          decisores: fichaDecisores?.decisores ?? [],
+          inteligencia_comercial: fichaDecisores?.inteligencia_comercial ?? null,
+        };
+
+        // ── PASO D: Guardar en Supabase ────────────────────────
         send("progreso", { mensaje: "Guardando ficha en tu base de datos..." });
 
-        console.log("[investigar] Guardando empresa:", ficha.nombre, url.trim());
         const empresa = await guardarEmpresaDesdeFicha(
-          ficha,
+          fichaFinal,
           url.trim(),
           contexto_vendedor?.trim() || null
         );
-        console.log("[investigar] Empresa guardada con ID:", empresa.id);
 
-        send("resultado", {
-          empresaId: empresa.id,
-          nombre: empresa.nombre,
-        });
+        send("resultado", { empresaId: empresa.id, nombre: empresa.nombre });
+
       } catch (error) {
-        const mensaje =
-          error instanceof Error ? error.message : "Error desconocido";
+        const mensaje = error instanceof Error ? error.message : "Error desconocido";
         send("error", { mensaje });
       } finally {
         controller.close();
