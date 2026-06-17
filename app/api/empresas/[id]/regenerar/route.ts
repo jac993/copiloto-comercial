@@ -132,7 +132,15 @@ export async function POST(
     }
 
     // ── Claude con todo el contexto ───────────────────────────
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    // Verificar key antes de inicializar el cliente (el SDK lanza error síncrono si es undefined)
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    console.log("[regenerar] ANTHROPIC_API_KEY presente:", !!apiKey, "| longitud:", apiKey?.length ?? 0);
+    if (!apiKey) {
+      throw new Error("ANTHROPIC_API_KEY no está disponible en el entorno de ejecución.");
+    }
+
+    const anthropic = new Anthropic({ apiKey });
+
     const textoWeb = sanitizarTexto(texto, 15000);
     const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto, 3000);
     const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000);
@@ -159,11 +167,26 @@ export async function POST(
 
     console.log(`[regenerar] llamando a Claude... modelo: claude-sonnet-4-6 | max_tokens: 4000 | prompt: ${promptCompleto.length} chars`);
 
-    const mensaje = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4000,
-      messages: [{ role: "user", content: promptCompleto }],
-    });
+    // Try/catch explícito para que errores del SDK de Anthropic sean visibles en Vercel logs
+    let mensaje: Awaited<ReturnType<typeof anthropic.messages.create>>;
+    try {
+      mensaje = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 4000,
+        messages: [{ role: "user", content: promptCompleto }],
+      });
+    } catch (claudeErr) {
+      console.error("[regenerar] ERROR en anthropic.messages.create:", claudeErr);
+      console.error("[regenerar] tipo de error:", Object.prototype.toString.call(claudeErr));
+      if (claudeErr instanceof Error) {
+        console.error("[regenerar] message:", claudeErr.message);
+        console.error("[regenerar] name:", claudeErr.name);
+        console.error("[regenerar] stack:", claudeErr.stack);
+      } else {
+        console.error("[regenerar] error raw:", JSON.stringify(claudeErr));
+      }
+      throw claudeErr;
+    }
 
     const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
     console.log(`[regenerar] Claude respondió: ${textoRespuesta.length} chars | stop_reason: ${mensaje.stop_reason} | tokens usados: ${mensaje.usage?.output_tokens ?? "?"}`);
