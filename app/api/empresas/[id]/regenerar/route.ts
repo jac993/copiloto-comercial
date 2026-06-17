@@ -4,14 +4,21 @@
 // REGLA: requiere clic explícito del usuario (⚡ usa créditos).
 
 import Anthropic from "@anthropic-ai/sdk";
-import { NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
+import { createClient } from "@supabase/supabase-js";
 import { getEmpresaById, actualizarFichaCompleta } from "@/lib/queries";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
 import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
-import { getSupabaseServer } from "@/lib/supabase";
 import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
+
+// Cliente Supabase con service role — no depende de cookies ni de next/headers
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export const maxDuration = 120;
 
@@ -42,9 +49,10 @@ function fichaFallback(nombre: string, url: string): FichaIA {
 }
 
 export async function POST(
-  req: NextRequest,
+  req: Request,
   { params }: { params: { id: string } }
 ) {
+  console.log("[regenerar] handler iniciado");
   console.log(`[regenerar] iniciando para empresa ${params.id}`);
   try {
     const empresa = await getEmpresaById(params.id);
@@ -84,7 +92,7 @@ export async function POST(
     console.log(`[regenerar] URL a usar: ${urlUsada}`);
 
     // Actualizar campos en DB si el usuario los cambió
-    const supabase = await getSupabaseServer();
+    const supabase = getSupabaseAdmin();
     const actualizaciones: Record<string, string | null> = { url: urlUsada };
     if (body.razon_social !== undefined) actualizaciones.razon_social = body.razon_social.trim() || null;
     if (body.rut !== undefined) actualizaciones.rut = body.rut.trim() || null;
