@@ -35,6 +35,14 @@ export async function POST(
 
   console.log("[regenerar-decisores] Iniciando búsqueda Perplexity para:", ficha.nombre);
 
+  // Sanitiza texto de Perplexity antes de inyectarlo en prompts — evita romper JSON
+  const sanitizar = (texto: string) =>
+    texto
+      .replace(/[\x00-\x1F\x7F]/g, " ")
+      .replace(/"/g, "'")
+      .replace(/\\/g, "/")
+      .slice(0, 3000);
+
   // Perplexity + Claude en paralelo
   const dominio = empresa.url
     ? (() => { try { return new URL(empresa.url!).hostname.replace(/^www\./, ""); } catch { return ""; } })()
@@ -81,6 +89,9 @@ Resumen: ${ficha.resumen_ejecutivo}`,
 
   if (perplexityResult.contactosTexto || perplexityResult.inteligenciaTexto) {
     try {
+      const contactosSanitizado = sanitizar(perplexityResult.contactosTexto || "Sin resultados.");
+      const inteligenciaSanitizada = sanitizar(perplexityResult.inteligenciaTexto || "Sin resultados.");
+
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
       const respEnriquecida = await anthropic.messages.create({
         model: "claude-haiku-4-5-20251001",
@@ -91,10 +102,10 @@ Resumen: ${ficha.resumen_ejecutivo}`,
 Empresa: ${ficha.nombre} — Industria: ${ficha.industria}
 
 BÚSQUEDA DE CONTACTOS (Perplexity):
-${perplexityResult.contactosTexto || "Sin resultados."}
+${contactosSanitizado}
 
 INTELIGENCIA COMERCIAL (Perplexity):
-${perplexityResult.inteligenciaTexto || "Sin resultados."}
+${inteligenciaSanitizada}
 
 FUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}
 
@@ -103,20 +114,28 @@ Responde ÚNICAMENTE con este JSON (sin markdown):
   "contactos_reales": [{"nombre":null,"cargo":null,"email":null,"telefono":null,"linkedin_url":null,"como_contactar":"string","fuente":"string","confianza":"alta|media|baja","relevancia_venta":"alta|media|baja"}],
   "inteligencia_comercial": {"situacion_mercado":"string","prioridades_actuales":"string","dolores_probables":"string","clientes_y_exigencias":"string","debilidades_proveedor_actual":"string","propuesta_valor_especifica":"string","fuentes":["url"]}
 }
-REGLA: NUNCA inventes datos. Si no hay información real, devuelve arrays vacíos y strings con "Sin información pública disponible."`,
+REGLA: NUNCA inventes datos. Si no hay informacion real, devuelve arrays vacios y strings con Sin informacion publica disponible.`,
         }],
       });
       const respTexto = respEnriquecida.content[0];
       if (respTexto.type === "text") {
         const jsonRaw = respTexto.text.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
-        const jsonM = jsonRaw.match(/\{[\s\S]*\}/);
-        if (jsonM) {
-          const parsed = JSON.parse(jsonM[0]) as { contactos_reales: ContactoReal[]; inteligencia_comercial: InteligenciaComercial };
+        let parsed: { contactos_reales: ContactoReal[]; inteligencia_comercial: InteligenciaComercial } | null = null;
+        try {
+          const jsonM = jsonRaw.match(/\{[\s\S]*\}/);
+          if (jsonM) parsed = JSON.parse(jsonM[0]);
+        } catch {
+          console.error("[regenerar-decisores] Error parseando JSON enriquecido — usando estructura vacía");
+          parsed = { contactos_reales: [], inteligencia_comercial: null as unknown as InteligenciaComercial };
+        }
+        if (parsed) {
           contactosRealesActualizados = parsed.contactos_reales ?? [];
           inteligenciaActualizada = parsed.inteligencia_comercial ?? null;
         }
       }
-    } catch { /* Perplexity enrich failed — keep existing */ }
+    } catch (err) {
+      console.error("[regenerar-decisores] Enriquecimiento Perplexity falló — conservando datos existentes:", err);
+    }
   }
 
   // Actualizar ficha_ia: decisores + contactos_reales + inteligencia_comercial

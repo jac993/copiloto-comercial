@@ -43,7 +43,15 @@ function extraerJson(texto: string): FichaIA {
   // Intento 3: encontrar el primer objeto JSON en el texto
   const jsonMatch = texto.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
-    return JSON.parse(jsonMatch[0]) as FichaIA;
+    try {
+      return JSON.parse(jsonMatch[0]) as FichaIA;
+    } catch {
+      // Intento 4: sanitizar el JSON extraído y reintentar
+      const sanitizado = jsonMatch[0]
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
+        .replace(/\t/g, " ");
+      return JSON.parse(sanitizado) as FichaIA;
+    }
   }
 
   throw new Error("No se pudo extraer JSON de la respuesta de IA");
@@ -104,8 +112,12 @@ export async function POST(request: Request) {
           ? `CONTEXTO PREVIO DEL VENDEDOR (priorizar esta información sobre lo que dice el sitio web):\n${contexto_vendedor.trim()}\n\n`
           : "";
 
+        // Sanitizar texto de Perplexity antes de inyectar en el prompt
+        const sanitizar = (t: string) =>
+          t.replace(/[\x00-\x1F\x7F]/g, " ").replace(/"/g, "'").replace(/\\/g, "/").slice(0, 3000);
+
         const perplexityBloque = perplexityResult.contactosTexto || perplexityResult.inteligenciaTexto
-          ? `\n\n--- BÚSQUEDA DE CONTACTOS (Perplexity) ---\n${perplexityResult.contactosTexto || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${perplexityResult.inteligenciaTexto || "Sin resultados."}\n\nFUENTES PERPLEXITY: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+          ? `\n\n--- BÚSQUEDA DE CONTACTOS (Perplexity) ---\n${sanitizar(perplexityResult.contactosTexto || "Sin resultados.")}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${sanitizar(perplexityResult.inteligenciaTexto || "Sin resultados.")}\n\nFUENTES PERPLEXITY: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
           : "";
 
         const mensaje = await anthropic.messages.create({
