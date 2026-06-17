@@ -71,7 +71,7 @@ export async function POST(request: Request) {
         enviarEvento(controller, tipo, payload);
 
       try {
-        const urlNorm = normalizarUrl(url.trim());
+        const urlNorm = normalizarUrl(url.trim().split("?")[0].split("#")[0].trim());
         let dominio = "";
         try {
           dominio = new URL(urlNorm).hostname.replace(/^www\./, "");

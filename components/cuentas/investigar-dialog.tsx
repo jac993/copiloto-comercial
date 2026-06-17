@@ -44,7 +44,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
   const [rubro, setRubro] = useState("");
 
   const investigar = async () => {
-    const urlLimpia = url.trim();
+    const urlLimpia = url.trim().split("?")[0].split("#")[0].trim();
     if (!urlLimpia) return;
 
     setEstado({ fase: "cargando", mensaje: "Iniciando...", pasoActual: 0 });
