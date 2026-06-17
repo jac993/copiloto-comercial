@@ -1,20 +1,17 @@
 // =============================================================
 // POST /api/investigar — Investiga una empresa con IA
-// Flujo: scraping + Perplexity en paralelo →
-//   Llamada 1 Claude: ficha básica (PROMPT_FICHA_BASICA, 2500 tokens)
-//   Llamada 2 Claude: decisores + inteligencia (PROMPT_DECISORES_PERPLEXITY, 2500 tokens)
-// Dividir en dos llamadas evita truncamiento del JSON monolítico.
+// Flujo: scraping + Perplexity en paralelo → una sola llamada Claude
 // REGLA: Solo se activa cuando el usuario aprieta "Investigar".
 // =============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
 import { guardarEmpresaDesdeFicha } from "@/lib/queries";
-import { PROMPT_FICHA_BASICA, PROMPT_DECISORES_PERPLEXITY } from "@/lib/prompts";
+import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
 import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
 
-export const maxDuration = 300;
+export const maxDuration = 180;
 
 const encoder = new TextEncoder();
 
@@ -26,10 +23,6 @@ function enviarEvento(
   const data = JSON.stringify({ type: tipo, ...payload });
   controller.enqueue(encoder.encode(`data: ${data}\n\n`));
 }
-
-// Tipos parciales para el parsing de cada llamada
-type FichaBasicaIA = Omit<FichaIA, "decisores" | "inteligencia_comercial">;
-type DecisoresIA = Pick<FichaIA, "decisores" | "inteligencia_comercial">;
 
 function fichaFallback(nombreDetectado: string, urlSitio: string): FichaIA {
   return {
@@ -86,15 +79,15 @@ export async function POST(request: Request) {
           dominio = urlLimpia;
         }
 
-        // ── PASO A: Scraping + Perplexity en paralelo ─────────
-        send("progreso", { mensaje: "Leyendo el sitio web..." });
-
         const opcionesExtra = {
           razonSocial: razon_social?.trim(),
           rut: rut?.trim(),
           ciudad: ciudad?.trim(),
           rubro: rubro?.trim(),
         };
+
+        // ── Scraping + Perplexity en paralelo ─────────────────
+        send("progreso", { mensaje: "Leyendo el sitio web..." });
 
         const [scrapeResult, perplexityResult] = await Promise.all([
           scrapeEmpresa(urlLimpia, (msg) => send("progreso", { mensaje: msg })),
@@ -121,17 +114,18 @@ export async function POST(request: Request) {
           );
         }
 
+        // ── Una sola llamada a Claude ──────────────────────────
+        send("progreso", { mensaje: "Analizando con IA..." });
+
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-        // Bloques de texto reutilizados en ambas llamadas
         const textoWeb = sanitizarTexto(texto, 15000);
         const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto, 3000);
         const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000);
 
-        const perplexityBloque =
-          contactosLimpio || inteligenciaLimpia
-            ? `--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
-            : "";
+        const perplexityBloque = contactosLimpio || inteligenciaLimpia
+          ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+          : "";
 
         const contextoBloque = contexto_vendedor?.trim()
           ? `CONTEXTO PREVIO DEL VENDEDOR:\n${contexto_vendedor.trim()}\n\n`
@@ -145,69 +139,47 @@ export async function POST(request: Request) {
         ].filter(Boolean).join("\n");
         const datosExtraBloque = datosExtra ? `DATOS ADICIONALES PROVISTOS:\n${datosExtra}\n\n` : "";
 
-        // ── PASO B: Llamada 1 — ficha básica (sin decisores) ──
-        send("progreso", { mensaje: "Analizando empresa..." });
+        const nombreEmpresa = nombreDetectado || razon_social?.trim() || dominio.split(".")[0];
 
-        const msg1 = await anthropic.messages.create({
+        const prompt =
+          `${PROMPT_INVESTIGADOR}\n\n` +
+          `URL: ${urlLimpia}\nNombre detectado: ${nombreEmpresa}\nDominio: ${dominio}\n\n` +
+          `${datosExtraBloque}${contextoBloque}` +
+          `--- TEXTO DEL SITIO WEB ---\n${textoWeb}` +
+          perplexityBloque;
+
+        const mensaje = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
-          max_tokens: 4000,
-          messages: [{
-            role: "user",
-            content:
-              `${PROMPT_FICHA_BASICA}\n\n` +
-              `URL: ${urlLimpia}\nNombre detectado: ${nombreDetectado}\nDominio: ${dominio}\n\n` +
-              `${datosExtraBloque}${contextoBloque}` +
-              `--- TEXTO DEL SITIO WEB ---\n${textoWeb}`,
-          }],
+          max_tokens: 6000,
+          messages: [{ role: "user", content: prompt }],
         });
 
-        const texto1 = msg1.content[0]?.type === "text" ? msg1.content[0].text : "";
-        const fichaBasica = extraerJsonSeguro<FichaBasicaIA>(texto1);
+        const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
 
-        // ── PASO C: Llamada 2 — decisores + inteligencia ──────
-        send("progreso", { mensaje: "Identificando decisores..." });
+        // ── Parsear y completar decisores con LinkedIn URL ─────
+        send("progreso", { mensaje: "Guardando ficha..." });
 
-        const nombreEmpresa = fichaBasica?.nombre || nombreDetectado || dominio;
-        const industriaEmpresa = fichaBasica?.industria || rubro?.trim() || "Por determinar";
+        const fichaParseada = extraerJsonSeguro<FichaIA>(textoRespuesta);
+        const fichaBase = fichaParseada ?? fichaFallback(nombreDetectado, urlLimpia);
 
-        const msg2 = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
-          max_tokens: 4000,
-          messages: [{
-            role: "user",
-            content:
-              `${PROMPT_DECISORES_PERPLEXITY}\n\n` +
-              `Empresa: ${nombreEmpresa}\n` +
-              `Industria: ${industriaEmpresa}\n` +
-              `Qué fabrican/venden: ${fichaBasica?.que_fabrican_o_venden || "Por determinar"}\n\n` +
-              (perplexityBloque || "Sin resultados de búsqueda en internet."),
-          }],
-        });
-
-        const texto2 = msg2.content[0]?.type === "text" ? msg2.content[0].text : "";
-        const decisoresParsed = extraerJsonSeguro<DecisoresIA>(texto2);
-
-        // ── PASO D: Fusionar ambos JSONs en FichaIA completa ──
-        const fichaBase = fichaBasica ?? fichaFallback(nombreDetectado, urlLimpia);
+        // Asegurar que cada decisor tenga linkedin_url de búsqueda
         const ficha: FichaIA = {
           ...fichaBase,
-          decisores: decisoresParsed?.decisores ?? [],
-          inteligencia_comercial: decisoresParsed?.inteligencia_comercial ?? undefined,
+          decisores: fichaBase.decisores.map((d) => ({
+            ...d,
+            linkedin_url: d.persona_encontrada?.linkedin_url ||
+              `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(d.cargo + " " + fichaBase.nombre)}`,
+          })),
         };
 
-        // Guardar raw de Perplexity junto con la empresa
-        const busquedaWebRaw: BusquedaWebRaw | null =
-          contactosLimpio || inteligenciaLimpia
-            ? {
-                contactosTexto: perplexityResult.contactosTexto,
-                inteligenciaTexto: perplexityResult.inteligenciaTexto,
-                fuentes: perplexityResult.fuentes,
-                buscado_en: new Date().toISOString(),
-              }
-            : null;
-
-        // ── PASO E: Guardar en Supabase ────────────────────────
-        send("progreso", { mensaje: "Guardando ficha..." });
+        const busquedaWebRaw: BusquedaWebRaw | null = contactosLimpio || inteligenciaLimpia
+          ? {
+              contactosTexto: perplexityResult.contactosTexto,
+              inteligenciaTexto: perplexityResult.inteligenciaTexto,
+              fuentes: perplexityResult.fuentes,
+              buscado_en: new Date().toISOString(),
+            }
+          : null;
 
         const empresa = await guardarEmpresaDesdeFicha(
           ficha,
@@ -220,8 +192,7 @@ export async function POST(request: Request) {
         send("resultado", { empresaId: empresa.id, nombre: empresa.nombre });
         send("progreso", { mensaje: "¡Listo!" });
       } catch (error) {
-        const mensaje =
-          error instanceof Error ? error.message : "Error desconocido";
+        const mensaje = error instanceof Error ? error.message : "Error desconocido";
         send("error", { mensaje });
       } finally {
         controller.close();

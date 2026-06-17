@@ -1,18 +1,14 @@
 // POST /api/empresas/[id]/regenerar
-// Reinvestiga la empresa: scraping + Perplexity + Claude (2 llamadas).
+// Reinvestiga la empresa: scraping + Perplexity en paralelo → una sola llamada Claude.
 // Acepta campos opcionales para actualizar URL, razón social, notas.
 // REGLA: requiere clic explícito del usuario (⚡ usa créditos).
-//
-// Divide la llamada en dos para evitar truncamiento JSON:
-//   Llamada 1: PROMPT_FICHA_BASICA  → ficha base sin decisores (2500 tokens)
-//   Llamada 2: PROMPT_DECISORES_PERPLEXITY → decisores + inteligencia (2500 tokens)
 
 import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { getEmpresaById, actualizarFichaCompleta } from "@/lib/queries";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
-import { PROMPT_FICHA_BASICA, PROMPT_DECISORES_PERPLEXITY } from "@/lib/prompts";
+import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
 import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
 
@@ -25,9 +21,6 @@ function getSupabaseAdmin() {
 }
 
 export const maxDuration = 180;
-
-type FichaBasicaIA = Omit<FichaIA, "decisores" | "inteligencia_comercial">;
-type DecisoresIA = Pick<FichaIA, "decisores" | "inteligencia_comercial">;
 
 function limpiarUrl(url: string): string {
   return url.split("?")[0].split("#")[0].trim();
@@ -60,17 +53,14 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   console.log("[regenerar] handler iniciado");
-  console.log(`[regenerar] iniciando para empresa ${params.id}`);
   try {
     const empresa = await getEmpresaById(params.id);
     if (!empresa) {
-      console.error(`[regenerar] empresa ${params.id} no encontrada en DB`);
       return Response.json({ error: "Empresa no encontrada" }, { status: 404 });
     }
-    console.log(`[regenerar] empresa encontrada: ${empresa.nombre} | url actual: ${empresa.url}`);
+    console.log(`[regenerar] empresa: ${empresa.nombre}`);
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    console.log("[regenerar] ANTHROPIC_API_KEY presente:", !!apiKey, "| longitud:", apiKey?.length ?? 0);
     if (!apiKey) {
       return Response.json({ error: "Falta ANTHROPIC_API_KEY" }, { status: 500 });
     }
@@ -86,18 +76,15 @@ export async function POST(
     } = {};
     try {
       body = await req.json();
-      console.log("[regenerar] body recibido:", JSON.stringify(body));
-    } catch (bodyErr) {
-      console.log("[regenerar] body vacío o inválido:", String(bodyErr));
+    } catch {
+      // body vacío es válido
     }
 
-    // Resolver URL a usar
     const urlUsada = limpiarUrl(body.url?.trim() || empresa.url || "");
     if (!urlUsada) {
-      console.error("[regenerar] empresa sin URL y body sin url");
       return Response.json({ error: "Esta empresa no tiene URL para reinvestigar." }, { status: 422 });
     }
-    console.log(`[regenerar] URL a usar: ${urlUsada}`);
+    console.log(`[regenerar] URL: ${urlUsada}`);
 
     // Actualizar campos en DB si el usuario los cambió
     const supabase = getSupabaseAdmin();
@@ -105,26 +92,21 @@ export async function POST(
     if (body.razon_social !== undefined) actualizaciones.razon_social = body.razon_social.trim() || null;
     if (body.rut !== undefined) actualizaciones.rut = body.rut.trim() || null;
     if (body.notas_vendedor !== undefined) actualizaciones.notas_vendedor = body.notas_vendedor.trim() || null;
-    const { error: updateErr } = await supabase.from("empresas").update(actualizaciones).eq("id", params.id);
-    if (updateErr) {
-      console.error("[regenerar] error actualizando campos en DB:", updateErr);
-    } else {
-      console.log("[regenerar] campos actualizados en DB:", actualizaciones);
-    }
+    await supabase.from("empresas").update(actualizaciones).eq("id", params.id);
 
     const urlNorm = normalizarUrl(urlUsada);
     let dominio = "";
     try { dominio = new URL(urlNorm).hostname.replace(/^www\./, ""); } catch { dominio = urlUsada; }
+
     const opcionesExtra = {
       razonSocial: body.razon_social?.trim() || empresa.razon_social || undefined,
       rut: body.rut?.trim() || empresa.rut || undefined,
       ciudad: body.ciudad?.trim(),
       rubro: body.rubro?.trim(),
     };
-    console.log(`[regenerar] dominio: ${dominio} | opcionesExtra:`, opcionesExtra);
 
-    // ── Scraping + Perplexity en paralelo ────────────────────
-    console.log("[regenerar] iniciando scraping + Perplexity en paralelo...");
+    // ── Scraping + Perplexity en paralelo ──────────────────────
+    console.log("[regenerar] scraping + Perplexity...");
     const [scrapeResult, perplexityResult] = await Promise.all([
       scrapeEmpresa(urlUsada, () => {}),
       buscarConPerplexity(
@@ -139,14 +121,13 @@ export async function POST(
     ]);
 
     const { texto, nombreDetectado } = scrapeResult;
-    console.log(`[regenerar] scraping: ${texto?.length ?? 0} chars | nombreDetectado: "${nombreDetectado}"`);
-    console.log(`[regenerar] Perplexity: contactos ${perplexityResult.contactosTexto.length} chars | inteligencia ${perplexityResult.inteligenciaTexto.length} chars`);
+    console.log(`[regenerar] scraping: ${texto?.length ?? 0} chars | Perplexity: ${perplexityResult.contactosTexto.length + perplexityResult.inteligenciaTexto.length} chars`);
 
     if (!texto || texto.length < 50) {
-      console.error(`[regenerar] texto scrapeado demasiado corto: ${texto?.length ?? 0} chars`);
       return Response.json({ error: "No se pudo leer el sitio web. Verifica que la URL sea accesible." }, { status: 422 });
     }
 
+    // ── Una sola llamada a Claude ───────────────────────────────
     const anthropic = new Anthropic({ apiKey });
 
     const textoWeb = sanitizarTexto(texto, 15000);
@@ -154,7 +135,7 @@ export async function POST(
     const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000);
 
     const perplexityBloque = contactosLimpio || inteligenciaLimpia
-      ? `--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+      ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
       : "";
 
     const notasBloque = (body.notas_vendedor?.trim() || empresa.notas_vendedor)
@@ -169,94 +150,59 @@ export async function POST(
     ].filter(Boolean).join("\n");
     const datosExtraBloque = datosExtra ? `DATOS ADICIONALES PROVISTOS:\n${datosExtra}\n\n` : "";
 
-    // ── Llamada 1: ficha base (sin decisores) ─────────────────
-    const prompt1 =
-      `${PROMPT_FICHA_BASICA}\n\n` +
-      `URL: ${urlUsada}\nNombre detectado: ${nombreDetectado || empresa.nombre}\nDominio: ${dominio}\n\n` +
-      `${datosExtraBloque}${notasBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}`;
+    const nombreEmpresa = nombreDetectado || opcionesExtra.razonSocial || empresa.nombre;
 
-    console.log(`[regenerar] llamada 1 Claude (ficha base) | prompt: ${prompt1.length} chars`);
+    const prompt =
+      `${PROMPT_INVESTIGADOR}\n\n` +
+      `URL: ${urlUsada}\nNombre detectado: ${nombreEmpresa}\nDominio: ${dominio}\n\n` +
+      `${datosExtraBloque}${notasBloque}` +
+      `--- TEXTO DEL SITIO WEB ---\n${textoWeb}` +
+      perplexityBloque;
 
-    let msg1: Awaited<ReturnType<typeof anthropic.messages.create>>;
+    console.log(`[regenerar] llamando a Claude | prompt: ${prompt.length} chars`);
+
+    let mensaje: Awaited<ReturnType<typeof anthropic.messages.create>>;
     try {
-      msg1 = await anthropic.messages.create({
+      mensaje = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 4000,
-        messages: [{ role: "user", content: prompt1 }],
+        max_tokens: 6000,
+        messages: [{ role: "user", content: prompt }],
       });
     } catch (claudeErr) {
-      console.error("[regenerar] ERROR llamada 1 Claude:", claudeErr instanceof Error ? claudeErr.message : claudeErr);
+      console.error("[regenerar] ERROR Claude:", claudeErr instanceof Error ? claudeErr.message : claudeErr);
       throw claudeErr;
     }
 
-    const texto1 = msg1.content[0]?.type === "text" ? msg1.content[0].text : "";
-    console.log(`[regenerar] llamada 1 respondió: ${texto1.length} chars | stop_reason: ${msg1.stop_reason} | tokens: ${msg1.usage?.output_tokens ?? "?"}`);
-    console.log("[regenerar] llamada 1 primeros 300 chars:", texto1.slice(0, 300));
+    const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
+    console.log(`[regenerar] Claude respondió: ${textoRespuesta.length} chars | stop_reason: ${mensaje.stop_reason} | tokens: ${mensaje.usage?.output_tokens ?? "?"}`);
 
-    const fichaBasica = extraerJsonSeguro<FichaBasicaIA>(texto1);
-    if (!fichaBasica) {
-      console.error("[regenerar] llamada 1: JSON no parseado. Últimos 300 chars:", texto1.slice(-300));
-    } else {
-      console.log(`[regenerar] llamada 1 OK: nombre="${fichaBasica.nombre}"`);
+    // ── Parsear y completar decisores con LinkedIn URL ──────────
+    const fichaParseada = extraerJsonSeguro<FichaIA>(textoRespuesta);
+    if (!fichaParseada) {
+      console.error("[regenerar] JSON no parseado. Últimos 500 chars:", textoRespuesta.slice(-500));
     }
+    const fichaBase = fichaParseada ?? fichaFallback(empresa.nombre, urlUsada);
 
-    // ── Llamada 2: decisores + inteligencia ───────────────────
-    const nombreEmpresa = fichaBasica?.nombre || nombreDetectado || empresa.nombre;
-    const industriaEmpresa = fichaBasica?.industria || body.rubro?.trim() || "Por determinar";
-
-    const prompt2 =
-      `${PROMPT_DECISORES_PERPLEXITY}\n\n` +
-      `Empresa: ${nombreEmpresa}\n` +
-      `Industria: ${industriaEmpresa}\n` +
-      `Qué fabrican/venden: ${fichaBasica?.que_fabrican_o_venden || "Por determinar"}\n\n` +
-      (perplexityBloque || "Sin resultados de búsqueda en internet.");
-
-    console.log(`[regenerar] llamada 2 Claude (decisores) | prompt: ${prompt2.length} chars`);
-
-    let msg2: Awaited<ReturnType<typeof anthropic.messages.create>>;
-    try {
-      msg2 = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4000,
-        messages: [{ role: "user", content: prompt2 }],
-      });
-    } catch (claudeErr) {
-      console.error("[regenerar] ERROR llamada 2 Claude:", claudeErr instanceof Error ? claudeErr.message : claudeErr);
-      throw claudeErr;
-    }
-
-    const texto2 = msg2.content[0]?.type === "text" ? msg2.content[0].text : "";
-    console.log(`[regenerar] llamada 2 respondió: ${texto2.length} chars | stop_reason: ${msg2.stop_reason} | tokens: ${msg2.usage?.output_tokens ?? "?"}`);
-
-    const decisoresParsed = extraerJsonSeguro<DecisoresIA>(texto2);
-    if (!decisoresParsed) {
-      console.error("[regenerar] llamada 2: JSON no parseado. Últimos 300 chars:", texto2.slice(-300));
-    } else {
-      console.log(`[regenerar] llamada 2 OK: decisores: ${decisoresParsed.decisores?.length ?? 0}`);
-    }
-
-    // ── Fusionar ambos JSONs ───────────────────────────────────
-    const fichaBase = fichaBasica ?? fichaFallback(empresa.nombre, urlUsada);
     const ficha: FichaIA = {
       ...fichaBase,
-      decisores: decisoresParsed?.decisores ?? [],
-      inteligencia_comercial: decisoresParsed?.inteligencia_comercial ?? undefined,
+      decisores: fichaBase.decisores.map((d) => ({
+        ...d,
+        linkedin_url: d.persona_encontrada?.linkedin_url ||
+          `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(d.cargo + " " + fichaBase.nombre)}`,
+      })),
     };
-    console.log(`[regenerar] ficha fusionada: nombre="${ficha.nombre}" | decisores: ${ficha.decisores.length}`);
 
-    // Guardar raw de Perplexity
+    console.log(`[regenerar] ficha: nombre="${ficha.nombre}" | decisores: ${ficha.decisores.length}`);
+
     const busquedaWebRaw: BusquedaWebRaw | null = contactosLimpio || inteligenciaLimpia
       ? { contactosTexto: perplexityResult.contactosTexto, inteligenciaTexto: perplexityResult.inteligenciaTexto, fuentes: perplexityResult.fuentes, buscado_en: new Date().toISOString() }
       : null;
 
-    console.log("[regenerar] guardando ficha en DB...");
+    // ── Guardar en DB ───────────────────────────────────────────
     await actualizarFichaCompleta(params.id, ficha);
-    console.log("[regenerar] actualizarFichaCompleta OK");
+    console.log("[regenerar] ficha guardada");
 
-    // Upsert decisores como filas en tabla contactos
-    // (ignorar si ya existe el cargo para esta empresa — el vendedor pudo haberlo editado)
     if (ficha.decisores.length > 0) {
-      console.log(`[regenerar] decisores a guardar: ${ficha.decisores.length}`);
       const contactosDecisores = ficha.decisores.map((d) => ({
         empresa_id: params.id,
         nombre: d.persona_encontrada?.nombre ?? d.cargo,
@@ -267,9 +213,8 @@ export async function POST(
           `Dolor específico: ${d.dolor_especifico}`,
           `Buscar en LinkedIn: ${d.query_linkedin}`,
           d.persona_encontrada?.nombre ? `Persona encontrada: ${d.persona_encontrada.nombre} (confianza: ${d.persona_encontrada.confianza})` : null,
-          d.persona_encontrada?.linkedin_url ? `LinkedIn: ${d.persona_encontrada.linkedin_url}` : null,
         ].filter(Boolean).join("\n\n"),
-        linkedin_url: d.persona_encontrada?.linkedin_url ?? null,
+        linkedin_url: (d as FichaIA["decisores"][number] & { linkedin_url?: string }).linkedin_url ?? null,
         es_decisor: true,
       }));
       const { error: contactosErr } = await supabase
@@ -278,25 +223,20 @@ export async function POST(
       if (contactosErr) {
         console.error("[regenerar] error guardando contactos:", contactosErr);
       } else {
-        console.log(`[regenerar] contactos guardados OK: ${contactosDecisores.length}`);
+        console.log(`[regenerar] contactos guardados: ${contactosDecisores.length}`);
       }
-    } else {
-      console.log("[regenerar] sin decisores — no se insertan contactos");
     }
 
     if (busquedaWebRaw) {
-      const { error: rawErr } = await supabase.from("empresas").update({ busqueda_web_raw: busquedaWebRaw }).eq("id", params.id);
-      if (rawErr) console.error("[regenerar] error guardando busqueda_web_raw:", rawErr);
-      else console.log("[regenerar] busqueda_web_raw guardado OK");
+      await supabase.from("empresas").update({ busqueda_web_raw: busquedaWebRaw }).eq("id", params.id);
     }
 
     revalidatePath(`/cuentas/${params.id}`);
-    console.log(`[regenerar] completado exitosamente: nombre="${ficha.nombre}"`);
+    console.log(`[regenerar] completado: "${ficha.nombre}"`);
 
     return Response.json({ ok: true, nombre: ficha.nombre });
   } catch (error) {
-    console.error("[regenerar] ERROR no manejado:", error);
-    console.error("[regenerar] stack:", error instanceof Error ? error.stack : "no stack");
+    console.error("[regenerar] ERROR:", error instanceof Error ? error.message : error);
     return Response.json({ ok: false, error: String(error) }, { status: 500 });
   }
 }
