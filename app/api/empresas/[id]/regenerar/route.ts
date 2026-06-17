@@ -253,6 +253,37 @@ export async function POST(
     await actualizarFichaCompleta(params.id, ficha);
     console.log("[regenerar] actualizarFichaCompleta OK");
 
+    // Upsert decisores como filas en tabla contactos
+    // (ignorar si ya existe el cargo para esta empresa — el vendedor pudo haberlo editado)
+    if (ficha.decisores.length > 0) {
+      console.log(`[regenerar] decisores a guardar: ${ficha.decisores.length}`);
+      const contactosDecisores = ficha.decisores.map((d) => ({
+        empresa_id: params.id,
+        nombre: d.persona_encontrada?.nombre ?? d.cargo,
+        cargo: d.cargo,
+        area: d.area as "adquisiciones" | "calidad" | "operaciones" | "gerencia" | "otro",
+        notas_ia: [
+          d.por_que_es_clave,
+          `Dolor específico: ${d.dolor_especifico}`,
+          `Buscar en LinkedIn: ${d.query_linkedin}`,
+          d.persona_encontrada?.nombre ? `Persona encontrada: ${d.persona_encontrada.nombre} (confianza: ${d.persona_encontrada.confianza})` : null,
+          d.persona_encontrada?.linkedin_url ? `LinkedIn: ${d.persona_encontrada.linkedin_url}` : null,
+        ].filter(Boolean).join("\n\n"),
+        linkedin_url: d.persona_encontrada?.linkedin_url ?? null,
+        es_decisor: true,
+      }));
+      const { error: contactosErr } = await supabase
+        .from("contactos")
+        .upsert(contactosDecisores, { onConflict: "empresa_id,cargo", ignoreDuplicates: true });
+      if (contactosErr) {
+        console.error("[regenerar] error guardando contactos:", contactosErr);
+      } else {
+        console.log(`[regenerar] contactos guardados OK: ${contactosDecisores.length}`);
+      }
+    } else {
+      console.log("[regenerar] sin decisores — no se insertan contactos");
+    }
+
     if (busquedaWebRaw) {
       const { error: rawErr } = await supabase.from("empresas").update({ busqueda_web_raw: busquedaWebRaw }).eq("id", params.id);
       if (rawErr) console.error("[regenerar] error guardando busqueda_web_raw:", rawErr);
