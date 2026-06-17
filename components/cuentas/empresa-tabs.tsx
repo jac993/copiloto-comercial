@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  FileText, Users, Clock, Clipboard, MessageSquare, Globe,
+  FileText, Users, Clock, Clipboard, MessageSquare,
   ArrowLeft, Zap, Phone, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,6 @@ import { TabDecisores } from "@/components/cuentas/tab-decisores";
 import { TabHistorial } from "@/components/cuentas/tab-historial";
 import { TabPreparacion } from "@/components/cuentas/tab-preparacion";
 import { TabChat } from "@/components/cuentas/tab-chat";
-import { TabBusquedaWeb } from "@/components/cuentas/tab-busqueda-web";
 import type { EmpresaCompleta, EstadoEmpresa, Interaccion, Contacto } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +34,6 @@ const TABS = [
   { id: "decisores", label: "Decisores", Icon: Users },
   { id: "historial", label: "Historial", Icon: Clock },
   { id: "preparacion", label: "Preparación", Icon: Clipboard },
-  { id: "busqueda", label: "Búsqueda Web", Icon: Globe },
   { id: "chat", label: "Consultar", Icon: MessageSquare },
 ] as const;
 
@@ -147,6 +145,7 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             ficha={ficha}
             empresaId={empresa.id}
             notasVendedor={empresa.notas_vendedor}
+            busquedaWebRaw={empresa.busqueda_web_raw}
           />
         )}
         {tabActivo === "resumen" && !ficha && <SinFicha />}
@@ -176,10 +175,6 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
         )}
         {tabActivo === "preparacion" && !ficha && <SinFicha />}
 
-        {tabActivo === "busqueda" && (
-          <TabBusquedaWeb empresa={empresa} />
-        )}
-
         {tabActivo === "chat" && (
           <TabChat
             empresaId={empresa.id}
@@ -188,8 +183,8 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
         )}
       </div>
 
-      {/* Botón flotante de acción principal — oculto en historial, búsqueda y chat */}
-      {tabActivo !== "historial" && tabActivo !== "chat" && tabActivo !== "busqueda" && (
+      {/* Botón flotante de acción principal — oculto en historial y chat */}
+      {tabActivo !== "historial" && tabActivo !== "chat" && (
         <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
           <Button
             size="lg"

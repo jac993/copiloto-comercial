@@ -599,7 +599,8 @@ export async function getHistorialResumido(empresaId: string): Promise<string> {
 export async function guardarEmpresaDesdeFicha(
   ficha: FichaIA,
   url: string,
-  contextoVendedor?: string | null
+  contextoVendedor?: string | null,
+  busquedaWebRaw?: import("@/lib/types").BusquedaWebRaw | null
 ): Promise<Empresa> {
   // Calcular score basado en urgencia y señales detectadas
   const urgencias = ficha.productos_etiquetas.map((p) => p.urgencia);
@@ -628,7 +629,7 @@ export async function guardarEmpresaDesdeFicha(
     notas_vendedor: contextoVendedor ?? null,
     razon_perdido: null,
     fecha_reactivacion: null,
-    busqueda_web_raw: null,
+    busqueda_web_raw: busquedaWebRaw ?? null,
     busqueda_web_analisis: null,
   };
 

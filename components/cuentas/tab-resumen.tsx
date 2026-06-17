@@ -13,7 +13,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { FichaIA, VerificacionContexto, InteligenciaComercial } from "@/lib/types";
+import type { FichaIA, VerificacionContexto, InteligenciaComercial, BusquedaWebRaw } from "@/lib/types";
 
 const TECNICA_COLOR: Record<string, string> = {
   SPIN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -32,9 +32,10 @@ interface TabResumenProps {
   ficha: FichaIA;
   empresaId: string;
   notasVendedor: string | null;
+  busquedaWebRaw?: BusquedaWebRaw | null;
 }
 
-export function TabResumen({ ficha, empresaId, notasVendedor }: TabResumenProps) {
+export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: TabResumenProps) {
   const router = useRouter();
   const { toast } = useToast();
 
@@ -97,9 +98,14 @@ export function TabResumen({ ficha, empresaId, notasVendedor }: TabResumenProps)
         </CardContent>
       </Card>
 
-      {/* Inteligencia comercial (Perplexity) */}
+      {/* Inteligencia comercial (Perplexity en ficha) */}
       {ficha.inteligencia_comercial && (
         <InteligenciaComercialCard intel={ficha.inteligencia_comercial} />
+      )}
+
+      {/* Encontrado en internet — texto crudo de Perplexity, colapsable */}
+      {busquedaWebRaw && (busquedaWebRaw.contactosTexto || busquedaWebRaw.inteligenciaTexto) && (
+        <EncontradoEnInternet raw={busquedaWebRaw} />
       )}
 
       {/* Ángulo de entrada + técnica + botón regenerar */}
@@ -346,6 +352,82 @@ function ContextoVerificacion({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Encontrado en internet — texto crudo de Perplexity ───────
+function EncontradoEnInternet({ raw }: { raw: BusquedaWebRaw }) {
+  return (
+    <div>
+      <Accordion type="single" collapsible>
+        <AccordionItem value="internet" className="border rounded-2xl px-4">
+          <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
+            <span className="flex items-center gap-2">
+              🌐 Encontrado en internet
+              {raw.fuentes.length > 0 && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  · {raw.fuentes.length} fuente{raw.fuentes.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="space-y-3 pb-4">
+            {raw.contactosTexto && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Personas y contactos
+                </p>
+                <div className="max-h-40 overflow-y-auto rounded-xl bg-muted/40 p-3">
+                  <p className="text-xs text-foreground/80 whitespace-pre-wrap leading-relaxed">
+                    {raw.contactosTexto}
+                  </p>
+                </div>
+              </div>
+            )}
+            {raw.inteligenciaTexto && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Noticias e inteligencia comercial
+                </p>
+                <div className="max-h-40 overflow-y-auto rounded-xl bg-muted/40 p-3">
+                  <p className="text-xs text-foreground/80 whitespace-pre-wrap leading-relaxed">
+                    {raw.inteligenciaTexto}
+                  </p>
+                </div>
+              </div>
+            )}
+            {raw.fuentes.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {raw.fuentes.slice(0, 6).map((url, i) => {
+                  let host = url;
+                  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+                  return (
+                    <a
+                      key={i}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {host}
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+            {raw.buscado_en && (
+              <p className="text-xs text-muted-foreground/60">
+                Buscado el{" "}
+                {new Intl.DateTimeFormat("es-CL", {
+                  day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                }).format(new Date(raw.buscado_en))}
+              </p>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </div>
   );
 }
