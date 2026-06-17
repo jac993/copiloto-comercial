@@ -25,36 +25,74 @@ function enviarEvento(
   controller.enqueue(encoder.encode(`data: ${data}\n\n`));
 }
 
-// Extrae JSON de la respuesta de Claude (maneja markdown y texto libre)
-function extraerJson(texto: string): FichaIA {
+// Limpia texto de entrada antes de enviarlo a Claude para evitar que
+// caracteres especiales rompan el JSON que Claude genera en su respuesta.
+function sanitizarTexto(texto: string, maxChars = 3000): string {
+  return texto
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")  // control chars excepto \t \n \r
+    .replace(/\r\n/g, " ")
+    .replace(/\n/g, " ")
+    .replace(/\r/g, " ")
+    .replace(/\t/g, " ")
+    .replace(/"/g, "'")
+    .replace(/\\/g, "/")
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, "")               // fuera del rango ASCII imprimible + latin-1
+    .slice(0, maxChars)
+    .trim();
+}
+
+// Extrae JSON de la respuesta de Claude con 4 intentos progresivamente más agresivos.
+// Si todo falla devuelve null en vez de lanzar excepción — el caller decide qué hacer.
+function extraerJsonSeguro(texto: string): FichaIA | null {
   // Intento 1: parse directo
-  try {
-    return JSON.parse(texto) as FichaIA;
-  } catch {}
+  try { return JSON.parse(texto) as FichaIA; } catch {}
 
   // Intento 2: extraer de bloque markdown ```json ... ```
-  const markdownMatch = texto.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (markdownMatch) {
+  const mdMatch = texto.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (mdMatch) {
+    try { return JSON.parse(mdMatch[1]) as FichaIA; } catch {}
+  }
+
+  // Intento 3: primer objeto JSON del texto
+  const jsonMatch = texto.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try { return JSON.parse(jsonMatch[0]) as FichaIA; } catch {}
+
+    // Intento 4: limpiar el JSON extraído y reintentar
     try {
-      return JSON.parse(markdownMatch[1]) as FichaIA;
+      const limpio = jsonMatch[0]
+        .replace(/[\x00-\x1F]/g, " ")          // todos los control chars → espacio
+        .replace(/,(\s*[}\]])/g, "$1")          // comas finales antes de } o ]
+        .replace(/([{,]\s*)(\w+)(\s*):/g, '$1"$2"$3:');  // claves sin comillas → con comillas
+      return JSON.parse(limpio) as FichaIA;
     } catch {}
   }
 
-  // Intento 3: encontrar el primer objeto JSON en el texto
-  const jsonMatch = texto.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    try {
-      return JSON.parse(jsonMatch[0]) as FichaIA;
-    } catch {
-      // Intento 4: sanitizar el JSON extraído y reintentar
-      const sanitizado = jsonMatch[0]
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
-        .replace(/\t/g, " ");
-      return JSON.parse(sanitizado) as FichaIA;
-    }
-  }
+  return null;
+}
 
-  throw new Error("No se pudo extraer JSON de la respuesta de IA");
+// Ficha mínima de fallback cuando Claude devuelve JSON inválido.
+// Permite guardar la empresa aunque el análisis esté incompleto.
+function fichaFallback(nombreDetectado: string, urlSitio: string): FichaIA {
+  return {
+    nombre: nombreDetectado || urlSitio,
+    industria: "Por determinar",
+    descripcion: "Análisis pendiente — el sitio web no devolvió suficiente información.",
+    que_fabrican_o_venden: "Por determinar",
+    por_que_necesitan_etiquetas: "Por determinar",
+    productos_etiquetas: [],
+    tamano_estimado: "mediana",
+    region: "Por determinar",
+    senales_oportunidad: [],
+    decisores: [],
+    angulo_entrada: "Investigación incompleta. Vuelve a investigar esta empresa.",
+    tecnica_recomendada: "consultiva",
+    razon_tecnica: "Por determinar",
+    preguntas_spin: ["Por determinar", "Por determinar", "Por determinar"],
+    objeciones_probables: [],
+    resumen_ejecutivo: "No se pudo generar la ficha completa. Vuelve a intentarlo.",
+    verificacion_contexto: [],
+  };
 }
 
 export async function POST(request: Request) {
@@ -112,12 +150,13 @@ export async function POST(request: Request) {
           ? `CONTEXTO PREVIO DEL VENDEDOR (priorizar esta información sobre lo que dice el sitio web):\n${contexto_vendedor.trim()}\n\n`
           : "";
 
-        // Sanitizar texto de Perplexity antes de inyectar en el prompt
-        const sanitizar = (t: string) =>
-          t.replace(/[\x00-\x1F\x7F]/g, " ").replace(/"/g, "'").replace(/\\/g, "/").slice(0, 3000);
+        // Sanitizar TODOS los textos externos antes de inyectarlos en el prompt
+        const textoWeb = sanitizarTexto(texto, 15000);
+        const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto || "", 3000);
+        const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto || "", 3000);
 
-        const perplexityBloque = perplexityResult.contactosTexto || perplexityResult.inteligenciaTexto
-          ? `\n\n--- BÚSQUEDA DE CONTACTOS (Perplexity) ---\n${sanitizar(perplexityResult.contactosTexto || "Sin resultados.")}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${sanitizar(perplexityResult.inteligenciaTexto || "Sin resultados.")}\n\nFUENTES PERPLEXITY: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+        const perplexityBloque = contactosLimpio || inteligenciaLimpia
+          ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
           : "";
 
         const mensaje = await anthropic.messages.create({
@@ -126,7 +165,7 @@ export async function POST(request: Request) {
           messages: [
             {
               role: "user",
-              content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${url.trim()}\nNombre detectado: ${nombreDetectado}\n\n${contextoBloque}--- TEXTO DEL SITIO WEB ---\n${texto}${perplexityBloque}`,
+              content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${url.trim()}\nNombre detectado: ${nombreDetectado}\n\n${contextoBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}${perplexityBloque}`,
             },
           ],
         });
@@ -136,7 +175,8 @@ export async function POST(request: Request) {
           throw new Error("Respuesta inesperada de Claude");
         }
 
-        const ficha = extraerJson(contenido.text);
+        // Usar parser robusto con fallback — nunca crashear por JSON inválido
+        const ficha = extraerJsonSeguro(contenido.text) ?? fichaFallback(nombreDetectado, url.trim());
 
         // PASO C: Guardar en Supabase (contexto_vendedor se guarda en notas_vendedor)
         send("progreso", { mensaje: "Guardando ficha en tu base de datos..." });
