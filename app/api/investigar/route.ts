@@ -1,14 +1,16 @@
 // =============================================================
 // POST /api/investigar — Investiga una empresa con IA
-// Flujo: scraping + Perplexity en paralelo → Claude con todo.
-// Perplexity es opcional — si falla, sigue solo con el sitio web.
+// Flujo: scraping + Perplexity en paralelo →
+//   Llamada 1 Claude: ficha básica (PROMPT_FICHA_BASICA, 2500 tokens)
+//   Llamada 2 Claude: decisores + inteligencia (PROMPT_DECISORES_PERPLEXITY, 2500 tokens)
+// Dividir en dos llamadas evita truncamiento del JSON monolítico.
 // REGLA: Solo se activa cuando el usuario aprieta "Investigar".
 // =============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
 import { guardarEmpresaDesdeFicha } from "@/lib/queries";
-import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
+import { PROMPT_FICHA_BASICA, PROMPT_DECISORES_PERPLEXITY } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
 import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
 
@@ -24,6 +26,10 @@ function enviarEvento(
   const data = JSON.stringify({ type: tipo, ...payload });
   controller.enqueue(encoder.encode(`data: ${data}\n\n`));
 }
+
+// Tipos parciales para el parsing de cada llamada
+type FichaBasicaIA = Omit<FichaIA, "decisores" | "inteligencia_comercial">;
+type DecisoresIA = Pick<FichaIA, "decisores" | "inteligencia_comercial">;
 
 function fichaFallback(nombreDetectado: string, urlSitio: string): FichaIA {
   return {
@@ -71,14 +77,14 @@ export async function POST(request: Request) {
         enviarEvento(controller, tipo, payload);
 
       try {
-        const urlNorm = normalizarUrl(url.trim().split("?")[0].split("#")[0].trim());
+        const urlLimpia = url.trim().split("?")[0].split("#")[0].trim();
+        const urlNorm = normalizarUrl(urlLimpia);
         let dominio = "";
         try {
           dominio = new URL(urlNorm).hostname.replace(/^www\./, "");
         } catch {
-          dominio = url.trim();
+          dominio = urlLimpia;
         }
-        const nombreBase = dominio.split(".")[0];
 
         // ── PASO A: Scraping + Perplexity en paralelo ─────────
         send("progreso", { mensaje: "Leyendo el sitio web..." });
@@ -91,11 +97,16 @@ export async function POST(request: Request) {
         };
 
         const [scrapeResult, perplexityResult] = await Promise.all([
-          scrapeEmpresa(url.trim(), (msg) => send("progreso", { mensaje: msg })),
+          scrapeEmpresa(urlLimpia, (msg) => send("progreso", { mensaje: msg })),
           (async () => {
             send("progreso", { mensaje: "Buscando en internet..." });
             try {
-              return await buscarConPerplexity(nombreBase, dominio, "Chile", opcionesExtra);
+              return await buscarConPerplexity(
+                razon_social?.trim() || dominio.split(".")[0],
+                dominio,
+                "Chile",
+                opcionesExtra
+              );
             } catch {
               return { contactosTexto: "", inteligenciaTexto: "", fuentes: [] };
             }
@@ -110,10 +121,17 @@ export async function POST(request: Request) {
           );
         }
 
-        // ── PASO B: Claude con todo el contexto ───────────────
-        send("progreso", { mensaje: "Analizando con IA..." });
-
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+        // Bloques de texto reutilizados en ambas llamadas
+        const textoWeb = sanitizarTexto(texto, 15000);
+        const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto, 3000);
+        const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000);
+
+        const perplexityBloque =
+          contactosLimpio || inteligenciaLimpia
+            ? `--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+            : "";
 
         const contextoBloque = contexto_vendedor?.trim()
           ? `CONTEXTO PREVIO DEL VENDEDOR:\n${contexto_vendedor.trim()}\n\n`
@@ -127,36 +145,55 @@ export async function POST(request: Request) {
         ].filter(Boolean).join("\n");
         const datosExtraBloque = datosExtra ? `DATOS ADICIONALES PROVISTOS:\n${datosExtra}\n\n` : "";
 
-        const textoWeb = sanitizarTexto(texto, 15000);
-        const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto, 3000);
-        const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000);
+        // ── PASO B: Llamada 1 — ficha básica (sin decisores) ──
+        send("progreso", { mensaje: "Analizando empresa..." });
 
-        const perplexityBloque =
-          contactosLimpio || inteligenciaLimpia
-            ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
-            : "";
-
-        const mensaje = await anthropic.messages.create({
+        const msg1 = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
-          max_tokens: 4000,
-          messages: [
-            {
-              role: "user",
-              content:
-                `${PROMPT_INVESTIGADOR}\n\nURL: ${url.trim()}\nNombre detectado: ${nombreDetectado}\nDominio: ${dominio}\n\n` +
-                `${datosExtraBloque}${contextoBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}${perplexityBloque}`,
-            },
-          ],
+          max_tokens: 2500,
+          messages: [{
+            role: "user",
+            content:
+              `${PROMPT_FICHA_BASICA}\n\n` +
+              `URL: ${urlLimpia}\nNombre detectado: ${nombreDetectado}\nDominio: ${dominio}\n\n` +
+              `${datosExtraBloque}${contextoBloque}` +
+              `--- TEXTO DEL SITIO WEB ---\n${textoWeb}`,
+          }],
         });
 
-        const contenido = mensaje.content[0];
-        if (contenido.type !== "text") {
-          throw new Error("Respuesta inesperada de Claude");
-        }
+        const texto1 = msg1.content[0]?.type === "text" ? msg1.content[0].text : "";
+        const fichaBasica = extraerJsonSeguro<FichaBasicaIA>(texto1);
 
-        const ficha =
-          extraerJsonSeguro<FichaIA>(contenido.text) ??
-          fichaFallback(nombreDetectado, url.trim());
+        // ── PASO C: Llamada 2 — decisores + inteligencia ──────
+        send("progreso", { mensaje: "Identificando decisores..." });
+
+        const nombreEmpresa = fichaBasica?.nombre || nombreDetectado || dominio;
+        const industriaEmpresa = fichaBasica?.industria || rubro?.trim() || "Por determinar";
+
+        const msg2 = await anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2500,
+          messages: [{
+            role: "user",
+            content:
+              `${PROMPT_DECISORES_PERPLEXITY}\n\n` +
+              `Empresa: ${nombreEmpresa}\n` +
+              `Industria: ${industriaEmpresa}\n` +
+              `Qué fabrican/venden: ${fichaBasica?.que_fabrican_o_venden || "Por determinar"}\n\n` +
+              (perplexityBloque || "Sin resultados de búsqueda en internet."),
+          }],
+        });
+
+        const texto2 = msg2.content[0]?.type === "text" ? msg2.content[0].text : "";
+        const decisoresParsed = extraerJsonSeguro<DecisoresIA>(texto2);
+
+        // ── PASO D: Fusionar ambos JSONs en FichaIA completa ──
+        const fichaBase = fichaBasica ?? fichaFallback(nombreDetectado, urlLimpia);
+        const ficha: FichaIA = {
+          ...fichaBase,
+          decisores: decisoresParsed?.decisores ?? [],
+          inteligencia_comercial: decisoresParsed?.inteligencia_comercial ?? undefined,
+        };
 
         // Guardar raw de Perplexity junto con la empresa
         const busquedaWebRaw: BusquedaWebRaw | null =
@@ -169,12 +206,12 @@ export async function POST(request: Request) {
               }
             : null;
 
-        // ── PASO C: Guardar en Supabase ────────────────────────
+        // ── PASO E: Guardar en Supabase ────────────────────────
         send("progreso", { mensaje: "Guardando ficha..." });
 
         const empresa = await guardarEmpresaDesdeFicha(
           ficha,
-          url.trim(),
+          urlLimpia,
           contexto_vendedor?.trim() || null,
           busquedaWebRaw,
           { razonSocial: razon_social?.trim(), rut: rut?.trim() }
