@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw, Copy, Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
-import { useToast } from "@/hooks/use-toast";
 import type { Contacto, DecisorIA, ContactoReal } from "@/lib/types";
 
 const AREA_LABEL: Record<string, string> = {
@@ -35,8 +33,6 @@ interface TabDecisoresProps {
 }
 
 export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReales = [] }: TabDecisoresProps) {
-  const router = useRouter();
-  const { toast } = useToast();
   const [actualizando, setActualizando] = useState(false);
 
   const actualizarDecisores = async () => {
