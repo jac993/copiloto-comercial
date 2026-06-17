@@ -5,7 +5,7 @@
 // principal para no mezclar fuentes ni consumir créditos sin querer.
 
 import { useState } from "react";
-import { Globe, Zap, RefreshCw, User, AlertCircle, CheckCircle, ExternalLink, Clock } from "lucide-react";
+import { Globe, Zap, RefreshCw, AlertCircle, CheckCircle, ExternalLink, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { EmpresaCompleta, BusquedaWebRaw, AnalisisWeb } from "@/lib/types";
