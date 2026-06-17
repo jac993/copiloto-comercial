@@ -513,8 +513,8 @@ Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional.
 export const PROMPT_BUSCAR_CONTACTOS = `
 Eres un analista comercial B2B especializado en etiquetas autoadhesivas e imprenta industrial en Chile.
 
-Recibirás dos bloques de texto extraídos de una búsqueda en internet sobre una empresa chilena.
-Tu tarea es extraer estructuradamente la información en JSON.
+Recibirás bloques de texto de búsquedas en internet sobre una empresa chilena (LinkedIn, emails, directorio, noticias).
+Tu tarea: extraer TODA la información de personas y contexto comercial disponible.
 
 ${CONTEXTO_DOMINIO}
 
@@ -523,12 +523,12 @@ Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto adicional.
 {
   "contactos_reales": [
     {
-      "nombre": "Nombre real o null si no se encontró",
+      "nombre": "Nombre real o null",
       "cargo": "Cargo real o null",
       "email": "email@empresa.cl o null",
       "telefono": "+56 9 XXXX XXXX o null",
       "linkedin_url": "https://linkedin.com/in/... o null",
-      "como_contactar": "Instrucción concreta: 'Buscar en LinkedIn: [query]' o 'Llamar a central [número]'",
+      "como_contactar": "Instrucción concreta de contacto",
       "fuente": "URL o descripción de dónde se encontró",
       "confianza": "alta|media|baja",
       "relevancia_venta": "alta|media|baja"
@@ -545,18 +545,55 @@ Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto adicional.
   }
 }
 
-REGLAS para contactos_reales:
-- NUNCA inventes nombres, cargos, emails o teléfonos.
-- Si no hay personas reales en el texto, devuelve "contactos_reales": [].
-- "confianza" alta: nombre + cargo confirmado en LinkedIn o sitio oficial.
-  Media: mencionado en artículo o directorio reciente (2022+). Baja: solo nombre sin cargo verificado.
-- "relevancia_venta" alta: área Calidad, Operaciones o Gerente de Planta.
-  Media: Compras/Adquisiciones o Gerencia General. Baja: área no relevante para etiquetas.
-- Máximo 6 contactos, ordenados de mayor a menor relevancia_venta.
+═══ INSTRUCCIONES PARA contactos_reales ═══
 
-REGLAS para inteligencia_comercial:
-- NUNCA inventes datos de mercado ni situaciones que no aparezcan en las fuentes.
-- Si no hay información, usa "Sin información pública disponible para esta empresa en 2024-2025."
+EXTRACCIÓN AGRESIVA — busca activamente estos patrones en el texto:
+
+NOMBRES: Extrae TODOS los nombres de personas mencionados, aunque sea solo el nombre sin cargo.
+  Incluye: ejecutivos, directores, jefes, gerentes, encargados, dueños, fundadores.
+
+EMAILS: Busca cualquier patrón nombre@dominio o dirección de correo en el texto.
+  Si encuentras el patrón del email corporativo (ej: jrodriguez@empresa.cl), documéntalo.
+
+TELÉFONOS: Extrae cualquier número con formato chileno: +56, 56-2, (2), 2 XXXX XXXX, 9 XXXX XXXX.
+  Incluye teléfonos de central/recepción aunque no sean directos.
+
+LINKEDIN: Extrae URLs completas que contengan linkedin.com/in/ o linkedin.com/company/.
+
+CAMPO como_contactar — SIEMPRE completa este campo con una de estas opciones:
+  a) Si hay email directo: "Escribir a [email]"
+  b) Si hay teléfono: "Llamar al [número]"
+  c) Si hay LinkedIn: "Conectar en LinkedIn: [url o query exacta]"
+  d) Si no hay datos directos pero tienes nombre + dominio: sugiere el email probable.
+     Ejemplo: si el dominio es coexpan.cl y el nombre es Juan Pérez, escribe:
+     "Email probable: jperez@coexpan.cl o juan.perez@coexpan.cl — intentar ambos"
+  e) Si solo tienes nombre: "Buscar en LinkedIn: [nombre] [empresa] Chile"
+
+NIVEL MÍNIMO ACEPTABLE:
+- Al menos 3 contactos si hay nombres en el texto (con o sin cargo)
+- Al menos 1 teléfono (directo o central de la empresa)
+- Al menos 1 sugerencia de email probable basada en el dominio
+- Al menos 1 link de LinkedIn si aparece en el texto
+
+CONFIANZA:
+  alta = nombre + cargo confirmado en LinkedIn o sitio oficial de la empresa
+  media = mencionado en artículo, noticia o directorio reciente (2022+)
+  baja = solo nombre sin cargo verificado, o cargo sin nombre completo
+
+RELEVANCIA PARA LA VENTA:
+  alta = área Calidad, Operaciones, Gerente de Planta
+  media = Compras/Adquisiciones, Gerencia General
+  baja = área no relevante para etiquetas (RRHH, finanzas, marketing)
+
+Máximo 8 contactos, ordenados de mayor a menor relevancia_venta.
+NUNCA inventes nombres, cargos, emails o teléfonos que no aparezcan en el texto.
+Si realmente no hay ninguna persona en el texto, devuelve "contactos_reales": [].
+
+═══ INSTRUCCIONES PARA inteligencia_comercial ═══
+
+- NUNCA inventes datos que no aparezcan en las fuentes.
+- Si no hay información, usa: "Sin información pública disponible para esta empresa en 2024-2025."
+- "propuesta_valor_especifica": concreta y basada SOLO en evidencia encontrada.
 - "fuentes": solo URLs reales del texto. Si no hay, devuelve [].
 `;
 
