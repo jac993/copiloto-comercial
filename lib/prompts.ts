@@ -117,6 +117,13 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "area": "calidad",
       "por_que_es_clave": "Por qué el Jefe de Calidad de ESTA empresa necesita etiquetas perfectas (menciona su industria y producto)",
       "dolor_especifico": "Qué problema concreto de etiquetado genera no conformidades, rechazos o auditorías fallidas EN ESTA empresa",
+      "tecnica_recomendada": "SPIN",
+      "persona_encontrada": {
+        "nombre": "Nombre real encontrado en Perplexity o null",
+        "linkedin_url": "https://linkedin.com/in/... o null",
+        "fuente": "Descripción de dónde se encontró o null",
+        "confianza": "alta|media|baja o null"
+      },
       "query_linkedin": "Jefe Calidad [NombreEmpresa] Chile"
     },
     {
@@ -124,6 +131,13 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "area": "operaciones",
       "por_que_es_clave": "Por qué el Jefe de Operaciones de ESTA empresa depende de etiquetas para no parar la línea",
       "dolor_especifico": "Qué impacto operacional concreto tiene un fallo de etiquetado en la producción de ESTA empresa",
+      "tecnica_recomendada": "consultiva",
+      "persona_encontrada": {
+        "nombre": "Nombre real encontrado en Perplexity o null",
+        "linkedin_url": "https://linkedin.com/in/... o null",
+        "fuente": "Descripción de dónde se encontró o null",
+        "confianza": "alta|media|baja o null"
+      },
       "query_linkedin": "Jefe Operaciones [NombreEmpresa] Chile"
     },
     {
@@ -131,6 +145,13 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "area": "operaciones",
       "por_que_es_clave": "Por qué el Jefe de Logística de ESTA empresa necesita etiquetas logísticas fiables",
       "dolor_especifico": "Qué problema de despacho, picking o trazabilidad causa un error de etiquetado en ESTA empresa",
+      "tecnica_recomendada": "consultiva",
+      "persona_encontrada": {
+        "nombre": "Nombre real encontrado en Perplexity o null",
+        "linkedin_url": "https://linkedin.com/in/... o null",
+        "fuente": "Descripción de dónde se encontró o null",
+        "confianza": "alta|media|baja o null"
+      },
       "query_linkedin": "Jefe Logística [NombreEmpresa] Chile"
     },
     {
@@ -138,6 +159,13 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "area": "operaciones",
       "por_que_es_clave": "Por qué el Gerente de Planta de ESTA empresa aprueba o bloquea un cambio de proveedor de etiquetas",
       "dolor_especifico": "Qué KPI de planta se ve afectado por problemas de etiquetado en ESTA empresa",
+      "tecnica_recomendada": "challenger",
+      "persona_encontrada": {
+        "nombre": "Nombre real encontrado en Perplexity o null",
+        "linkedin_url": "https://linkedin.com/in/... o null",
+        "fuente": "Descripción de dónde se encontró o null",
+        "confianza": "alta|media|baja o null"
+      },
       "query_linkedin": "Gerente Planta [NombreEmpresa] Chile"
     },
     {
@@ -145,6 +173,13 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "area": "compras",
       "por_que_es_clave": "Por qué el Jefe de Compras de ESTA empresa es el guardián formal del cambio de proveedor",
       "dolor_especifico": "Qué presión de costos y riesgo de suministro enfrenta el área de compras de ESTA empresa en etiquetas",
+      "tecnica_recomendada": "relacional",
+      "persona_encontrada": {
+        "nombre": "Nombre real encontrado en Perplexity o null",
+        "linkedin_url": "https://linkedin.com/in/... o null",
+        "fuente": "Descripción de dónde se encontró o null",
+        "confianza": "alta|media|baja o null"
+      },
       "query_linkedin": "Jefe Compras [NombreEmpresa] Chile"
     },
     {
@@ -152,6 +187,13 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "area": "gerencia",
       "por_que_es_clave": "Por qué el Gerente General de ESTA empresa se preocupa del etiquetado (riesgo reputacional, regulatorio o de mercado)",
       "dolor_especifico": "Qué riesgo de negocio concreto representa un problema de etiquetado para ESTA empresa a nivel gerencial",
+      "tecnica_recomendada": "challenger",
+      "persona_encontrada": {
+        "nombre": "Nombre real encontrado en Perplexity o null",
+        "linkedin_url": "https://linkedin.com/in/... o null",
+        "fuente": "Descripción de dónde se encontró o null",
+        "confianza": "alta|media|baja o null"
+      },
       "query_linkedin": "Gerente General [NombreEmpresa] Chile"
     }
   ],
@@ -169,25 +211,12 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "como_responderla": "Respuesta concreta, no genérica, usando datos o ejemplos de su industria"
     }
   ],
-  "resumen_ejecutivo": "3 líneas: 1) Quiénes son y qué hacen. 2) La oportunidad específica. 3) Cómo entrar y con quién.",
+  "resumen_ejecutivo": "3 líneas potentes: 1) Quiénes son y qué fabrican exactamente. 2) La oportunidad comercial específica basada en inteligencia de mercado (situación actual, expansión, clientes). 3) Cómo entrar: cargo prioritario + si hay persona real encontrada, mencionar su nombre.",
   "verificacion_contexto": [
     {
       "dato_vendedor": "Exactamente lo que dijo el vendedor (cita textual o paráfrasis breve)",
       "estado": "confirmado|inconsistente|no_verificable",
       "observacion": "Qué encontraste en el sitio web que confirma, contradice o no permite verificar esto"
-    }
-  ],
-  "contactos_reales": [
-    {
-      "nombre": "Nombre real o null si no se encontró",
-      "cargo": "Cargo real o null",
-      "email": "email@empresa.cl o null",
-      "telefono": "+56 9 XXXX XXXX o null",
-      "linkedin_url": "https://linkedin.com/in/... o null",
-      "como_contactar": "Instrucción concreta: 'Buscar en LinkedIn: [query]' o 'Llamar a central [número]'",
-      "fuente": "URL o descripción de dónde se encontró (ej: sitio web empresa, LinkedIn, noticia)",
-      "confianza": "alta|media|baja",
-      "relevancia_venta": "alta|media|baja"
     }
   ],
   "inteligencia_comercial": {
@@ -212,20 +241,17 @@ INSTRUCCIONES PARA verificacion_contexto:
 - Los ítems "confirmado" son útiles pero los "inconsistente" y "no_verificable" son los más
   importantes: alertan al vendedor antes de que llegue a la llamada con información incorrecta.
 
-INSTRUCCIONES PARA contactos_reales:
-- USA EXCLUSIVAMENTE la sección "BÚSQUEDA DE CONTACTOS (Perplexity)" del mensaje.
-- NUNCA inventes nombres, cargos, emails o teléfonos. Si Perplexity no encontró una persona real,
-  devuelve "contactos_reales": [].
-- "como_contactar": si no hay email ni teléfono directo, escribe la instrucción específica:
-  "Buscar en LinkedIn: [query exacta]" o "Llamar a central [número si existe]" o
-  "Escribir a [email genérico de la empresa si existe en el sitio]".
-- "confianza" alta: nombre + cargo confirmado en LinkedIn o sitio oficial de la empresa.
-  Media: mencionado en artículo, noticia o directorio reciente (2022+).
-  Baja: solo nombre sin cargo verificado, o cargo sin nombre.
-- "relevancia_venta" alta: área Calidad, Operaciones o Gerente de Planta.
-  Media: Compras/Adquisiciones o Gerencia General. Baja: área no relevante para etiquetas.
-- Máximo 6 contactos, ordenados de mayor a menor relevancia_venta.
-- Si la sección Perplexity está vacía o dice "sin información", devuelve [].
+INSTRUCCIONES PARA persona_encontrada dentro de cada decisor:
+- USA EXCLUSIVAMENTE la sección "CONTACTOS (Perplexity)" del mensaje.
+- Para cada uno de los 6 cargos fijos, busca si el texto de Perplexity menciona una persona
+  con ese cargo o similar en esa empresa.
+- Si la encuentras: rellena nombre, linkedin_url (si existe), fuente, confianza.
+- Si NO la encuentras: pon persona_encontrada: null.
+- NUNCA inventes personas. Un match parcial (solo nombre sin cargo) no es suficiente.
+- confianza "alta": nombre + cargo en LinkedIn oficial o sitio web de la empresa.
+  "media": mencionado en artículo, directorio o noticia (2022+).
+  "baja": solo mencionado de pasada sin cargo verificado.
+- El campo persona_encontrada SIEMPRE debe estar presente en cada decisor (puede ser null).
 
 INSTRUCCIONES PARA inteligencia_comercial:
 - USA EXCLUSIVAMENTE la sección "INTELIGENCIA COMERCIAL (Perplexity)" del mensaje.

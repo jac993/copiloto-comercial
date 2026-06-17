@@ -154,7 +154,6 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             contactos={empresa.contactos}
             decisoresIA={ficha?.decisores ?? []}
             empresaId={empresa.id}
-            contactosReales={ficha?.contactos_reales ?? []}
           />
         )}
 

@@ -63,52 +63,35 @@ async function llamarPerplexity(query: string): Promise<{ texto: string; fuentes
   }
 }
 
-// Cuatro búsquedas Perplexity: 3 de contactos (distintos ángulos) + 1 de inteligencia.
+// Dos búsquedas Perplexity: 1 de contactos + 1 de inteligencia comercial.
 // Corre en paralelo con scrapeEmpresa() en /api/investigar.
 export async function buscarConPerplexity(
   nombreEmpresa: string,
   dominio: string,
   pais: string = "Chile"
 ): Promise<BusquedaPerplexity> {
-  // Tres ángulos distintos para maximizar contactos encontrados
-  const queryA =
-    `"${nombreEmpresa}" ${pais} ejecutivos directivos LinkedIn site:linkedin.com`;
-
-  const queryB =
-    `"${nombreEmpresa}" ${pais} contacto email teléfono jefe gerente calidad operaciones compras`;
-
-  const queryC =
-    `"${nombreEmpresa}" ${dominio} staff equipo directorio team ejecutivos`;
+  const queryContactos =
+    `"${nombreEmpresa}" ${pais} jefe gerente calidad operaciones compras adquisiciones ` +
+    `logística planta directivos ejecutivos LinkedIn contacto`;
 
   const queryInteligencia =
     `"${nombreEmpresa}" ${pais} 2024 2025 noticias expansión contratos clientes ` +
-    `proveedores etiquetas packaging licitación mercadopublico`;
+    `proveedores etiquetas packaging licitación mercadopublico situación`;
 
-  const [resA, resB, resC, resInteligencia] = await Promise.allSettled([
-    llamarPerplexity(queryA),
-    llamarPerplexity(queryB),
-    llamarPerplexity(queryC),
+  const [resContactos, resInteligencia] = await Promise.allSettled([
+    llamarPerplexity(queryContactos),
     llamarPerplexity(queryInteligencia),
   ]);
 
-  const a = resA.status === "fulfilled" ? resA.value : { texto: "", fuentes: [] };
-  const b = resB.status === "fulfilled" ? resB.value : { texto: "", fuentes: [] };
-  const c = resC.status === "fulfilled" ? resC.value : { texto: "", fuentes: [] };
+  const c = resContactos.status === "fulfilled" ? resContactos.value : { texto: "", fuentes: [] };
   const i = resInteligencia.status === "fulfilled" ? resInteligencia.value : { texto: "", fuentes: [] };
 
-  // Combinar los tres resultados de contactos con separadores claros
-  const contactosTexto = [
-    a.texto ? `--- BÚSQUEDA LINKEDIN ---\n${a.texto}` : "",
-    b.texto ? `--- BÚSQUEDA EMAILS Y TELÉFONOS ---\n${b.texto}` : "",
-    c.texto ? `--- BÚSQUEDA DIRECTORIO ---\n${c.texto}` : "",
-  ].filter(Boolean).join("\n\n");
-
-  console.log("[Perplexity] empresa:", nombreEmpresa, "| chars contactos:", contactosTexto.length, "| chars intel:", i.texto.length);
+  console.log("[Perplexity] empresa:", nombreEmpresa, "| contactos:", c.texto.length, "chars | intel:", i.texto.length, "chars");
 
   return {
-    contactosTexto: contactosTexto.slice(0, 6000),
+    contactosTexto: c.texto.slice(0, 4000),
     inteligenciaTexto: i.texto.slice(0, 4000),
-    fuentes: Array.from(new Set([...a.fuentes, ...b.fuentes, ...c.fuentes, ...i.fuentes])).slice(0, 15),
+    fuentes: Array.from(new Set([...c.fuentes, ...i.fuentes])).slice(0, 12),
   };
 }
 

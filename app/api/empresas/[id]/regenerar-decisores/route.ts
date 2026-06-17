@@ -1,18 +1,18 @@
 // POST /api/empresas/[id]/regenerar-decisores
-// Busca contactos reales e inteligencia comercial con Perplexity,
-// los procesa con Claude y guarda el resultado en ficha_ia.
-// REGLA: requiere clic explícito del usuario (botón "↻ Actualizar con Perplexity").
+// Re-investiga la empresa completa: scraping + Perplexity + Claude.
+// Actualiza ficha_ia completa incluyendo resumen ejecutivo, decisores con
+// persona_encontrada e inteligencia_comercial.
+// REGLA: requiere clic explícito del usuario.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
-import { getEmpresaById, actualizarContactosReales } from "@/lib/queries";
-import { buscarConPerplexity } from "@/lib/scraper";
-import { PROMPT_BUSCAR_CONTACTOS } from "@/lib/prompts";
-import type { ContactoReal, InteligenciaComercial } from "@/lib/types";
+import { getEmpresaById, actualizarFichaCompleta } from "@/lib/queries";
+import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
+import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
+import type { FichaIA } from "@/lib/types";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
-// Sanitiza texto de Perplexity antes de inyectarlo en el prompt de Claude
 function sanitizar(t: string): string {
   return t
     .replace(/[\x00-\x1F\x7F]/g, " ")
@@ -21,32 +21,18 @@ function sanitizar(t: string): string {
     .slice(0, 3000);
 }
 
-interface ContactosResult {
-  contactos_reales: ContactoReal[];
-  no_encontrados?: string | null;
-  inteligencia_comercial: InteligenciaComercial | null;
-}
-
-function extraerJson(texto: string): ContactosResult {
-  // Intento 1: parse directo
-  try { return JSON.parse(texto) as ContactosResult; } catch {}
-
-  // Intento 2: extraer de bloque markdown
+function extraerJson(texto: string): FichaIA {
+  try { return JSON.parse(texto) as FichaIA; } catch {}
   const md = texto.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (md) { try { return JSON.parse(md[1]) as ContactosResult; } catch {} }
-
-  // Intento 3: primer objeto JSON del texto
+  if (md) { try { return JSON.parse(md[1]) as FichaIA; } catch {} }
   const match = texto.match(/\{[\s\S]*\}/);
   if (match) {
-    try { return JSON.parse(match[0]) as ContactosResult; } catch {
-      const sanitizado = match[0]
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
-        .replace(/\t/g, " ");
-      return JSON.parse(sanitizado) as ContactosResult;
+    try { return JSON.parse(match[0]) as FichaIA; } catch {
+      const s = match[0].replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\t/g, " ");
+      return JSON.parse(s) as FichaIA;
     }
   }
-
-  throw new Error("No se pudo extraer JSON de la respuesta de IA");
+  throw new Error("No se pudo extraer JSON de la respuesta de Claude");
 }
 
 export async function POST(
@@ -54,74 +40,59 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    // 1. Obtener empresa
     const empresa = await getEmpresaById(params.id);
     if (!empresa) {
       return Response.json({ error: "Empresa no encontrada" }, { status: 404 });
     }
 
-    const nombre = empresa.nombre;
-    const dominio = empresa.url
-      ?.replace(/https?:\/\//, "")
-      ?.split("/")[0] ?? "";
-
-    // 2. Buscar con Perplexity
-    const perplexity = await buscarConPerplexity(nombre, dominio, "Chile");
-
-    if (!perplexity.contactosTexto && !perplexity.inteligenciaTexto) {
-      return Response.json(
-        { error: "Perplexity no devolvió información para esta empresa." },
-        { status: 422 }
-      );
+    if (!empresa.url) {
+      return Response.json({ error: "Esta empresa no tiene URL para reinvestigar." }, { status: 422 });
     }
 
-    // 3. Procesar con Claude
     if (!process.env.ANTHROPIC_API_KEY) {
       return Response.json({ error: "Falta ANTHROPIC_API_KEY" }, { status: 500 });
     }
 
+    const urlNorm = normalizarUrl(empresa.url);
+    let dominio = "";
+    try { dominio = new URL(urlNorm).hostname.replace(/^www\./, ""); } catch { dominio = empresa.url; }
+
+    // Scraping + Perplexity en paralelo
+    const [scrapeResult, perplexityResult] = await Promise.all([
+      scrapeEmpresa(empresa.url, () => {}),
+      buscarConPerplexity(empresa.nombre, dominio, "Chile"),
+    ]);
+
+    const { texto } = scrapeResult;
+    if (!texto || texto.length < 50) {
+      return Response.json({ error: "No se pudo leer el sitio web. Verifica que la URL sea accesible." }, { status: 422 });
+    }
+
+    const perplexityBloque = perplexityResult.contactosTexto || perplexityResult.inteligenciaTexto
+      ? `\n\n--- CONTACTOS (Perplexity) ---\n${sanitizar(perplexityResult.contactosTexto || "Sin resultados.")}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${sanitizar(perplexityResult.inteligenciaTexto || "Sin resultados.")}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+      : "";
+
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const bloquePerplexity = `
---- BÚSQUEDA DE CONTACTOS (Perplexity) ---
-${sanitizar(perplexity.contactosTexto || "Sin resultados.")}
-
---- INTELIGENCIA COMERCIAL (Perplexity) ---
-${sanitizar(perplexity.inteligenciaTexto || "Sin resultados.")}
-
-FUENTES: ${perplexity.fuentes.join(", ") || "ninguna"}
-    `.trim();
-
     const mensaje = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 3000,
+      model: "claude-sonnet-4-6",
+      max_tokens: 5000,
       messages: [
         {
           role: "user",
-          content: `${PROMPT_BUSCAR_CONTACTOS}\n\nEmpresa: ${nombre}\nDominio: ${dominio}\n\n${bloquePerplexity}`,
+          content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${empresa.url}\nNombre detectado: ${empresa.nombre}\n\n--- TEXTO DEL SITIO WEB ---\n${texto}${perplexityBloque}`,
         },
       ],
     });
 
     const contenido = mensaje.content[0];
-    if (contenido.type !== "text") {
-      throw new Error("Respuesta inesperada de Claude");
-    }
+    if (contenido.type !== "text") throw new Error("Respuesta inesperada de Claude");
 
-    const resultado = extraerJson(contenido.text);
+    const ficha = extraerJson(contenido.text);
 
-    // 4. Guardar contactos_reales e inteligencia_comercial en ficha_ia
-    await actualizarContactosReales(
-      params.id,
-      resultado.contactos_reales ?? [],
-      resultado.inteligencia_comercial ?? null
-    );
+    await actualizarFichaCompleta(params.id, ficha);
 
-    return Response.json({
-      ok: true,
-      totalContactos: (resultado.contactos_reales ?? []).length,
-      noEncontrados: resultado.no_encontrados ?? null,
-    });
+    return Response.json({ ok: true, nombre: ficha.nombre });
 
   } catch (error) {
     console.error("[regenerar-decisores] error:", error);

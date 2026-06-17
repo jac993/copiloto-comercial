@@ -21,11 +21,20 @@ export interface SenalOportunidadIA {
   fuente: string;
 }
 
+export interface PersonaEncontrada {
+  nombre: string | null;
+  linkedin_url: string | null;
+  fuente: string | null;
+  confianza: "alta" | "media" | "baja" | null;
+}
+
 export interface DecisorIA {
   cargo: string;
   area: string;
   por_que_es_clave: string;
   dolor_especifico: string;
+  tecnica_recomendada?: string;                    // NUEVO — técnica para este cargo específico
+  persona_encontrada?: PersonaEncontrada | null;   // NUEVO — persona real encontrada por Perplexity
   query_linkedin: string;
 }
 

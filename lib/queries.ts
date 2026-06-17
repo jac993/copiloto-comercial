@@ -503,8 +503,25 @@ export async function actualizarCamposRegenerados(
   return data;
 }
 
+// Actualiza la ficha_ia completa sin tocar el resto de campos de la empresa
+// (estado, score, notas_vendedor, etc.). Llamado por regenerar-decisores.
+export async function actualizarFichaCompleta(
+  id: string,
+  ficha: FichaIA
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from("empresas")
+    .update({
+      ficha_ia: ficha,
+      razon_de_contacto_actual: ficha.angulo_entrada,
+    } as unknown as Record<string, unknown>)
+    .eq("id", id);
+
+  if (error) throw new Error(`actualizarFichaCompleta: ${error.message}`);
+}
+
 // Guarda contactos_reales e inteligencia_comercial en ficha_ia
-// sin tocar el resto de la ficha. Llamado por regenerar-decisores.
+// sin tocar el resto de la ficha. Llamado por regenerar-decisores (versión legado).
 export async function actualizarContactosReales(
   id: string,
   contactosReales: FichaIA["contactos_reales"],
