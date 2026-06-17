@@ -52,9 +52,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Falta ANTHROPIC_API_KEY en .env.local" }, { status: 500 });
   }
 
-  const { url, contexto_vendedor } = (await request.json()) as {
+  const { url, contexto_vendedor, razon_social, rut, ciudad, rubro } = (await request.json()) as {
     url?: string;
     contexto_vendedor?: string;
+    razon_social?: string;
+    rut?: string;
+    ciudad?: string;
+    rubro?: string;
   };
 
   if (!url?.trim()) {
@@ -79,12 +83,19 @@ export async function POST(request: Request) {
         // ── PASO A: Scraping + Perplexity en paralelo ─────────
         send("progreso", { mensaje: "Leyendo el sitio web..." });
 
+        const opcionesExtra = {
+          razonSocial: razon_social?.trim(),
+          rut: rut?.trim(),
+          ciudad: ciudad?.trim(),
+          rubro: rubro?.trim(),
+        };
+
         const [scrapeResult, perplexityResult] = await Promise.all([
           scrapeEmpresa(url.trim(), (msg) => send("progreso", { mensaje: msg })),
           (async () => {
             send("progreso", { mensaje: "Buscando en internet..." });
             try {
-              return await buscarConPerplexity(nombreBase, dominio, "Chile");
+              return await buscarConPerplexity(nombreBase, dominio, "Chile", opcionesExtra);
             } catch {
               return { contactosTexto: "", inteligenciaTexto: "", fuentes: [] };
             }
@@ -108,6 +119,14 @@ export async function POST(request: Request) {
           ? `CONTEXTO PREVIO DEL VENDEDOR:\n${contexto_vendedor.trim()}\n\n`
           : "";
 
+        const datosExtra = [
+          razon_social?.trim() ? `Razón social oficial: ${razon_social.trim()}` : "",
+          rut?.trim() ? `RUT: ${rut.trim()}` : "",
+          ciudad?.trim() ? `Ciudad/Región: ${ciudad.trim()}` : "",
+          rubro?.trim() ? `Rubro declarado: ${rubro.trim()}` : "",
+        ].filter(Boolean).join("\n");
+        const datosExtraBloque = datosExtra ? `DATOS ADICIONALES PROVISTOS:\n${datosExtra}\n\n` : "";
+
         const textoWeb = sanitizarTexto(texto, 15000);
         const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto, 3000);
         const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000);
@@ -125,7 +144,7 @@ export async function POST(request: Request) {
               role: "user",
               content:
                 `${PROMPT_INVESTIGADOR}\n\nURL: ${url.trim()}\nNombre detectado: ${nombreDetectado}\nDominio: ${dominio}\n\n` +
-                `${contextoBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}${perplexityBloque}`,
+                `${datosExtraBloque}${contextoBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}${perplexityBloque}`,
             },
           ],
         });
@@ -157,7 +176,8 @@ export async function POST(request: Request) {
           ficha,
           url.trim(),
           contexto_vendedor?.trim() || null,
-          busquedaWebRaw
+          busquedaWebRaw,
+          { razonSocial: razon_social?.trim(), rut: rut?.trim() }
         );
 
         send("resultado", { empresaId: empresa.id, nombre: empresa.nombre });

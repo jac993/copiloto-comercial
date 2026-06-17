@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw, Trash2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { ExternalLink, UserPlus, User, CheckCircle, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -40,93 +38,26 @@ interface TabDecisoresProps {
 }
 
 export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisoresProps) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [actualizando, setActualizando] = useState(false);
-
   // Estado local para gestionar persona_encontrada sin recargar la página
   const [decisoresLocales, setDecisoresLocales] = useState<DecisorIA[]>(decisoresIA);
 
-  // Actualiza solo persona_encontrada del decisor con ese índice
   const eliminarPersonaDecisor = (index: number) => {
     setDecisoresLocales((prev) =>
       prev.map((d, i) => i === index ? { ...d, persona_encontrada: null } : d)
     );
   };
 
-  const actualizarDecisores = async () => {
-    setActualizando(true);
-    try {
-      const res = await fetch(
-        `/api/empresas/${empresaId}/regenerar-decisores`,
-        { method: "POST" }
-      );
-      const data = await res.json() as {
-        ok: boolean;
-        error?: string;
-        nombre?: string;
-      };
-
-      if (!data.ok) {
-        toast({
-          variant: "destructive",
-          title: "No se pudo actualizar",
-          description: data.error ?? "Error desconocido",
-        });
-        return;
-      }
-
-      // Recargar para obtener los nuevos decisores con persona_encontrada
-      router.refresh();
-
-      // Contar cuántos decisores tienen persona identificada después del refresh
-      // (el conteo se actualizará con el nuevo estado de decisoresLocales tras refresh)
-      toast({
-        title: "¡Investigación completada!",
-        description: `Ficha actualizada para ${data.nombre ?? "la empresa"}.`,
-      });
-
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Error de conexión",
-        description: String(err),
-      });
-    } finally {
-      setActualizando(false);
-    }
-  };
-
-  // Mostrar los contactos ya registrados primero, luego los sugeridos por IA no registrados
   const cargoRegistrado = new Set(contactos.map((c) => c.cargo));
   const decisoresSugeridos = decisoresLocales.filter(
     (d) => !cargoRegistrado.has(d.cargo)
   );
 
-  // Contador de decisores con persona identificada
   const personasIdentificadas = decisoresLocales.filter(
     (d) => d.persona_encontrada?.nombre != null
   ).length;
 
   return (
     <div className="space-y-4 pb-6">
-      {/* Botón principal — reinvestigar empresa completa ⚡ */}
-      <button
-        onClick={actualizarDecisores}
-        disabled={actualizando}
-        className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl border-2 border-[#7C3AED] text-[#7C3AED] bg-white dark:bg-background hover:bg-[#EDE9FE] dark:hover:bg-[#7C3AED]/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        <RefreshCw className={`h-4 w-4 shrink-0 ${actualizando ? "animate-spin" : ""}`} />
-        <div className="text-left">
-          <p className="text-sm font-semibold">
-            {actualizando ? "Reinvestigando empresa..." : "⚡ Reinvestigar empresa"}
-          </p>
-          {!actualizando && (
-            <p className="text-xs opacity-70">Scraping + Perplexity + Claude — actualiza toda la ficha</p>
-          )}
-        </div>
-      </button>
-
       {/* Contactos ya registrados */}
       {contactos.length > 0 && (
         <div>

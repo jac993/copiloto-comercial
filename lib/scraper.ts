@@ -65,17 +65,27 @@ async function llamarPerplexity(query: string): Promise<{ texto: string; fuentes
 
 // Dos búsquedas Perplexity: 1 de contactos + 1 de inteligencia comercial.
 // Corre en paralelo con scrapeEmpresa() en /api/investigar.
+// opcionesExtra mejora la precisión cuando el usuario los ingresó en el dialog.
 export async function buscarConPerplexity(
   nombreEmpresa: string,
   dominio: string,
-  pais: string = "Chile"
+  pais: string = "Chile",
+  opcionesExtra?: { razonSocial?: string; rut?: string; ciudad?: string; rubro?: string }
 ): Promise<BusquedaPerplexity> {
+  // Nombre para búsqueda: preferir razón social oficial si se proveyó
+  const nombreBuscar = opcionesExtra?.razonSocial?.trim() || nombreEmpresa;
+  const ubicacion = opcionesExtra?.ciudad?.trim()
+    ? `${opcionesExtra.ciudad.trim()} ${pais}`
+    : pais;
+  const rutBloque = opcionesExtra?.rut?.trim() ? ` RUT ${opcionesExtra.rut.trim()}` : "";
+  const rubroBloque = opcionesExtra?.rubro?.trim() ? ` ${opcionesExtra.rubro.trim()}` : "";
+
   const queryContactos =
-    `"${nombreEmpresa}" ${pais} jefe gerente calidad operaciones compras adquisiciones ` +
+    `"${nombreBuscar}"${rutBloque} ${ubicacion}${rubroBloque} jefe gerente calidad operaciones compras adquisiciones ` +
     `logística planta directivos ejecutivos LinkedIn contacto`;
 
   const queryInteligencia =
-    `"${nombreEmpresa}" ${pais} 2024 2025 noticias expansión contratos clientes ` +
+    `"${nombreBuscar}"${rutBloque} ${ubicacion}${rubroBloque} 2024 2025 noticias expansión contratos clientes ` +
     `proveedores etiquetas packaging licitación mercadopublico situación`;
 
   const [resContactos, resInteligencia] = await Promise.allSettled([

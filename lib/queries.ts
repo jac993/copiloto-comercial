@@ -600,7 +600,8 @@ export async function guardarEmpresaDesdeFicha(
   ficha: FichaIA,
   url: string,
   contextoVendedor?: string | null,
-  busquedaWebRaw?: import("@/lib/types").BusquedaWebRaw | null
+  busquedaWebRaw?: import("@/lib/types").BusquedaWebRaw | null,
+  datosBusqueda?: { razonSocial?: string; rut?: string }
 ): Promise<Empresa> {
   // Calcular score basado en urgencia y señales detectadas
   const urgencias = ficha.productos_etiquetas.map((p) => p.urgencia);
@@ -615,7 +616,8 @@ export async function guardarEmpresaDesdeFicha(
   // Upsert empresa — si ya existe con esta URL, actualiza la ficha
   const empresaData: EmpresaInsert = {
     nombre: ficha.nombre,
-    rut: null,
+    razon_social: datosBusqueda?.razonSocial?.trim() || null,
+    rut: datosBusqueda?.rut?.trim() || null,
     url,
     industria: ficha.industria,
     descripcion_ia: ficha.descripcion,

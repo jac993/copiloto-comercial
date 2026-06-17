@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Globe, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { Zap, Globe, Loader2, CheckCircle, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   Dialog,
@@ -37,6 +37,11 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
   const [url, setUrl] = useState("");
   const [contexto, setContexto] = useState("");
   const [estado, setEstado] = useState<EstadoDialog>({ fase: "idle" });
+  const [mostrarExtra, setMostrarExtra] = useState(false);
+  const [razonSocial, setRazonSocial] = useState("");
+  const [rut, setRut] = useState("");
+  const [ciudad, setCiudad] = useState("");
+  const [rubro, setRubro] = useState("");
 
   const investigar = async () => {
     const urlLimpia = url.trim();
@@ -48,7 +53,14 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
       const response = await fetch("/api/investigar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlLimpia, contexto_vendedor: contexto.trim() || undefined }),
+        body: JSON.stringify({
+          url: urlLimpia,
+          contexto_vendedor: contexto.trim() || undefined,
+          razon_social: razonSocial.trim() || undefined,
+          rut: rut.trim() || undefined,
+          ciudad: ciudad.trim() || undefined,
+          rubro: rubro.trim() || undefined,
+        }),
       });
 
       if (!response.body) throw new Error("Sin respuesta del servidor");
@@ -121,9 +133,14 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
   };
 
   const handleClose = () => {
-    if (estado.fase === "cargando") return; // No cerrar mientras carga
+    if (estado.fase === "cargando") return;
     setUrl("");
     setContexto("");
+    setRazonSocial("");
+    setRut("");
+    setCiudad("");
+    setRubro("");
+    setMostrarExtra(false);
     setEstado({ fase: "idle" });
     onClose();
   };
@@ -192,6 +209,54 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                   La IA contrastará tu información con lo que encuentre en internet y te avisará si detecta alguna inconsistencia.
                 </p>
               </div>
+              {/* Sección colapsable — datos opcionales para mejorar la búsqueda */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setMostrarExtra(!mostrarExtra)}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full py-1"
+                >
+                  {mostrarExtra ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  + Agregar más datos{mostrarExtra ? "" : " (mejora la búsqueda)"}
+                </button>
+
+                {mostrarExtra && (
+                  <div className="mt-2 space-y-2 rounded-xl border border-dashed border-border p-3">
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Perplexity usa estos datos para búsquedas más precisas. Todos opcionales.
+                    </p>
+                    <input
+                      type="text"
+                      placeholder="Razón social / Nombre legal"
+                      value={razonSocial}
+                      onChange={(e) => setRazonSocial(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <input
+                      type="text"
+                      placeholder="RUT (ej: 76.123.456-7)"
+                      value={rut}
+                      onChange={(e) => setRut(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Ciudad / Región (ej: Santiago, RM)"
+                      value={ciudad}
+                      onChange={(e) => setCiudad(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Rubro principal (ej: alimentos, químicos)"
+                      value={rubro}
+                      onChange={(e) => setRubro(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                )}
+              </div>
+
               <Button
                 size="lg"
                 className="w-full gap-2"

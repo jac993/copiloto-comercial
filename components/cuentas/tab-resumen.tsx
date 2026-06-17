@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink } from "lucide-react";
+import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,6 +45,24 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
   const [regenerando, setRegenerando] = useState(false);
   const [errorRegen, setErrorRegen] = useState<string | null>(null);
   const [contextoNuevo, setContextoNuevo] = useState("");
+  const [reinvestigando, setReinvestigando] = useState(false);
+  const [confirmarReinvestigar, setConfirmarReinvestigar] = useState(false);
+
+  const reinvestigar = async () => {
+    setReinvestigando(true);
+    setConfirmarReinvestigar(false);
+    try {
+      const res = await fetch(`/api/empresas/${empresaId}/regenerar`, { method: "POST" });
+      const data = await res.json() as { ok: boolean; error?: string };
+      if (!data.ok) throw new Error(data.error ?? "Error desconocido");
+      toast({ title: "✅ Ficha actualizada", description: "La ficha se reinvestigó con éxito." });
+      router.refresh();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al reinvestigar", description: e instanceof Error ? e.message : "Error desconocido" });
+    } finally {
+      setReinvestigando(false);
+    }
+  };
 
   const regenerar = async () => {
     if (!contextoNuevo.trim()) return;
@@ -273,6 +291,40 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
           </Card>
         </div>
       )}
+      {/* Botón Reinvestigar empresa */}
+      <div className="pt-2">
+        {!confirmarReinvestigar ? (
+          <button
+            onClick={() => setConfirmarReinvestigar(true)}
+            disabled={reinvestigando}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${reinvestigando ? "animate-spin" : ""}`} />
+            {reinvestigando ? "Reinvestigando empresa..." : "↻ Reinvestigar empresa"}
+          </button>
+        ) : (
+          <div className="rounded-xl border border-amber-200 dark:border-amber-800/30 bg-amber-50/60 dark:bg-amber-900/10 p-4 space-y-3">
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              ¿Reinvestigar esta empresa? Se actualizará toda la ficha con la información más reciente del sitio web.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmarReinvestigar(false)}
+                className="flex-1 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={reinvestigar}
+                className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-primary/90 transition-colors"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Sí, reinvestigar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -358,16 +410,22 @@ function ContextoVerificacion({
 
 // ── Encontrado en internet — texto crudo de Perplexity ───────
 function EncontradoEnInternet({ raw }: { raw: BusquedaWebRaw }) {
+  const tieneDatos = !!(raw.contactosTexto || raw.inteligenciaTexto);
   return (
     <div>
       <Accordion type="single" collapsible>
         <AccordionItem value="internet" className="border rounded-2xl px-4">
           <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
             <span className="flex items-center gap-2">
-              🌐 Encontrado en internet
-              {raw.fuentes.length > 0 && (
-                <span className="text-xs font-normal text-muted-foreground">
-                  · {raw.fuentes.length} fuente{raw.fuentes.length !== 1 ? "s" : ""}
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              Encontrado en internet
+              {tieneDatos ? (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  Datos ✓
+                </span>
+              ) : (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  Sin datos
                 </span>
               )}
             </span>

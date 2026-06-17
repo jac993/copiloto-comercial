@@ -239,6 +239,7 @@ export interface AnalisisWeb {
 export interface Empresa {
   id: string;
   nombre: string;
+  razon_social: string | null;
   rut: string | null;
   url: string | null;
   industria: string | null;
