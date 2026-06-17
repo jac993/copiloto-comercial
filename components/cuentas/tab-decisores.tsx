@@ -42,11 +42,21 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
   const actualizarDecisores = async () => {
     setActualizando(true);
     try {
-      await fetch(`/api/empresas/${empresaId}/regenerar-decisores`, { method: "POST" });
-      router.refresh();
-      toast({ title: "✅ Decisores actualizados con inteligencia de Perplexity" });
-    } catch {
-      toast({ title: "❌ Error al actualizar. Intenta de nuevo.", variant: "destructive" });
+      const res = await fetch(
+        `/api/empresas/${empresaId}/regenerar-decisores`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+
+      alert(JSON.stringify({
+        ok: data.ok,
+        error: data.error,
+        contactos: data.contactosTexto?.slice(0, 200) ?? "vacío",
+        inteligencia: data.inteligenciaTexto?.slice(0, 200) ?? "vacío",
+      }, null, 2));
+
+    } catch (err) {
+      alert("Error: " + String(err));
     } finally {
       setActualizando(false);
     }
