@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Tag, AlertTriangle, RefreshCw } from "lucide-react";
+import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { FichaIA, VerificacionContexto } from "@/lib/types";
+import type { FichaIA, VerificacionContexto, InteligenciaComercial } from "@/lib/types";
 
 const TECNICA_COLOR: Record<string, string> = {
   SPIN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -96,6 +96,11 @@ export function TabResumen({ ficha, empresaId, notasVendedor }: TabResumenProps)
           </p>
         </CardContent>
       </Card>
+
+      {/* Inteligencia comercial (Perplexity) */}
+      {ficha.inteligencia_comercial && (
+        <InteligenciaComercialCard intel={ficha.inteligencia_comercial} />
+      )}
 
       {/* Ángulo de entrada + técnica + botón regenerar */}
       <Card>
@@ -341,6 +346,74 @@ function ContextoVerificacion({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Inteligencia comercial de Perplexity ──────────────────────
+function InteligenciaComercialCard({ intel }: { intel: InteligenciaComercial }) {
+  const filas: { label: string; valor: string }[] = [
+    { label: "Situación actual", valor: intel.situacion_mercado },
+    { label: "Prioridades este año", valor: intel.prioridades_actuales },
+    { label: "Dolores que resolvemos", valor: intel.dolores_probables },
+    { label: "Clientes y exigencias", valor: intel.clientes_y_exigencias },
+    { label: "Debilidades proveedor actual", valor: intel.debilidades_proveedor_actual },
+  ].filter((f) => f.valor && !f.valor.toLowerCase().startsWith("sin información"));
+
+  const propuesta = intel.propuesta_valor_especifica;
+  const fuentes = (intel.fuentes ?? []).filter(Boolean);
+
+  if (filas.length === 0 && !propuesta) return null;
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
+        🧠 Inteligencia comercial
+      </p>
+      <Card className="overflow-hidden">
+        <CardContent className="pt-4 pb-4 space-y-3">
+          {/* Propuesta de valor específica — destacada */}
+          {propuesta && !propuesta.toLowerCase().startsWith("sin información") && (
+            <div className="bg-[#EDE9FE] border border-violet-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-[#5B21B6] mb-1">Cómo posicionar tu oferta</p>
+              <p className="text-xs text-[#4C1D95] leading-relaxed">{propuesta}</p>
+            </div>
+          )}
+
+          {/* Resto de campos */}
+          {filas.map(({ label, valor }) => (
+            <div key={label} className="border-b border-border last:border-0 pb-2.5 last:pb-0">
+              <p className="text-xs font-semibold text-muted-foreground mb-0.5">{label}</p>
+              <p className="text-xs leading-relaxed">{valor}</p>
+            </div>
+          ))}
+
+          {/* Fuentes */}
+          {fuentes.length > 0 && (
+            <div className="pt-1">
+              <p className="text-xs text-muted-foreground mb-1">Fuentes:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {fuentes.slice(0, 5).map((url, i) => {
+                  let host = url;
+                  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+                  return (
+                    <a
+                      key={i}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {host}
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

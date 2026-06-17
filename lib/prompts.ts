@@ -176,7 +176,29 @@ El JSON debe cumplir EXACTAMENTE esta estructura:
       "estado": "confirmado|inconsistente|no_verificable",
       "observacion": "Qué encontraste en el sitio web que confirma, contradice o no permite verificar esto"
     }
-  ]
+  ],
+  "contactos_reales": [
+    {
+      "nombre": "Nombre real o null si no se encontró",
+      "cargo": "Cargo real o null",
+      "email": "email@empresa.cl o null",
+      "telefono": "+56 9 XXXX XXXX o null",
+      "linkedin_url": "https://linkedin.com/in/... o null",
+      "como_contactar": "Instrucción concreta: 'Buscar en LinkedIn: [query]' o 'Llamar a central [número]'",
+      "fuente": "URL o descripción de dónde se encontró (ej: sitio web empresa, LinkedIn, noticia)",
+      "confianza": "alta|media|baja",
+      "relevancia_venta": "alta|media|baja"
+    }
+  ],
+  "inteligencia_comercial": {
+    "situacion_mercado": "Cómo le está yendo a la empresa según fuentes recientes",
+    "prioridades_actuales": "En qué está enfocada la empresa este año (expansión, certificaciones, nuevos mercados)",
+    "dolores_probables": "Qué problemas tiene que tus etiquetas resuelven directamente",
+    "clientes_y_exigencias": "A quiénes le venden y qué les exigen en calidad, trazabilidad o etiquetado",
+    "debilidades_proveedor_actual": "Señales de insatisfacción con su proveedor actual de etiquetas o packaging",
+    "propuesta_valor_especifica": "Cómo posicionar tu oferta para ESTA empresa — concreto y basado en evidencia",
+    "fuentes": ["https://fuente1.cl", "https://fuente2.cl"]
+  }
 }
 
 INSTRUCCIONES PARA verificacion_contexto:
@@ -189,6 +211,31 @@ INSTRUCCIONES PARA verificacion_contexto:
   tuvieron un problema interno) — imposible confirmar desde fuentes públicas.
 - Los ítems "confirmado" son útiles pero los "inconsistente" y "no_verificable" son los más
   importantes: alertan al vendedor antes de que llegue a la llamada con información incorrecta.
+
+INSTRUCCIONES PARA contactos_reales:
+- USA EXCLUSIVAMENTE la sección "BÚSQUEDA DE CONTACTOS (Perplexity)" del mensaje.
+- NUNCA inventes nombres, cargos, emails o teléfonos. Si Perplexity no encontró una persona real,
+  devuelve "contactos_reales": [].
+- "como_contactar": si no hay email ni teléfono directo, escribe la instrucción específica:
+  "Buscar en LinkedIn: [query exacta]" o "Llamar a central [número si existe]" o
+  "Escribir a [email genérico de la empresa si existe en el sitio]".
+- "confianza" alta: nombre + cargo confirmado en LinkedIn o sitio oficial de la empresa.
+  Media: mencionado en artículo, noticia o directorio reciente (2022+).
+  Baja: solo nombre sin cargo verificado, o cargo sin nombre.
+- "relevancia_venta" alta: área Calidad, Operaciones o Gerente de Planta.
+  Media: Compras/Adquisiciones o Gerencia General. Baja: área no relevante para etiquetas.
+- Máximo 6 contactos, ordenados de mayor a menor relevancia_venta.
+- Si la sección Perplexity está vacía o dice "sin información", devuelve [].
+
+INSTRUCCIONES PARA inteligencia_comercial:
+- USA EXCLUSIVAMENTE la sección "INTELIGENCIA COMERCIAL (Perplexity)" del mensaje.
+- NUNCA inventes datos de mercado ni situaciones que no aparezcan en las fuentes.
+  Si no hay información, usa "Sin información pública disponible para esta empresa en 2024-2025."
+- "propuesta_valor_especifica": concreta y basada SOLO en evidencia encontrada.
+  Ejemplo bueno: "Tienen línea de exportación a EEUU — necesitan etiquetas GS1-128 con trazabilidad
+  de lote para cumplir FDA. Su proveedor actual probablemente no tiene esa capacidad."
+  Ejemplo malo: "Podrían necesitar etiquetas de calidad para sus productos."
+- "fuentes": URLs reales de las Perplexity citations. Si no hay, devuelve [].
 `;
 
 

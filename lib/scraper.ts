@@ -14,6 +14,81 @@ const SUBPATHS = [
   "/clientes", "/portfolio", "/historia",
 ];
 
+// ─── PERPLEXITY SEARCH ───────────────────────────────────────
+
+const PERPLEXITY_API = "https://api.perplexity.ai/chat/completions";
+
+export interface BusquedaPerplexity {
+  contactosTexto: string;
+  inteligenciaTexto: string;
+  fuentes: string[];
+}
+
+interface PerplexityResponse {
+  choices: { message: { content: string } }[];
+  citations?: string[];
+}
+
+async function llamarPerplexity(query: string): Promise<{ texto: string; fuentes: string[] }> {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) return { texto: "", fuentes: [] };
+
+  try {
+    const res = await fetch(PERPLEXITY_API, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "sonar-pro",
+        messages: [{ role: "user", content: query }],
+        max_tokens: 1500,
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (!res.ok) return { texto: "", fuentes: [] };
+    const data = (await res.json()) as PerplexityResponse;
+    return {
+      texto: data.choices[0]?.message?.content ?? "",
+      fuentes: data.citations ?? [],
+    };
+  } catch {
+    return { texto: "", fuentes: [] };
+  }
+}
+
+// Dos búsquedas Perplexity en paralelo: contactos + inteligencia comercial.
+// Corre en paralelo con scrapeEmpresa() en /api/investigar.
+export async function buscarConPerplexity(
+  nombreEmpresa: string,
+  dominio: string,
+  pais: string = "Chile"
+): Promise<BusquedaPerplexity> {
+  const queryContactos =
+    `${nombreEmpresa} ${pais} ejecutivos directivos jefe gerente calidad operaciones ` +
+    `compras adquisiciones contacto email teléfono LinkedIn`;
+
+  const queryInteligencia =
+    `${nombreEmpresa} ${pais} situación actual mercado clientes proveedores problemas ` +
+    `desafíos expansión licitaciones etiquetas packaging insumos noticias 2024 2025`;
+
+  const [resContactos, resInteligencia] = await Promise.allSettled([
+    llamarPerplexity(queryContactos),
+    llamarPerplexity(queryInteligencia),
+  ]);
+
+  const c = resContactos.status === "fulfilled" ? resContactos.value : { texto: "", fuentes: [] };
+  const i = resInteligencia.status === "fulfilled" ? resInteligencia.value : { texto: "", fuentes: [] };
+
+  return {
+    contactosTexto: c.texto.slice(0, 4000),
+    inteligenciaTexto: i.texto.slice(0, 4000),
+    fuentes: Array.from(new Set([...c.fuentes, ...i.fuentes])).slice(0, 12),
+  };
+}
+
 export function normalizarUrl(url: string): string {
   const trimmed = url.trim().replace(/\/$/, "");
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {

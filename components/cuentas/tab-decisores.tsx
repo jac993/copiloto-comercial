@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw } from "lucide-react";
+import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw, Copy, Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
-import type { Contacto, DecisorIA } from "@/lib/types";
+import type { Contacto, DecisorIA, ContactoReal } from "@/lib/types";
 
 const AREA_LABEL: Record<string, string> = {
   adquisiciones: "Adquisiciones",
@@ -30,9 +30,10 @@ interface TabDecisoresProps {
   contactos: Contacto[];
   decisoresIA: DecisorIA[];
   empresaId: string;
+  contactosReales?: ContactoReal[];
 }
 
-export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisoresProps) {
+export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReales = [] }: TabDecisoresProps) {
   const router = useRouter();
   const [actualizando, setActualizando] = useState(false);
 
@@ -99,6 +100,26 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
           <p className="text-sm">Sin decisores identificados</p>
         </div>
       )}
+
+      {/* Contactos encontrados en internet (Perplexity) */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-2 px-1">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            🔍 Contactos encontrados en internet
+          </p>
+        </div>
+        {contactosReales.length > 0 ? (
+          <div className="space-y-2">
+            {contactosReales.map((c, i) => (
+              <ContactoRealCard key={i} contacto={c} empresaId={empresaId} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground px-1">
+            No se encontraron contactos públicos. Pulsa &ldquo;↻ Actualizar decisores&rdquo; para buscar en internet.
+          </p>
+        )}
+      </div>
 
       {/* Botón para regenerar los decisores sugeridos con Claude */}
       <button
@@ -307,6 +328,157 @@ function DecisorSugeridoCard({
             </Button>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Tarjeta de contacto real encontrado en internet ───────────
+const CONFIANZA_BADGE: Record<string, { label: string; cls: string }> = {
+  alta:  { label: "✓ Alta confianza",  cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  media: { label: "~ Confianza media", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  baja:  { label: "? Baja confianza",  cls: "bg-muted text-muted-foreground" },
+};
+
+const RELEVANCIA_BADGE: Record<string, { label: string; cls: string }> = {
+  alta:  { label: "Alta relevancia",  cls: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400" },
+  media: { label: "Media relevancia", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  baja:  { label: "Baja relevancia",  cls: "bg-muted text-muted-foreground" },
+};
+
+function ContactoRealCard({ contacto, empresaId }: { contacto: ContactoReal; empresaId: string }) {
+  const [agregado, setAgregado] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+
+  const copiarEmail = () => {
+    if (!contacto.email) return;
+    navigator.clipboard.writeText(contacto.email).catch(() => {});
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 1500);
+  };
+
+  const agregar = async () => {
+    setGuardando(true);
+    try {
+      await fetch("/api/contactos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          nombre: contacto.nombre ?? "Contacto encontrado en internet",
+          cargo: contacto.cargo ?? null,
+          area: null,
+          email: contacto.email ?? null,
+          telefono: contacto.telefono ?? null,
+          linkedin_url: contacto.linkedin_url ?? null,
+          es_decisor: contacto.relevancia_venta === "alta",
+          notas_ia: `Encontrado en internet.\nFuente: ${contacto.fuente}\nConfianza: ${contacto.confianza}`,
+        }),
+      });
+      setAgregado(true);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const confianza = CONFIANZA_BADGE[contacto.confianza] ?? CONFIANZA_BADGE.baja;
+  const relevancia = RELEVANCIA_BADGE[contacto.relevancia_venta] ?? RELEVANCIA_BADGE.baja;
+
+  return (
+    <Card className="border border-dashed border-violet-200 dark:border-violet-800/30">
+      <CardContent className="pt-4 pb-4">
+        <div className="flex items-start gap-3">
+          <div className="h-9 w-9 rounded-full bg-violet-100 dark:bg-violet-900/20 flex items-center justify-center shrink-0">
+            <User className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm">
+              {contacto.nombre ?? "Nombre desconocido"}
+            </p>
+            {contacto.cargo && (
+              <p className="text-xs text-muted-foreground">{contacto.cargo}</p>
+            )}
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${confianza.cls}`}>
+                {confianza.label}
+              </span>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${relevancia.cls}`}>
+                {relevancia.label}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Datos de contacto */}
+        <div className="mt-3 space-y-1.5">
+          {contacto.email && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground font-mono flex-1 truncate">{contacto.email}</span>
+              <button onClick={copiarEmail} className="text-xs text-primary hover:underline flex items-center gap-1">
+                <Copy className="h-3 w-3" />
+                {copiado ? "Copiado" : "Copiar"}
+              </button>
+            </div>
+          )}
+          {contacto.telefono && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground flex-1">{contacto.telefono}</span>
+              <a href={`tel:${contacto.telefono}`} className="text-xs text-primary hover:underline flex items-center gap-1">
+                <Phone className="h-3 w-3" />
+                Llamar
+              </a>
+            </div>
+          )}
+          {contacto.linkedin_url && (
+            <a
+              href={contacto.linkedin_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Ver LinkedIn
+            </a>
+          )}
+        </div>
+
+        {/* Cómo contactar (si no hay datos directos) */}
+        {!contacto.email && !contacto.telefono && !contacto.linkedin_url && contacto.como_contactar && (
+          <div className="mt-2.5 bg-amber-50 dark:bg-amber-900/10 rounded-lg p-2.5">
+            <p className="text-xs text-amber-700 dark:text-amber-400">{contacto.como_contactar}</p>
+          </div>
+        )}
+
+        {/* Fuente */}
+        <p className="text-xs text-muted-foreground mt-2">
+          Fuente: {contacto.fuente.startsWith("http") ? (
+            <a href={contacto.fuente} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              {(() => { try { return new URL(contacto.fuente).hostname.replace(/^www\./, ""); } catch { return contacto.fuente; } })()}
+            </a>
+          ) : contacto.fuente}
+        </p>
+
+        {/* Botón agregar */}
+        <div className="mt-3">
+          {agregado ? (
+            <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+              <CheckCircle className="h-3.5 w-3.5" />
+              Agregado a decisores
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full text-xs gap-1.5"
+              onClick={agregar}
+              disabled={guardando}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              {guardando ? "Guardando..." : "➕ Agregar a decisores"}
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

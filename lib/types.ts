@@ -40,6 +40,30 @@ export interface VerificacionContexto {
   observacion: string;
 }
 
+// Contacto real encontrado en internet por Perplexity
+export interface ContactoReal {
+  nombre: string | null;
+  cargo: string | null;
+  email: string | null;
+  telefono: string | null;
+  linkedin_url: string | null;
+  como_contactar: string;
+  fuente: string;
+  confianza: "alta" | "media" | "baja";
+  relevancia_venta: "alta" | "media" | "baja";
+}
+
+// Inteligencia comercial obtenida de búsqueda web con Perplexity
+export interface InteligenciaComercial {
+  situacion_mercado: string;
+  prioridades_actuales: string;
+  dolores_probables: string;
+  clientes_y_exigencias: string;
+  debilidades_proveedor_actual: string;
+  propuesta_valor_especifica: string;
+  fuentes: string[];
+}
+
 // Respuesta completa del PROMPT_INVESTIGADOR — se guarda en empresas.ficha_ia
 export interface FichaIA {
   nombre: string;
@@ -59,6 +83,9 @@ export interface FichaIA {
   objeciones_probables: ObjecionProbable[];
   resumen_ejecutivo: string;
   verificacion_contexto: VerificacionContexto[];
+  // Campos enriquecidos con Perplexity (opcionales — fichas antiguas no los tienen)
+  contactos_reales?: ContactoReal[];
+  inteligencia_comercial?: InteligenciaComercial | null;
 }
 
 // Resultado del análisis de IA para cualquier tipo de interacción

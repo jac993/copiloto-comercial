@@ -5,7 +5,7 @@
 // =============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
-import { scrapeEmpresa } from "@/lib/scraper";
+import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
 import { guardarEmpresaDesdeFicha } from "@/lib/queries";
 import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
 import type { FichaIA } from "@/lib/types";
@@ -74,11 +74,20 @@ export async function POST(request: Request) {
         enviarEvento(controller, tipo, payload);
 
       try {
-        // PASO A: Scraping del sitio web
-        const { texto, nombreDetectado } = await scrapeEmpresa(
-          url.trim(),
-          (msg) => send("progreso", { mensaje: msg })
-        );
+        // PASO A: Scraping + Perplexity en paralelo
+        const urlNorm = normalizarUrl(url.trim());
+        let dominio = "";
+        try { dominio = new URL(urlNorm).hostname.replace(/^www\./, ""); } catch { dominio = url.trim(); }
+        const nombreBase = dominio.split(".")[0];
+
+        send("progreso", { mensaje: "Leyendo sitio web y buscando en internet..." });
+
+        const [scrapeResult, perplexityResult] = await Promise.all([
+          scrapeEmpresa(url.trim(), (msg) => send("progreso", { mensaje: msg })),
+          buscarConPerplexity(nombreBase, dominio, "Chile"),
+        ]);
+
+        const { texto, nombreDetectado } = scrapeResult;
 
         if (!texto || texto.length < 50) {
           throw new Error(
@@ -86,23 +95,26 @@ export async function POST(request: Request) {
           );
         }
 
-        // PASO B: Análisis con Claude
+        // PASO B: Análisis con Claude (sitio web + Perplexity)
         send("progreso", { mensaje: "Analizando con IA..." });
 
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-        // Construir el contenido del mensaje: contexto del vendedor primero, luego web
         const contextoBloque = contexto_vendedor?.trim()
-          ? `CONTEXTO PREVIO DEL VENDEDOR (priorizar esta información sobre lo que dice el sitio web):\n${contexto_vendedor.trim()}\n\nINFORMACIÓN ENCONTRADA EN INTERNET:`
-          : "--- TEXTO DEL SITIO WEB ---";
+          ? `CONTEXTO PREVIO DEL VENDEDOR (priorizar esta información sobre lo que dice el sitio web):\n${contexto_vendedor.trim()}\n\n`
+          : "";
+
+        const perplexityBloque = perplexityResult.contactosTexto || perplexityResult.inteligenciaTexto
+          ? `\n\n--- BÚSQUEDA DE CONTACTOS (Perplexity) ---\n${perplexityResult.contactosTexto || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${perplexityResult.inteligenciaTexto || "Sin resultados."}\n\nFUENTES PERPLEXITY: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
+          : "";
 
         const mensaje = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
-          max_tokens: 4096,
+          max_tokens: 5000,
           messages: [
             {
               role: "user",
-              content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${url.trim()}\nNombre detectado: ${nombreDetectado}\n\n${contextoBloque}\n${texto}`,
+              content: `${PROMPT_INVESTIGADOR}\n\nURL analizada: ${url.trim()}\nNombre detectado: ${nombreDetectado}\n\n${contextoBloque}--- TEXTO DEL SITIO WEB ---\n${texto}${perplexityBloque}`,
             },
           ],
         });
