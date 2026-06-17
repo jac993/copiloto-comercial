@@ -48,6 +48,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
     if (!urlLimpia) return;
 
     setEstado({ fase: "cargando", mensaje: "Iniciando...", pasoActual: 0 });
+    console.log("[investigar] fetch iniciado para URL:", urlLimpia);
 
     try {
       const response = await fetch("/api/investigar", {
@@ -99,7 +100,9 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
             } else if (data.type === "error" && data.mensaje) {
               setEstado({ fase: "error", mensaje: data.mensaje });
             }
-          } catch {}
+          } catch (parseErr) {
+            console.error("[investigar] error parseando línea SSE:", parseErr, "línea:", linea);
+          }
         }
       };
 

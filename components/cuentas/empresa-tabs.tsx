@@ -62,30 +62,38 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
   const [editRubro, setEditRubro] = useState("");
   const [editNotas, setEditNotas] = useState(empresa.notas_vendedor ?? "");
   const [analizando, setAnalizando] = useState(false);
+  const [errorSheet, setErrorSheet] = useState<string | null>(null);
 
   const ficha = empresa.ficha_ia;
   const estadoBadge = ESTADO_BADGE[empresa.estado];
   const tecnica = ficha?.tecnica_recomendada;
 
   const abrirSheet = () => {
-    // Resetear a los valores actuales de la empresa cada vez que se abre
     setEditUrl(empresa.url ?? "");
     setEditRazonSocial(empresa.razon_social ?? "");
     setEditRut(empresa.rut ?? "");
     setEditCiudad("");
     setEditRubro("");
     setEditNotas(empresa.notas_vendedor ?? "");
+    setErrorSheet(null);
     setSheetAbierto(true);
   };
 
   const analizarDeNuevo = async () => {
+    const urlFinal = editUrl.trim().split("?")[0].split("#")[0].trim();
+    if (!urlFinal) {
+      setErrorSheet("Ingresa la URL del sitio web de la empresa antes de analizar.");
+      return;
+    }
     setAnalizando(true);
+    setErrorSheet(null);
     try {
+      console.log("[analizarDeNuevo] iniciando para empresa", empresa.id, "url:", urlFinal);
       const res = await fetch(`/api/empresas/${empresa.id}/regenerar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url: editUrl.trim().split("?")[0].split("#")[0].trim(),
+          url: urlFinal,
           razon_social: editRazonSocial.trim() || undefined,
           rut: editRut.trim() || undefined,
           ciudad: editCiudad.trim() || undefined,
@@ -93,17 +101,18 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
           notas_vendedor: editNotas.trim() || undefined,
         }),
       });
+      console.log("[analizarDeNuevo] respuesta HTTP:", res.status);
       const data = await res.json() as { ok: boolean; error?: string };
+      console.log("[analizarDeNuevo] body:", data);
       if (!data.ok) throw new Error(data.error ?? "Error desconocido");
       toast({ title: "✅ Ficha actualizada", description: "La empresa fue reinvestigada con éxito." });
       setSheetAbierto(false);
       router.refresh();
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Error al analizar",
-        description: e instanceof Error ? e.message : "Error desconocido",
-      });
+      const msg = e instanceof Error ? e.message : "Error desconocido";
+      console.error("[analizarDeNuevo] error:", msg, e);
+      setErrorSheet(msg);
+      toast({ variant: "destructive", title: "Error al analizar", description: msg });
     } finally {
       setAnalizando(false);
     }
@@ -329,12 +338,17 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             </div>
           </div>
 
-          <div className="px-5 pb-6 pt-2 border-t border-border space-y-2">
+          <div className="px-5 pb-6 pt-2 border-t border-border space-y-2 flex-shrink-0">
+            {errorSheet && (
+              <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+                {errorSheet}
+              </p>
+            )}
             <Button
               size="lg"
               className="w-full gap-2"
               onClick={analizarDeNuevo}
-              disabled={analizando || !editUrl.trim()}
+              disabled={analizando}
             >
               {analizando ? (
                 <>
