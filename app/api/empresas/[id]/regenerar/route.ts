@@ -45,13 +45,17 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  console.log(`[regenerar] iniciando para empresa ${params.id}`);
   try {
     const empresa = await getEmpresaById(params.id);
     if (!empresa) {
+      console.error(`[regenerar] empresa ${params.id} no encontrada en DB`);
       return Response.json({ error: "Empresa no encontrada" }, { status: 404 });
     }
+    console.log(`[regenerar] empresa encontrada: ${empresa.nombre} | url actual: ${empresa.url}`);
 
     if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("[regenerar] falta ANTHROPIC_API_KEY");
       return Response.json({ error: "Falta ANTHROPIC_API_KEY" }, { status: 500 });
     }
 
@@ -64,13 +68,20 @@ export async function POST(
       rubro?: string;
       notas_vendedor?: string;
     } = {};
-    try { body = await req.json(); } catch { /* body vacío es válido */ }
+    try {
+      body = await req.json();
+      console.log("[regenerar] body recibido:", JSON.stringify(body));
+    } catch (bodyErr) {
+      console.log("[regenerar] body vacío o inválido (normal si se llama sin body):", String(bodyErr));
+    }
 
     // Resolver URL a usar (preferir la del body si viene; limpiar parámetros)
     const urlUsada = limpiarUrl(body.url?.trim() || empresa.url || "");
     if (!urlUsada) {
+      console.error("[regenerar] empresa sin URL y body sin url");
       return Response.json({ error: "Esta empresa no tiene URL para reinvestigar." }, { status: 422 });
     }
+    console.log(`[regenerar] URL a usar: ${urlUsada}`);
 
     // Actualizar campos en DB si el usuario los cambió
     const supabase = await getSupabaseServer();
@@ -78,7 +89,12 @@ export async function POST(
     if (body.razon_social !== undefined) actualizaciones.razon_social = body.razon_social.trim() || null;
     if (body.rut !== undefined) actualizaciones.rut = body.rut.trim() || null;
     if (body.notas_vendedor !== undefined) actualizaciones.notas_vendedor = body.notas_vendedor.trim() || null;
-    await supabase.from("empresas").update(actualizaciones).eq("id", params.id);
+    const { error: updateErr } = await supabase.from("empresas").update(actualizaciones).eq("id", params.id);
+    if (updateErr) {
+      console.error("[regenerar] error actualizando campos en DB:", updateErr);
+    } else {
+      console.log("[regenerar] campos actualizados en DB:", actualizaciones);
+    }
 
     const urlNorm = normalizarUrl(urlUsada);
     let dominio = "";
@@ -89,8 +105,10 @@ export async function POST(
       ciudad: body.ciudad?.trim(),
       rubro: body.rubro?.trim(),
     };
+    console.log(`[regenerar] dominio: ${dominio} | opcionesExtra:`, opcionesExtra);
 
     // ── Scraping + Perplexity en paralelo ────────────────────
+    console.log("[regenerar] iniciando scraping + Perplexity en paralelo...");
     const [scrapeResult, perplexityResult] = await Promise.all([
       scrapeEmpresa(urlUsada, () => {}),
       buscarConPerplexity(
@@ -98,11 +116,18 @@ export async function POST(
         dominio,
         "Chile",
         opcionesExtra
-      ).catch(() => ({ contactosTexto: "", inteligenciaTexto: "", fuentes: [] })),
+      ).catch((err) => {
+        console.error("[regenerar] Perplexity falló:", String(err));
+        return { contactosTexto: "", inteligenciaTexto: "", fuentes: [] };
+      }),
     ]);
+
+    console.log(`[regenerar] scraping completo: ${scrapeResult.texto?.length ?? 0} chars | nombreDetectado: "${scrapeResult.nombreDetectado}"`);
+    console.log(`[regenerar] Perplexity: contactos ${perplexityResult.contactosTexto.length} chars | inteligencia ${perplexityResult.inteligenciaTexto.length} chars | fuentes: ${perplexityResult.fuentes.length}`);
 
     const { texto, nombreDetectado } = scrapeResult;
     if (!texto || texto.length < 50) {
+      console.error(`[regenerar] texto scrapeado demasiado corto: ${texto?.length ?? 0} chars`);
       return Response.json({ error: "No se pudo leer el sitio web. Verifica que la URL sea accesible." }, { status: 422 });
     }
 
@@ -128,36 +153,55 @@ export async function POST(
     ].filter(Boolean).join("\n");
     const datosExtraBloque = datosExtra ? `DATOS ADICIONALES PROVISTOS:\n${datosExtra}\n\n` : "";
 
+    const promptCompleto =
+      `${PROMPT_INVESTIGADOR}\n\nURL: ${urlUsada}\nNombre detectado: ${nombreDetectado || empresa.nombre}\nDominio: ${dominio}\n\n` +
+      `${datosExtraBloque}${notasBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}${perplexityBloque}`;
+
+    console.log(`[regenerar] llamando a Claude... modelo: claude-sonnet-4-6 | max_tokens: 4000 | prompt: ${promptCompleto.length} chars`);
+
     const mensaje = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 4000,
-      messages: [{
-        role: "user",
-        content:
-          `${PROMPT_INVESTIGADOR}\n\nURL: ${urlUsada}\nNombre detectado: ${nombreDetectado || empresa.nombre}\nDominio: ${dominio}\n\n` +
-          `${datosExtraBloque}${notasBloque}--- TEXTO DEL SITIO WEB ---\n${textoWeb}${perplexityBloque}`,
-      }],
+      messages: [{ role: "user", content: promptCompleto }],
     });
 
     const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
-    const ficha = extraerJsonSeguro<FichaIA>(textoRespuesta) ?? fichaFallback(empresa.nombre, urlUsada);
+    console.log(`[regenerar] Claude respondió: ${textoRespuesta.length} chars | stop_reason: ${mensaje.stop_reason} | tokens usados: ${mensaje.usage?.output_tokens ?? "?"}`);
+    console.log("[regenerar] primeros 300 chars de respuesta:", textoRespuesta.slice(0, 300));
+
+    const fichaParseada = extraerJsonSeguro<FichaIA>(textoRespuesta);
+    if (!fichaParseada) {
+      console.error("[regenerar] extraerJsonSeguro retornó null — JSON malformado o truncado. Usando fichaFallback.");
+      console.error("[regenerar] últimos 300 chars de respuesta:", textoRespuesta.slice(-300));
+    } else {
+      console.log(`[regenerar] JSON parseado OK: nombre="${fichaParseada.nombre}" | decisores: ${fichaParseada.decisores?.length ?? 0}`);
+    }
+    const ficha = fichaParseada ?? fichaFallback(empresa.nombre, urlUsada);
 
     // Guardar raw de Perplexity si hubo resultados
     const busquedaWebRaw: BusquedaWebRaw | null = contactosLimpio || inteligenciaLimpia
       ? { contactosTexto: perplexityResult.contactosTexto, inteligenciaTexto: perplexityResult.inteligenciaTexto, fuentes: perplexityResult.fuentes, buscado_en: new Date().toISOString() }
       : null;
 
+    console.log("[regenerar] guardando ficha en DB con actualizarFichaCompleta...");
     await actualizarFichaCompleta(params.id, ficha);
+    console.log("[regenerar] actualizarFichaCompleta OK");
+
     if (busquedaWebRaw) {
-      await supabase.from("empresas").update({ busqueda_web_raw: busquedaWebRaw }).eq("id", params.id);
+      const { error: rawErr } = await supabase.from("empresas").update({ busqueda_web_raw: busquedaWebRaw }).eq("id", params.id);
+      if (rawErr) console.error("[regenerar] error guardando busqueda_web_raw:", rawErr);
+      else console.log("[regenerar] busqueda_web_raw guardado OK");
     }
 
     // Invalidar caché de Next.js para que router.refresh() sirva datos frescos
     revalidatePath(`/cuentas/${params.id}`);
+    console.log(`[regenerar] revalidatePath /cuentas/${params.id} OK`);
+    console.log(`[regenerar] completado exitosamente: nombre="${ficha.nombre}"`);
 
     return Response.json({ ok: true, nombre: ficha.nombre });
   } catch (error) {
-    console.error("[regenerar] error:", error);
+    console.error("[regenerar] ERROR no manejado:", error);
+    console.error("[regenerar] stack:", error instanceof Error ? error.stack : "no stack");
     return Response.json({ ok: false, error: String(error) }, { status: 500 });
   }
 }
