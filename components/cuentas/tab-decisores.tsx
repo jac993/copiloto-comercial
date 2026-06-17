@@ -6,6 +6,7 @@ import { ExternalLink, UserPlus, User, CheckCircle, RefreshCw, Copy, Phone } fro
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { useToast } from "@/hooks/use-toast";
 import type { Contacto, DecisorIA, ContactoReal } from "@/lib/types";
 
 const AREA_LABEL: Record<string, string> = {
@@ -35,6 +36,7 @@ interface TabDecisoresProps {
 
 export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReales = [] }: TabDecisoresProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const [actualizando, setActualizando] = useState(false);
 
   const actualizarDecisores = async () => {
@@ -42,6 +44,9 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
     try {
       await fetch(`/api/empresas/${empresaId}/regenerar-decisores`, { method: "POST" });
       router.refresh();
+      toast({ title: "✅ Decisores actualizados con inteligencia de Perplexity" });
+    } catch {
+      toast({ title: "❌ Error al actualizar. Intenta de nuevo.", variant: "destructive" });
     } finally {
       setActualizando(false);
     }
@@ -55,6 +60,23 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
 
   return (
     <div className="space-y-4 pb-6">
+      {/* Botón principal — buscar con Perplexity */}
+      <button
+        onClick={actualizarDecisores}
+        disabled={actualizando}
+        className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl border-2 border-[#7C3AED] text-[#7C3AED] bg-white dark:bg-background hover:bg-[#EDE9FE] dark:hover:bg-[#7C3AED]/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        <RefreshCw className={`h-4 w-4 shrink-0 ${actualizando ? "animate-spin" : ""}`} />
+        <div className="text-left">
+          <p className="text-sm font-semibold">
+            {actualizando ? "Buscando en internet..." : "↻ Actualizar con Perplexity"}
+          </p>
+          {!actualizando && (
+            <p className="text-xs opacity-70">Busca contactos reales y actualiza la inteligencia comercial</p>
+          )}
+        </div>
+      </button>
+
       {/* Contactos ya registrados */}
       {contactos.length > 0 && (
         <div>
@@ -121,15 +143,6 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, contactosReale
         )}
       </div>
 
-      {/* Botón para regenerar los decisores sugeridos con Claude */}
-      <button
-        onClick={actualizarDecisores}
-        disabled={actualizando}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 mx-auto mt-2"
-      >
-        <RefreshCw className={`h-3 w-3 ${actualizando ? "animate-spin" : ""}`} />
-        {actualizando ? "Actualizando decisores..." : "↻ Actualizar decisores"}
-      </button>
     </div>
   );
 }
