@@ -125,10 +125,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Falta ANTHROPIC_API_KEY en .env.local" }, { status: 500 });
   }
 
-  const { url, contexto_vendedor, razon_social, rut, ciudad, rubro } = (await request.json()) as {
+  const { url, contexto_vendedor, razon_social, nombre_comercial, rut, ciudad, rubro } = (await request.json()) as {
     url?: string;
     contexto_vendedor?: string;
     razon_social?: string;
+    nombre_comercial?: string;
     rut?: string;
     ciudad?: string;
     rubro?: string;
@@ -155,6 +156,7 @@ export async function POST(request: Request) {
 
         const opcionesExtra = {
           razonSocial: razon_social?.trim(),
+          nombreComercial: nombre_comercial?.trim(),
           rut: rut?.trim(),
           ciudad: ciudad?.trim(),
           rubro: rubro?.trim(),
@@ -207,13 +209,14 @@ export async function POST(request: Request) {
 
         const datosExtra = [
           razon_social?.trim() ? `Razón social oficial: ${razon_social.trim()}` : "",
+          nombre_comercial?.trim() ? `Nombre comercial (como aparece en el mercado): ${nombre_comercial.trim()}` : "",
           rut?.trim() ? `RUT: ${rut.trim()}` : "",
           ciudad?.trim() ? `Ciudad/Región: ${ciudad.trim()}` : "",
           rubro?.trim() ? `Rubro declarado: ${rubro.trim()}` : "",
         ].filter(Boolean).join("\n");
         const datosExtraBloque = datosExtra ? `DATOS ADICIONALES PROVISTOS:\n${datosExtra}\n\n` : "";
 
-        const nombreEmpresa = nombreDetectado || razon_social?.trim() || dominio.split(".")[0];
+        const nombreEmpresa = nombre_comercial?.trim() || nombreDetectado || razon_social?.trim() || dominio.split(".")[0];
 
         const prompt =
           `${PROMPT_INVESTIGADOR}\n\n` +
@@ -262,7 +265,7 @@ export async function POST(request: Request) {
           urlLimpia,
           contexto_vendedor?.trim() || null,
           busquedaWebRaw,
-          { razonSocial: razon_social?.trim(), rut: rut?.trim() }
+          { razonSocial: razon_social?.trim(), nombreComercial: nombre_comercial?.trim(), rut: rut?.trim() }
         );
 
         send("resultado", { empresaId: empresa.id, nombre: empresa.nombre });

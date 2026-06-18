@@ -242,6 +242,7 @@ export interface Empresa {
   id: string;
   nombre: string;
   razon_social: string | null;
+  nombre_comercial: string | null;
   rut: string | null;
   url: string | null;
   industria: string | null;

@@ -75,10 +75,10 @@ export async function buscarConPerplexity(
   nombreEmpresa: string,
   dominio: string,
   pais: string = "Chile",
-  opcionesExtra?: { razonSocial?: string; rut?: string; ciudad?: string; rubro?: string }
+  opcionesExtra?: { razonSocial?: string; rut?: string; ciudad?: string; rubro?: string; nombreComercial?: string }
 ): Promise<BusquedaPerplexity> {
-  // Nombre para búsqueda: preferir razón social oficial si se proveyó
-  const nombreBuscar = opcionesExtra?.razonSocial?.trim() || nombreEmpresa;
+  // Prioridad para búsqueda: nombre comercial > razón social > nombre detectado del dominio
+  const nombreBuscar = opcionesExtra?.nombreComercial?.trim() || opcionesExtra?.razonSocial?.trim() || nombreEmpresa;
   const ubicacion = opcionesExtra?.ciudad?.trim()
     ? `${opcionesExtra.ciudad.trim()} ${pais}`
     : pais;

@@ -39,6 +39,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
   const [estado, setEstado] = useState<EstadoDialog>({ fase: "idle" });
   const [mostrarExtra, setMostrarExtra] = useState(false);
   const [razonSocial, setRazonSocial] = useState("");
+  const [nombreComercial, setNombreComercial] = useState("");
   const [rut, setRut] = useState("");
   const [ciudad, setCiudad] = useState("");
   const [rubro, setRubro] = useState("");
@@ -63,6 +64,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
           url: urlLimpia,
           contexto_vendedor: contexto.trim() || undefined,
           razon_social: razonSocial.trim() || undefined,
+          nombre_comercial: nombreComercial.trim() || undefined,
           rut: rut.trim() || undefined,
           ciudad: ciudad.trim() || undefined,
           rubro: rubro.trim() || undefined,
@@ -175,6 +177,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
     setUrl("");
     setContexto("");
     setRazonSocial("");
+    setNombreComercial("");
     setRut("");
     setCiudad("");
     setRubro("");
@@ -263,6 +266,18 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                     <p className="text-xs text-muted-foreground mb-2">
                       Perplexity usa estos datos para búsquedas más precisas. Todos opcionales.
                     </p>
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Nombre comercial — Ej: Essity, Coexpan, Soprole"
+                        value={nombreComercial}
+                        onChange={(e) => setNombreComercial(e.target.value)}
+                        className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1 pl-1">
+                        Como aparece en el mercado, no la razón social legal
+                      </p>
+                    </div>
                     <input
                       type="text"
                       placeholder="Razón social / Nombre legal"

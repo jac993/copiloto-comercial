@@ -601,7 +601,7 @@ export async function guardarEmpresaDesdeFicha(
   url: string,
   contextoVendedor?: string | null,
   busquedaWebRaw?: import("@/lib/types").BusquedaWebRaw | null,
-  datosBusqueda?: { razonSocial?: string; rut?: string }
+  datosBusqueda?: { razonSocial?: string; rut?: string; nombreComercial?: string }
 ): Promise<Empresa> {
   // Calcular score basado en urgencia y señales detectadas
   const urgencias = ficha.productos_etiquetas.map((p) => p.urgencia);
@@ -617,6 +617,7 @@ export async function guardarEmpresaDesdeFicha(
   const empresaData: EmpresaInsert = {
     nombre: ficha.nombre,
     razon_social: datosBusqueda?.razonSocial?.trim() || null,
+    nombre_comercial: datosBusqueda?.nombreComercial?.trim() || null,
     rut: datosBusqueda?.rut?.trim() || null,
     url,
     industria: ficha.industria,
