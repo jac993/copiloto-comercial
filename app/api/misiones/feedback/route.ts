@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { updateRendimientoEjecutivo } from "@/lib/queries";
+import { registrarUso } from "@/lib/registrarUso";
 import { PROMPT_FEEDBACK_MISION } from "@/lib/prompts";
 import type { ResultadoMision } from "@/lib/types";
 
@@ -135,6 +136,7 @@ ${mision.detalle?.trim() || "No proporcionó detalle adicional."}`;
         });
 
         const texto = response.content[0].type === "text" ? response.content[0].text.trim() : "";
+        registrarUso({ api: "claude", endpoint: "claude-haiku-4-5-20251001", input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens, empresa_id: mision.empresa_id });
 
         return {
           empresa_id: mision.empresa_id,

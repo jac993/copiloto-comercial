@@ -12,6 +12,7 @@ import {
   insertEvaluacionSemanal,
   updateRendimientoEjecutivo,
 } from "@/lib/queries";
+import { registrarUso } from "@/lib/registrarUso";
 import { PROMPT_EVALUAR } from "@/lib/prompts";
 import type { EvaluacionSemanalInsert } from "@/lib/types";
 
@@ -154,6 +155,7 @@ ${JSON.stringify(contextoSemana, null, 2)}`;
     messages: [{ role: "user", content: mensaje }],
   });
 
+  registrarUso({ api: "claude", endpoint: "claude-haiku-4-5-20251001", input_tokens: respuestaAI.usage.input_tokens, output_tokens: respuestaAI.usage.output_tokens });
   const raw = respuestaAI.content[0].type === "text" ? respuestaAI.content[0].text : "";
   const jsonStr = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 

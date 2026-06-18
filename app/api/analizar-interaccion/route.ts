@@ -14,6 +14,7 @@ import {
   insertInteraccion,
 } from "@/lib/queries";
 import { PROMPT_COACH_ESCRITO } from "@/lib/prompts";
+import { registrarUso } from "@/lib/registrarUso";
 import type {
   ResultadoAnalisis,
   TipoInteraccion,
@@ -147,6 +148,7 @@ ${encabezadoEmail}${texto.trim()}
     if (!textContent || textContent.type !== "text") {
       throw new Error("Claude no devolvió texto");
     }
+    registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens, empresa_id });
 
     // ── Parsear JSON de Claude ──
     let resultado: ResultadoAnalisis;

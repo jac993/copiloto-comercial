@@ -11,6 +11,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { getEmpresaById } from "@/lib/queries";
 import { PROMPT_ANALISIS_CONVERSACION } from "@/lib/prompts";
+import { registrarUso } from "@/lib/registrarUso";
 import type { Interaccion, AnalisisConversacion } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -101,6 +102,7 @@ ${hiloCompleto}
 
     const textContent = response.content.find((c) => c.type === "text");
     if (!textContent || textContent.type !== "text") throw new Error("Claude no devolvió texto");
+    registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens, empresa_id: params.id });
 
     let analisis: AnalisisConversacion;
     try {

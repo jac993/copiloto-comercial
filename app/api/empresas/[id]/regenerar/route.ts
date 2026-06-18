@@ -10,6 +10,7 @@ import { getEmpresaById, actualizarFichaCompleta } from "@/lib/queries";
 import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
 import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
+import { registrarUso } from "@/lib/registrarUso";
 import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
 
 // Cliente Supabase con service role — no depende de cookies ni de next/headers
@@ -191,7 +192,7 @@ export async function POST(
         opcionesExtra
       ).catch((err) => {
         console.error("[regenerar] Perplexity falló:", String(err));
-        return { contactosTexto: "", inteligenciaTexto: "", fuentes: [] };
+        return { contactosTexto: "", inteligenciaTexto: "", fuentes: [], input_tokens: 0, output_tokens: 0 };
       }),
     ]);
 
@@ -251,6 +252,10 @@ export async function POST(
 
     const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
     console.log(`[regenerar] Claude respondió: ${textoRespuesta.length} chars | stop_reason: ${mensaje.stop_reason} | tokens: ${mensaje.usage?.output_tokens ?? "?"}`);
+    registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: mensaje.usage.input_tokens, output_tokens: mensaje.usage.output_tokens, empresa_id: params.id });
+    if (perplexityResult.input_tokens > 0 || perplexityResult.output_tokens > 0) {
+      registrarUso({ api: "perplexity", endpoint: "sonar", input_tokens: perplexityResult.input_tokens, output_tokens: perplexityResult.output_tokens, empresa_id: params.id });
+    }
 
     // ── Parsear ficha + generar 6 decisores hardcodeados ────────
     const fichaParseada = extraerJsonSeguro<FichaIA>(textoRespuesta);

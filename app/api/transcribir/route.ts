@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { AssemblyAI } from "assemblyai";
+import { registrarUso } from "@/lib/registrarUso";
 
 export const maxDuration = 300;
 
@@ -86,6 +87,9 @@ export async function POST(req: NextRequest) {
     }
 
     const transcripcion = transcript.text ?? "";
+    // audio_duration es en ms → convertir a segundos
+    const audioSegundos = transcript.audio_duration ? transcript.audio_duration / 1000 : undefined;
+    registrarUso({ api: "assemblyai", endpoint: "transcribe", audio_seconds: audioSegundos });
 
     console.log("[transcribir] Transcripción completada:", {
       palabras: transcript.words?.length ?? 0,

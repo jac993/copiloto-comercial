@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { getEmpresasPriorizadas, getAprendizajesActivos, guardarPrioridadesCache } from "@/lib/queries";
+import { registrarUso } from "@/lib/registrarUso";
 import { PROMPT_PRIORIZAR } from "@/lib/prompts";
 import type { PrioridadCacheItem } from "@/lib/types";
 
@@ -134,6 +135,7 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
     messages: [{ role: "user", content: mensajeUsuario }],
   });
 
+  registrarUso({ api: "claude", endpoint: "claude-haiku-4-5-20251001", input_tokens: message.usage.input_tokens, output_tokens: message.usage.output_tokens });
   const raw = message.content[0].type === "text" ? message.content[0].text : "";
   const jsonStr = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 

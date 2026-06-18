@@ -9,6 +9,7 @@ import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper
 import { guardarEmpresaDesdeFicha } from "@/lib/queries";
 import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
+import { registrarUso } from "@/lib/registrarUso";
 import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
 
 export const maxDuration = 180;
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
                 opcionesExtra
               );
             } catch {
-              return { contactosTexto: "", inteligenciaTexto: "", fuentes: [] };
+              return { contactosTexto: "", inteligenciaTexto: "", fuentes: [], input_tokens: 0, output_tokens: 0 };
             }
           })(),
         ]);
@@ -229,6 +230,10 @@ export async function POST(request: Request) {
         });
 
         const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
+        registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: mensaje.usage.input_tokens, output_tokens: mensaje.usage.output_tokens });
+        if (perplexityResult.input_tokens > 0 || perplexityResult.output_tokens > 0) {
+          registrarUso({ api: "perplexity", endpoint: "sonar", input_tokens: perplexityResult.input_tokens, output_tokens: perplexityResult.output_tokens });
+        }
 
         // ── Parsear y completar decisores con LinkedIn URL ─────
         send("progreso", { mensaje: "Guardando ficha..." });

@@ -14,6 +14,7 @@ import {
   insertChatMensaje,
   limpiarChatEmpresa,
 } from "@/lib/queries";
+import { registrarUso } from "@/lib/registrarUso";
 
 export const maxDuration = 60;
 
@@ -150,6 +151,7 @@ ${
   const textContent = response.content.find((c) => c.type === "text");
   const respuesta =
     textContent?.type === "text" ? textContent.text : "Sin respuesta de la IA.";
+  registrarUso({ api: "claude", endpoint: "claude-haiku-4-5-20251001", input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens, empresa_id: id });
 
   // Persistir pregunta + respuesta
   await insertChatMensaje({

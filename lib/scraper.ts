@@ -22,16 +22,19 @@ export interface BusquedaPerplexity {
   contactosTexto: string;
   inteligenciaTexto: string;
   fuentes: string[];
+  input_tokens: number;
+  output_tokens: number;
 }
 
 interface PerplexityResponse {
   choices: { message: { content: string } }[];
   citations?: string[];
+  usage?: { prompt_tokens: number; completion_tokens: number };
 }
 
-async function llamarPerplexity(query: string): Promise<{ texto: string; fuentes: string[] }> {
+async function llamarPerplexity(query: string): Promise<{ texto: string; fuentes: string[]; input_tokens: number; output_tokens: number }> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) return { texto: "", fuentes: [] };
+  if (!apiKey) return { texto: "", fuentes: [], input_tokens: 0, output_tokens: 0 };
 
   try {
     const respuesta = await fetch(PERPLEXITY_API, {
@@ -50,16 +53,18 @@ async function llamarPerplexity(query: string): Promise<{ texto: string; fuentes
 
     if (!respuesta.ok) {
       console.log("[Perplexity] status error:", respuesta.status, await respuesta.text().catch(() => ""));
-      return { texto: "", fuentes: [] };
+      return { texto: "", fuentes: [], input_tokens: 0, output_tokens: 0 };
     }
     const data = (await respuesta.json()) as PerplexityResponse;
     return {
       texto: data.choices[0]?.message?.content ?? "",
       fuentes: data.citations ?? [],
+      input_tokens: data.usage?.prompt_tokens ?? 0,
+      output_tokens: data.usage?.completion_tokens ?? 0,
     };
   } catch (err) {
     console.log("[Perplexity] error:", String(err));
-    return { texto: "", fuentes: [] };
+    return { texto: "", fuentes: [], input_tokens: 0, output_tokens: 0 };
   }
 }
 
@@ -88,13 +93,14 @@ export async function buscarConPerplexity(
     `"${nombreBuscar}"${rutBloque} ${ubicacion}${rubroBloque} 2024 2025 noticias expansión contratos clientes ` +
     `proveedores etiquetas packaging licitación mercadopublico situación`;
 
+  const fallback = { texto: "", fuentes: [], input_tokens: 0, output_tokens: 0 };
   const [resContactos, resInteligencia] = await Promise.allSettled([
     llamarPerplexity(queryContactos),
     llamarPerplexity(queryInteligencia),
   ]);
 
-  const c = resContactos.status === "fulfilled" ? resContactos.value : { texto: "", fuentes: [] };
-  const i = resInteligencia.status === "fulfilled" ? resInteligencia.value : { texto: "", fuentes: [] };
+  const c = resContactos.status === "fulfilled" ? resContactos.value : fallback;
+  const i = resInteligencia.status === "fulfilled" ? resInteligencia.value : fallback;
 
   console.log("[Perplexity] empresa:", nombreEmpresa, "| contactos:", c.texto.length, "chars | intel:", i.texto.length, "chars");
 
@@ -102,6 +108,8 @@ export async function buscarConPerplexity(
     contactosTexto: c.texto.slice(0, 4000),
     inteligenciaTexto: i.texto.slice(0, 4000),
     fuentes: Array.from(new Set([...c.fuentes, ...i.fuentes])).slice(0, 12),
+    input_tokens: c.input_tokens + i.input_tokens,
+    output_tokens: c.output_tokens + i.output_tokens,
   };
 }
 

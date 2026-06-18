@@ -9,6 +9,7 @@ import { getEmpresaById } from "@/lib/queries";
 import { buscarConPerplexity, normalizarUrl } from "@/lib/scraper";
 import { PROMPT_ANALISIS_WEB } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
+import { registrarUso } from "@/lib/registrarUso";
 import { getSupabaseServer } from "@/lib/supabase";
 import type { BusquedaWebRaw, AnalisisWeb } from "@/lib/types";
 
@@ -83,6 +84,10 @@ export async function POST(
 
     const contenido = mensaje.content[0];
     const textoRespuesta = contenido.type === "text" ? contenido.text : "";
+    registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: mensaje.usage.input_tokens, output_tokens: mensaje.usage.output_tokens, empresa_id: params.id });
+    if (perplexityResult.input_tokens > 0 || perplexityResult.output_tokens > 0) {
+      registrarUso({ api: "perplexity", endpoint: "sonar", input_tokens: perplexityResult.input_tokens, output_tokens: perplexityResult.output_tokens, empresa_id: params.id });
+    }
 
     const analisis = extraerJsonSeguro<AnalisisWeb>(textoRespuesta);
 
