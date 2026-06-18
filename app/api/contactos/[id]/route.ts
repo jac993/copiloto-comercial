@@ -1,6 +1,7 @@
-// PATCH /api/contactos/[id] — Actualiza datos de un contacto existente.
+// PATCH  /api/contactos/[id] — Actualiza datos de un contacto existente.
+// DELETE /api/contactos/[id] — Elimina un contacto.
 import { NextRequest, NextResponse } from "next/server";
-import { updateContacto } from "@/lib/queries";
+import { updateContacto, deleteContacto } from "@/lib/queries";
 import type { ContactoUpdate, AreaContacto } from "@/lib/types";
 
 export async function PATCH(
@@ -26,6 +27,19 @@ export async function PATCH(
 
     const actualizado = await updateContacto(params.id, cambios);
     return NextResponse.json(actualizado);
+  } catch (error) {
+    const mensaje = error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json({ error: mensaje }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await deleteContacto(params.id);
+    return NextResponse.json({ ok: true });
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : "Error desconocido";
     return NextResponse.json({ error: mensaje }, { status: 500 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, UserPlus, User, CheckCircle, Trash2, Pencil, X } from "lucide-react";
+import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -43,6 +43,8 @@ interface TabDecisoresProps {
 
 export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisoresProps) {
   const [decisoresLocales, setDecisoresLocales] = useState<DecisorIA[]>(decisoresIA);
+  // Estado local para soportar eliminaciones sin recargar la página
+  const [contactosLocales, setContactosLocales] = useState<Contacto[]>(contactos);
 
   const eliminarPersonaDecisor = (index: number) => {
     setDecisoresLocales((prev) =>
@@ -50,7 +52,15 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
     );
   };
 
-  const cargoRegistrado = new Set(contactos.map((c) => c.cargo));
+  const handleContactoEliminado = (id: string) => {
+    setContactosLocales((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleContactoAgregado = (nuevo: Contacto) => {
+    setContactosLocales((prev) => [...prev, nuevo]);
+  };
+
+  const cargoRegistrado = new Set(contactosLocales.map((c) => c.cargo));
   const decisoresSugeridos = decisoresLocales.filter((d) => !cargoRegistrado.has(d.cargo));
 
   const personasIdentificadas = decisoresLocales.filter(
@@ -60,14 +70,18 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
   return (
     <div className="space-y-4 pb-6">
       {/* Contactos ya registrados */}
-      {contactos.length > 0 && (
+      {contactosLocales.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
             Contactos registrados
           </p>
           <div className="space-y-2">
-            {contactos.map((contacto) => (
-              <ContactoCard key={contacto.id} contacto={contacto} />
+            {contactosLocales.map((contacto) => (
+              <ContactoCard
+                key={contacto.id}
+                contacto={contacto}
+                onEliminar={() => handleContactoEliminado(contacto.id)}
+              />
             ))}
           </div>
         </div>
@@ -97,6 +111,7 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
                 key={i}
                 decisor={decisor}
                 empresaId={empresaId}
+                onContactoAgregado={handleContactoAgregado}
                 onPersonaEliminada={() => {
                   const idxReal = decisoresLocales.findIndex((d) => d.cargo === decisor.cargo);
                   if (idxReal >= 0) eliminarPersonaDecisor(idxReal);
@@ -107,7 +122,7 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
         </div>
       )}
 
-      {contactos.length === 0 && decisoresSugeridos.length === 0 && (
+      {contactosLocales.length === 0 && decisoresSugeridos.length === 0 && (
         <div className="text-center py-10 text-muted-foreground">
           <User className="h-10 w-10 mx-auto mb-2 opacity-30" />
           <p className="text-sm">Sin decisores identificados</p>
@@ -120,7 +135,7 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
 
 // ── ContactoCard — muestra un contacto guardado, con edición inline ──────────
 
-function ContactoCard({ contacto }: { contacto: Contacto }) {
+function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar?: () => void }) {
   const [datos, setDatos] = useState<Contacto>(contacto);
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({
@@ -132,11 +147,22 @@ function ContactoCard({ contacto }: { contacto: Contacto }) {
     linkedin_url: datos.linkedin_url ?? "",
   });
   const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const areaColor = AREA_COLOR[datos.area ?? "otro"] ?? AREA_COLOR.otro;
   const iniciales = datos.nombre
     .split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+  const handleEliminar = async () => {
+    setEliminando(true);
+    try {
+      await fetch(`/api/contactos/${datos.id}`, { method: "DELETE" });
+      onEliminar?.();
+    } finally {
+      setEliminando(false);
+    }
+  };
 
   const guardarEdicion = async () => {
     if (!form.nombre.trim()) return;
@@ -265,14 +291,28 @@ function ContactoCard({ contacto }: { contacto: Contacto }) {
                   </span>
                 )}
               </div>
-              {/* Botón editar siempre visible */}
-              <button
-                onClick={() => setEditando(true)}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-[#7C3AED] hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors shrink-0"
-                aria-label="Editar contacto"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
+              {/* Botones editar y eliminar */}
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  onClick={() => setEditando(true)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-[#7C3AED] hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
+                  aria-label="Editar contacto"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                {onEliminar && (
+                  <button
+                    onClick={handleEliminar}
+                    disabled={eliminando}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                    aria-label="Eliminar contacto"
+                  >
+                    {eliminando
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Trash2 className="h-3.5 w-3.5" />}
+                  </button>
+                )}
+              </div>
             </div>
 
             {datos.notas_ia && (
@@ -316,13 +356,15 @@ function ContactoCard({ contacto }: { contacto: Contacto }) {
 function DecisorSugeridoCard({
   decisor,
   empresaId,
+  onContactoAgregado,
   onPersonaEliminada,
 }: {
   decisor: DecisorIA;
   empresaId: string;
+  onContactoAgregado: (c: Contacto) => void;
   onPersonaEliminada: () => void;
 }) {
-  const [agregados, setAgregados] = useState<string[]>([]);
+  const [agregados, setAgregados] = useState<Contacto[]>([]);
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
@@ -338,7 +380,7 @@ function DecisorSugeridoCard({
     if (!nombre.trim()) return;
     setGuardando(true);
     try {
-      await fetch("/api/contactos", {
+      const res = await fetch("/api/contactos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -353,7 +395,9 @@ function DecisorSugeridoCard({
           notas_ia:    `${decisor.por_que_es_clave}\n\nDolor: ${decisor.dolor_especifico}`,
         }),
       });
-      setAgregados((prev) => [...prev, nombre.trim()]);
+      const nuevo = (await res.json()) as Contacto;
+      setAgregados((prev) => [...prev, nuevo]);
+      onContactoAgregado(nuevo);
       setNombre("");
       setEmail("");
       setLinkedinUrl("");
@@ -435,14 +479,15 @@ function DecisorSugeridoCard({
           </div>
         )}
 
-        {/* Contactos ya agregados */}
+        {/* Contactos recién agregados — se muestran como tarjeta real */}
         {agregados.length > 0 && (
-          <div className="mb-3 space-y-1.5">
-            {agregados.map((n, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
-                <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>{n} agregado</span>
-              </div>
+          <div className="mb-3 space-y-2">
+            {agregados.map((c) => (
+              <ContactoCard
+                key={c.id}
+                contacto={c}
+                onEliminar={() => setAgregados((prev) => prev.filter((x) => x.id !== c.id))}
+              />
             ))}
           </div>
         )}

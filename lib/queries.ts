@@ -173,6 +173,15 @@ export async function updateContacto(id: string, cambios: ContactoUpdate): Promi
   return data;
 }
 
+export async function deleteContacto(id: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from("contactos")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw new Error(`deleteContacto: ${error.message}`);
+}
+
 // ─── INTERACCIONES ───────────────────────────────────────────
 
 export async function getInteraccionesPorEmpresa(empresaId: string): Promise<Interaccion[]> {
