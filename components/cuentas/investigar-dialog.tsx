@@ -48,11 +48,16 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
     if (!urlLimpia) return;
 
     setEstado({ fase: "cargando", mensaje: "Iniciando...", pasoActual: 0 });
-    console.log("[investigar] fetch iniciado para URL:", urlLimpia);
+
+    const abortCtrl = new AbortController();
+
+    // Timeout de seguridad: 150 segundos
+    const timeoutId = setTimeout(() => abortCtrl.abort("timeout"), 150_000);
 
     try {
       const response = await fetch("/api/investigar", {
         method: "POST",
+        signal: abortCtrl.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: urlLimpia,
@@ -64,11 +69,18 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
         }),
       });
 
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `Error del servidor (${response.status})`);
+      }
+
       if (!response.body) throw new Error("Sin respuesta del servidor");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      // Rastrear si ya recibimos resultado/error para validar al cerrar
+      let finalizado = false;
 
       const procesarLineas = (texto: string) => {
         const lineas = texto.split("\n");
@@ -86,19 +98,20 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
               const pasoActual = PASOS_PROGRESO.findIndex((p) =>
                 p.includes(data.mensaje!.split(" ")[0])
               );
-              setEstado({
-                fase: "cargando",
-                mensaje: data.mensaje,
-                pasoActual: pasoActual >= 0 ? pasoActual : 0,
-              });
+              setEstado((prev) =>
+                prev.fase === "cargando"
+                  ? { fase: "cargando", mensaje: data.mensaje!, pasoActual: pasoActual >= 0 ? pasoActual : prev.pasoActual }
+                  : prev
+              );
             } else if (data.type === "resultado" && data.empresaId && data.nombre) {
-              setEstado({
-                fase: "exito",
-                empresaId: data.empresaId,
-                nombre: data.nombre,
-              });
+              finalizado = true;
+              setEstado({ fase: "exito", empresaId: data.empresaId, nombre: data.nombre });
             } else if (data.type === "error" && data.mensaje) {
+              finalizado = true;
               setEstado({ fase: "error", mensaje: data.mensaje });
+            } else if (data.type === "done") {
+              // El servidor cerró el stream limpiamente — salimos del loop
+              finalizado = true;
             }
           } catch (parseErr) {
             console.error("[investigar] error parseando línea SSE:", parseErr, "línea:", linea);
@@ -108,9 +121,15 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
 
       while (true) {
         const { done, value } = await reader.read();
+
         if (done) {
-          // Procesar lo que queda en el buffer al cerrar el stream
           if (buffer.trim()) procesarLineas(buffer);
+          break;
+        }
+
+        // Si ya recibimos "done" del servidor, no seguimos bloqueando en read()
+        if (finalizado) {
+          reader.cancel().catch(() => {});
           break;
         }
 
@@ -119,12 +138,28 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
         buffer = lineas.pop() ?? "";
         procesarLineas(lineas.join("\n"));
       }
+
+      // Si el stream se cerró sin entregar resultado ni error, mostramos error claro
+      if (!finalizado) {
+        setEstado({
+          fase: "error",
+          mensaje: "La investigación no retornó resultado. El servidor puede haber tardado demasiado. Intenta de nuevo.",
+        });
+      }
     } catch (err) {
-      setEstado({
-        fase: "error",
-        mensaje:
-          err instanceof Error ? err.message : "Error de conexión. Intenta de nuevo.",
-      });
+      if (err instanceof Error && err.name === "AbortError") {
+        setEstado({
+          fase: "error",
+          mensaje: "La investigación está tardando más de lo esperado. Intenta de nuevo.",
+        });
+      } else {
+        setEstado({
+          fase: "error",
+          mensaje: err instanceof Error ? err.message : "Error de conexión. Intenta de nuevo.",
+        });
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 

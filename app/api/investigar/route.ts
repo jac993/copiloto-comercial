@@ -266,10 +266,11 @@ export async function POST(request: Request) {
         );
 
         send("resultado", { empresaId: empresa.id, nombre: empresa.nombre });
-        send("progreso", { mensaje: "¡Listo!" });
+        send("done", {});
       } catch (error) {
         const mensaje = error instanceof Error ? error.message : "Error desconocido";
         send("error", { mensaje });
+        send("done", {});
       } finally {
         controller.close();
       }
@@ -281,6 +282,8 @@ export async function POST(request: Request) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      // Impide que Nginx/Vercel proxy bufferice el stream SSE
+      "X-Accel-Buffering": "no",
     },
   });
 }
