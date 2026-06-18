@@ -33,9 +33,10 @@ export interface DecisorIA {
   area: string;
   por_que_es_clave: string;
   dolor_especifico: string;
-  tecnica_recomendada?: string;                    // NUEVO — técnica para este cargo específico
-  persona_encontrada?: PersonaEncontrada | null;   // NUEVO — persona real encontrada por Perplexity
+  tecnica_recomendada?: string;
+  persona_encontrada?: PersonaEncontrada | null;
   query_linkedin: string;
+  linkedin_url?: string | null;
 }
 
 export interface ObjecionProbable {
@@ -88,7 +89,7 @@ export interface FichaIA {
   angulo_entrada: string;
   tecnica_recomendada: TecnicaVenta;
   razon_tecnica: string;
-  preguntas_spin: [string, string, string];
+  preguntas_spin: string[];
   objeciones_probables: ObjecionProbable[];
   resumen_ejecutivo: string;
   verificacion_contexto: VerificacionContexto[];

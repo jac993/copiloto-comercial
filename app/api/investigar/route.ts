@@ -13,6 +13,79 @@ import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
 
 export const maxDuration = 180;
 
+// Genera los 6 decisores fijos — no dependen del JSON de Claude.
+function crearDecisoresHardcoded(nombreEmpresa: string, industria: string): FichaIA["decisores"] {
+  const industiaBrief = industria ? ` en ${industria}` : "";
+  const cargos: Array<{
+    cargo: string;
+    area: FichaIA["decisores"][number]["area"];
+    dolor_especifico: string;
+    por_que_es_clave: string;
+    tecnica_recomendada: string;
+    query_linkedin: string;
+  }> = [
+    {
+      cargo: "Jefe/a de Calidad",
+      area: "calidad",
+      dolor_especifico: `Lotes rechazados, no conformidades y auditorías fallidas por problemas de etiquetado${industiaBrief}.`,
+      por_que_es_clave: "Sufre el dolor más intenso: rechazos, re-etiquetados y devoluciones. El aliado ideal para construir el caso de negocio.",
+      tecnica_recomendada: "SPIN",
+      query_linkedin: `Jefe Calidad ${nombreEmpresa} Chile`,
+    },
+    {
+      cargo: "Jefe/Gerente de Operaciones",
+      area: "operaciones",
+      dolor_especifico: `Paros de línea, retrasos y re-etiquetados que impactan el OEE${industiaBrief}.`,
+      por_que_es_clave: "Siente el impacto en producción cuando las etiquetas fallan. Convierte el dolor en caso de negocio interno.",
+      tecnica_recomendada: "consultiva",
+      query_linkedin: `Jefe Operaciones ${nombreEmpresa} Chile`,
+    },
+    {
+      cargo: "Jefe/a de Logística o Despacho",
+      area: "operaciones",
+      dolor_especifico: `Errores de despacho y picking por etiquetas ilegibles o incorrectas${industiaBrief}.`,
+      por_que_es_clave: "Depende de etiquetas logísticas fiables para cumplir plazos y evitar devoluciones de clientes.",
+      tecnica_recomendada: "consultiva",
+      query_linkedin: `Jefe Logística ${nombreEmpresa} Chile`,
+    },
+    {
+      cargo: "Gerente de Planta",
+      area: "operaciones",
+      dolor_especifico: `KPIs de planta afectados por inconsistencias de adhesivos, colores o troqueles${industiaBrief}.`,
+      por_que_es_clave: "Aprueba o bloquea cambios de proveedor que afectan la línea. Necesita ROI claro antes de mover el proceso.",
+      tecnica_recomendada: "challenger",
+      query_linkedin: `Gerente Planta ${nombreEmpresa} Chile`,
+    },
+    {
+      cargo: "Jefe/Gerente de Compras o Adquisiciones",
+      area: "adquisiciones",
+      dolor_especifico: `Presión de costos, riesgo de desabastecimiento y homologación de nuevos proveedores${industiaBrief}.`,
+      por_que_es_clave: "Guardián formal del cambio de proveedor. Resistente al cambio; requiere datos de costo total y condiciones claras.",
+      tecnica_recomendada: "relacional",
+      query_linkedin: `Jefe Compras ${nombreEmpresa} Chile`,
+    },
+    {
+      cargo: "Gerente General o Dueño",
+      area: "gerencia",
+      dolor_especifico: `Riesgo reputacional, regulatorio o de mercado asociado a fallas de etiquetado${industiaBrief}.`,
+      por_que_es_clave: "En PYMEs decide todo. Visión global: crecimiento, riesgo y continuidad operacional.",
+      tecnica_recomendada: "challenger",
+      query_linkedin: `Gerente General ${nombreEmpresa} Chile`,
+    },
+  ];
+
+  return cargos.map((c) => ({
+    cargo: c.cargo,
+    area: c.area,
+    dolor_especifico: c.dolor_especifico,
+    por_que_es_clave: c.por_que_es_clave,
+    tecnica_recomendada: c.tecnica_recomendada,
+    persona_encontrada: null,
+    query_linkedin: c.query_linkedin,
+    linkedin_url: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(c.query_linkedin)}`,
+  }));
+}
+
 const encoder = new TextEncoder();
 
 function enviarEvento(
@@ -120,8 +193,8 @@ export async function POST(request: Request) {
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
         const textoWeb = sanitizarTexto(texto, 15000);
-        const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto, 3000);
-        const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000);
+        const contactosLimpio = sanitizarTexto(perplexityResult.contactosTexto, 3000).slice(0, 2000);
+        const inteligenciaLimpia = sanitizarTexto(perplexityResult.inteligenciaTexto, 3000).slice(0, 2000);
 
         const perplexityBloque = contactosLimpio || inteligenciaLimpia
           ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
@@ -151,6 +224,7 @@ export async function POST(request: Request) {
         const mensaje = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
           max_tokens: 6000,
+          system: "Eres un analizador de empresas B2B chilenas. Respondes ÚNICAMENTE con un objeto JSON válido. Nunca escribes texto fuera del JSON. Nunca te disculpas ni explicas. Solo JSON.",
           messages: [{ role: "user", content: prompt }],
         });
 
@@ -162,14 +236,11 @@ export async function POST(request: Request) {
         const fichaParseada = extraerJsonSeguro<FichaIA>(textoRespuesta);
         const fichaBase = fichaParseada ?? fichaFallback(nombreDetectado, urlLimpia);
 
-        // Asegurar que cada decisor tenga linkedin_url de búsqueda
+        // Decisores hardcodeados — no dependen del JSON de Claude para evitar truncación
         const ficha: FichaIA = {
           ...fichaBase,
-          decisores: fichaBase.decisores.map((d) => ({
-            ...d,
-            linkedin_url: d.persona_encontrada?.linkedin_url ||
-              `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(d.cargo + " " + fichaBase.nombre)}`,
-          })),
+          preguntas_spin: fichaBase.preguntas_spin?.slice(0, 2) ?? [],
+          decisores: crearDecisoresHardcoded(fichaBase.nombre, fichaBase.industria ?? ""),
         };
 
         const busquedaWebRaw: BusquedaWebRaw | null = contactosLimpio || inteligenciaLimpia
