@@ -21,6 +21,14 @@ const TIPO_LABEL: Record<string, string> = {
   email: "Correo",
   linkedin: "LinkedIn",
   whatsapp: "WhatsApp",
+  reunion: "Reunión",
+  sin_respuesta: "Sin respuesta",
+};
+
+const SENTIMIENTO_LABEL: Record<string, string> = {
+  positivo: "Positivo ✅",
+  neutro:   "Neutro 😐",
+  negativo: "Negativo ❌",
   sin_respuesta: "Sin respuesta",
 };
 
@@ -69,10 +77,11 @@ export async function POST(
           || i.resumen_ia
           || "(sin contenido registrado)";
 
-        const badge = i.badge_estado ? ` | Estado IA: ${i.badge_estado}` : "";
-        const proximo = i.proximo_paso ? ` | Próximo paso registrado: ${i.proximo_paso}` : "";
+        const resultado = i.sentimiento ? ` | Resultado: ${SENTIMIENTO_LABEL[i.sentimiento] ?? i.sentimiento}` : "";
+        const badge = i.badge_estado ? ` | Diagnóstico IA: ${i.badge_estado}` : "";
+        const proximo = i.proximo_paso ? ` | Próximo paso: ${i.proximo_paso}` : "";
 
-        return `INTERACCIÓN ${idx + 1} — ${tipo} (${fecha})${badge}${proximo}\n${contenido}`;
+        return `INTERACCIÓN ${idx + 1} — ${tipo} (${fecha})${resultado}${badge}${proximo}\n${contenido}`;
       })
       .join("\n\n---\n\n");
 

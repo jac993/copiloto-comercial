@@ -55,6 +55,14 @@ const BADGE_CONF: Record<BadgeEstado, BadgeConf> = {
 
 const DEFAULT_DOT = "#A78BFA";
 
+// ── Badge de resultado (sentimiento manual) ───────────────────
+
+const SENTIMIENTO_BADGE: Record<string, { label: string; className: string }> = {
+  positivo: { label: "Positivo", className: "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400" },
+  neutro:   { label: "Neutro",   className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" },
+  negativo: { label: "Negativo", className: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" },
+};
+
 // ── Icono por tipo ────────────────────────────────────────────
 
 const TIPO_CONF: Record<string, { emoji: string; Icon: React.ElementType; label: string }> = {
@@ -312,6 +320,10 @@ function EntradaTimeline({
   }
 
   const analizado = !!interaccion.resumen_ia;
+  const resumen = interaccion.resumen_ia ?? interaccion.transcripcion;
+  const sentimientoConf = interaccion.sentimiento && interaccion.sentimiento !== "sin_respuesta"
+    ? (SENTIMIENTO_BADGE[interaccion.sentimiento] ?? null)
+    : null;
 
   return (
     <div
@@ -325,8 +337,9 @@ function EntradaTimeline({
 
       {/* Tarjeta */}
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        {/* Cabecera */}
-        <div className="px-4 pt-3.5 pb-2">
+        <div className="px-4 pt-3.5 pb-3">
+
+          {/* Fila 1: tipo + badge resultado */}
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-foreground">
@@ -336,37 +349,26 @@ function EntradaTimeline({
                 {fechaCorta(interaccion.fecha)}
               </p>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={onEliminar}
-                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
-                aria-label="Eliminar"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-destructive/60 hover:text-destructive" />
-              </button>
-            </div>
+            {sentimientoConf && (
+              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0 mt-0.5 ${sentimientoConf.className}`}>
+                {sentimientoConf.label}
+              </span>
+            )}
           </div>
 
-          {/* Badge de estado */}
+          {/* Resumen — resumen_ia o transcripcion como fallback, siempre truncado */}
+          {resumen && (
+            <p className="text-xs text-foreground/70 mt-2 line-clamp-2 leading-relaxed">
+              {resumen}
+            </p>
+          )}
+
+          {/* Badge de estado IA */}
           {badgeConf && (
             <div className={`mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badgeConf.bg} ${badgeConf.text}`}>
               <badgeConf.Icon className="w-3 h-3" />
               {badgeConf.label}
             </div>
-          )}
-
-          {/* Decisión sugerida */}
-          {interaccion.decision_sugerida && (
-            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-              {interaccion.decision_sugerida}
-            </p>
-          )}
-
-          {/* Resumen (si fue analizado) */}
-          {interaccion.resumen_ia && (
-            <p className="text-xs text-foreground/80 mt-2 line-clamp-2 leading-relaxed">
-              {interaccion.resumen_ia}
-            </p>
           )}
 
           {/* Próximo paso */}
@@ -376,33 +378,40 @@ function EntradaTimeline({
               <span className="text-foreground/80">{interaccion.proximo_paso}</span>
             </div>
           )}
-        </div>
 
-        {/* Botones de acción */}
-        <div className="px-4 pb-3 pt-1 flex items-center gap-2 border-t border-border/50">
-          {analizado ? (
+          {/* Fila de acciones: analizar/ver análisis + eliminar */}
+          <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between">
+            {analizado ? (
+              <button
+                onClick={() => setExpandido(!expandido)}
+                className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                {expandido
+                  ? <><ChevronUp className="w-3.5 h-3.5" /> Ocultar análisis</>
+                  : <><ChevronDown className="w-3.5 h-3.5" /> Ver análisis</>
+                }
+              </button>
+            ) : (
+              <button
+                onClick={onAnalizar}
+                disabled={analizando}
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED] hover:text-[#6D28D9] transition-colors disabled:opacity-50"
+              >
+                {analizando
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Zap className="w-3.5 h-3.5" />
+                }
+                {analizando ? "Analizando…" : "⚡ Analizar ahora"}
+              </button>
+            )}
             <button
-              onClick={() => setExpandido(!expandido)}
-              className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              onClick={onEliminar}
+              className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
+              aria-label="Eliminar"
             >
-              {expandido
-                ? <><ChevronUp className="w-3.5 h-3.5" /> Ocultar análisis</>
-                : <><ChevronDown className="w-3.5 h-3.5" /> Ver análisis completo</>
-              }
+              <Trash2 className="h-3.5 w-3.5 text-destructive/60 hover:text-destructive" />
             </button>
-          ) : (
-            <button
-              onClick={onAnalizar}
-              disabled={analizando}
-              className="flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED] hover:text-[#6D28D9] transition-colors disabled:opacity-50"
-            >
-              {analizando
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <Zap className="w-3.5 h-3.5" />
-              }
-              {analizando ? "Analizando…" : "⚡ Analizar ahora"}
-            </button>
-          )}
+          </div>
         </div>
 
         {/* Sección expandida de coaching */}
