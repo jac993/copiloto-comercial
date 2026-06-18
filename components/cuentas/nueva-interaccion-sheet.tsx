@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Phone, Mail, MessageCircle, Briefcase, PhoneOff,
+  Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Upload, Loader2, CheckCircle2,
 } from "lucide-react";
 import type { Contacto, Interaccion, TipoInteraccion } from "@/lib/types";
@@ -25,11 +25,12 @@ import type { Contacto, Interaccion, TipoInteraccion } from "@/lib/types";
 type Fase = "tipos" | "form" | "transcribiendo" | "ok";
 
 const TIPOS = [
-  { id: "llamada" as TipoInteraccion,      emoji: "📞", label: "Llamada",    Icon: Phone,       ia: true },
-  { id: "email" as TipoInteraccion,        emoji: "📧", label: "Correo",     Icon: Mail,        ia: false },
-  { id: "whatsapp" as TipoInteraccion,     emoji: "💬", label: "WhatsApp",   Icon: MessageCircle, ia: false },
-  { id: "linkedin" as TipoInteraccion,     emoji: "💼", label: "LinkedIn",   Icon: Briefcase,   ia: false },
-  { id: "sin_respuesta" as TipoInteraccion, emoji: "⏰", label: "Sin respuesta", Icon: PhoneOff, ia: false },
+  { id: "llamada" as TipoInteraccion,       emoji: "📞", label: "Llamada",        Icon: Phone,          ia: true  },
+  { id: "reunion" as TipoInteraccion,       emoji: "🤝", label: "Reunión",        Icon: Users,          ia: false },
+  { id: "whatsapp" as TipoInteraccion,      emoji: "💬", label: "WhatsApp",       Icon: MessageCircle,  ia: false },
+  { id: "email" as TipoInteraccion,         emoji: "📧", label: "Correo",         Icon: Mail,           ia: false },
+  { id: "linkedin" as TipoInteraccion,      emoji: "💼", label: "LinkedIn",       Icon: Briefcase,      ia: false },
+  { id: "sin_respuesta" as TipoInteraccion, emoji: "⏰", label: "Sin respuesta",  Icon: PhoneOff,       ia: false },
 ];
 
 interface Props {
@@ -51,6 +52,8 @@ export function NuevaInteraccionSheet({
   const [cargando, setCargando] = useState(false);
   const [mensajeCarga, setMensajeCarga] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fecha, setFecha] = useState<string>(() => new Date().toISOString().slice(0, 16));
+  const [resultado, setResultado] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reset() {
@@ -62,6 +65,8 @@ export function NuevaInteraccionSheet({
     setCargando(false);
     setMensajeCarga("");
     setError(null);
+    setFecha(new Date().toISOString().slice(0, 16));
+    setResultado("");
   }
 
   function cerrar() {
@@ -83,7 +88,12 @@ export function NuevaInteraccionSheet({
       const res = await fetch("/api/interacciones/crear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresa_id: empresaId, tipo: "sin_respuesta", contacto_id: contactoId || undefined }),
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          tipo: "sin_respuesta",
+          contacto_id: contactoId || undefined,
+          fecha: new Date(fecha).toISOString(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -99,7 +109,7 @@ export function NuevaInteraccionSheet({
 
   // ── Guardar texto sin análisis ───────────────────────────────
   async function guardarSinAnalizar() {
-    if (!texto.trim()) { setError("Pega el texto antes de guardar."); return; }
+    if (!texto.trim()) { setError("Escribe el resumen antes de guardar."); return; }
     setCargando(true);
     setError(null);
     try {
@@ -111,6 +121,8 @@ export function NuevaInteraccionSheet({
           tipo,
           texto: texto.trim(),
           contacto_id: contactoId || undefined,
+          fecha: new Date(fecha).toISOString(),
+          sentimiento: resultado || undefined,
         }),
       });
       const data = await res.json();
@@ -127,7 +139,7 @@ export function NuevaInteraccionSheet({
 
   // ── Guardar texto + analizar con Claude ──────────────────────
   async function guardarYAnalizar() {
-    if (!texto.trim()) { setError("Pega el texto antes de analizar."); return; }
+    if (!texto.trim()) { setError("Escribe el resumen antes de analizar."); return; }
     setCargando(true);
     setError(null);
     try {
@@ -139,6 +151,7 @@ export function NuevaInteraccionSheet({
           tipo,
           texto: texto.trim(),
           contacto_id: contactoId || undefined,
+          fecha: new Date(fecha).toISOString(),
         }),
       });
       const data = await res.json();
@@ -184,6 +197,7 @@ export function NuevaInteraccionSheet({
           texto: dataT.transcripcion,
           audio_url: dataT.audio_url,
           contacto_id: contactoId || undefined,
+          fecha: new Date(fecha).toISOString(),
         }),
       });
       const dataA = await resA.json();
@@ -272,6 +286,19 @@ export function NuevaInteraccionSheet({
             </DialogHeader>
 
             <div className="px-5 py-4 space-y-4">
+              {/* Fecha y hora */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  Fecha y hora
+                </label>
+                <input
+                  type="datetime-local"
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                  className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
               {/* Selector de contacto */}
               {contactos.length > 0 && (
                 <div>
@@ -321,7 +348,7 @@ export function NuevaInteraccionSheet({
                 </div>
               )}
 
-              {/* Sin respuesta: solo selector de contacto (ya arriba) */}
+              {/* Sin respuesta: solo info */}
               {tipo === "sin_respuesta" && (
                 <div className="bg-muted/40 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground leading-relaxed">
@@ -331,24 +358,56 @@ export function NuevaInteraccionSheet({
                 </div>
               )}
 
-              {/* Tipos texto: textarea */}
+              {/* Tipos texto: resumen libre */}
               {tipo !== "llamada" && tipo !== "sin_respuesta" && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
-                    Pega el texto de la conversación
+                    Resumen
                   </label>
                   <Textarea
                     value={texto}
                     onChange={(e) => setTexto(e.target.value)}
                     placeholder={
-                      tipo === "email"
-                        ? "Pega el correo (con el asunto si puedes)…"
+                      tipo === "reunion"
+                        ? "¿De qué se habló? ¿Qué acordaron?"
+                        : tipo === "email"
+                        ? "Pega el correo o escribe un resumen…"
                         : tipo === "whatsapp"
-                        ? "Pega la conversación de WhatsApp…"
-                        : "Pega el hilo de LinkedIn…"
+                        ? "Pega la conversación o escribe un resumen…"
+                        : "Pega el hilo o escribe un resumen…"
                     }
-                    className="min-h-[140px] text-sm rounded-xl resize-none"
+                    className="min-h-[120px] text-sm rounded-xl resize-none"
                   />
+                </div>
+              )}
+
+              {/* Resultado — solo para tipos texto (no llamada ni sin_respuesta) */}
+              {tipo !== "llamada" && tipo !== "sin_respuesta" && (
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                    Resultado (opcional)
+                  </label>
+                  <div className="flex gap-2">
+                    {(["positivo", "neutro", "negativo"] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setResultado(resultado === r ? "" : r)}
+                        className={[
+                          "flex-1 py-2 rounded-xl text-xs font-semibold border transition-all",
+                          resultado === r
+                            ? r === "positivo"
+                              ? "bg-green-100 border-green-400 text-green-700 dark:bg-green-900/30 dark:border-green-600 dark:text-green-400"
+                              : r === "negativo"
+                              ? "bg-red-100 border-red-400 text-red-700 dark:bg-red-900/30 dark:border-red-600 dark:text-red-400"
+                              : "bg-amber-100 border-amber-400 text-amber-700 dark:bg-amber-900/30 dark:border-amber-600 dark:text-amber-400"
+                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        {r === "positivo" ? "👍 Positivo" : r === "negativo" ? "👎 Negativo" : "😐 Neutro"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 

@@ -168,6 +168,7 @@ export type TipoInteraccion =
   | "email"
   | "linkedin"
   | "whatsapp"
+  | "reunion"
   | "sin_respuesta";
 
 export type SentimientoInteraccion =

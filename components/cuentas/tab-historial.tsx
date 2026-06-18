@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  Phone, Mail, MessageCircle, Briefcase, PhoneOff,
+  Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Trash2, ChevronDown, ChevronUp, Loader2, Plus, Zap,
   TrendingUp, Minus, Brain, AlertCircle, Clock,
   CheckCircle2, XCircle, AlertTriangle,
@@ -58,11 +58,12 @@ const DEFAULT_DOT = "#A78BFA";
 // ── Icono por tipo ────────────────────────────────────────────
 
 const TIPO_CONF: Record<string, { emoji: string; Icon: React.ElementType; label: string }> = {
-  llamada:      { emoji: "📞", Icon: Phone,        label: "Llamada" },
-  email:        { emoji: "📧", Icon: Mail,         label: "Correo" },
+  llamada:      { emoji: "📞", Icon: Phone,         label: "Llamada" },
+  email:        { emoji: "📧", Icon: Mail,          label: "Correo" },
   whatsapp:     { emoji: "💬", Icon: MessageCircle, label: "WhatsApp" },
-  linkedin:     { emoji: "💼", Icon: Briefcase,    label: "LinkedIn" },
-  sin_respuesta:{ emoji: "⏰", Icon: PhoneOff,     label: "Sin respuesta" },
+  linkedin:     { emoji: "💼", Icon: Briefcase,     label: "LinkedIn" },
+  reunion:      { emoji: "🤝", Icon: Users,         label: "Reunión" },
+  sin_respuesta:{ emoji: "⏰", Icon: PhoneOff,      label: "Sin respuesta" },
 };
 
 function fechaCorta(iso: string) {

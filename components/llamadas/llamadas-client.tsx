@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Phone, Mail, MessageCircle, Briefcase, PhoneOff,
+  Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   TrendingUp, Minus, Brain, AlertTriangle, CheckCircle2,
   Clock, XCircle, Loader2, RefreshCw,
 } from "lucide-react";
@@ -21,11 +21,12 @@ import type { InteraccionFeed } from "@/app/api/interacciones/feed/route";
 // ── Configuraciones ───────────────────────────────────────────
 
 const TIPO_CONF: Record<TipoInteraccion, { emoji: string; label: string; Icon: React.ElementType }> = {
-  llamada:       { emoji: "📞", label: "Llamada",     Icon: Phone },
-  email:         { emoji: "📧", label: "Correo",      Icon: Mail },
-  whatsapp:      { emoji: "💬", label: "WhatsApp",    Icon: MessageCircle },
-  linkedin:      { emoji: "💼", label: "LinkedIn",    Icon: Briefcase },
-  sin_respuesta: { emoji: "⏰", label: "Sin respuesta", Icon: PhoneOff },
+  llamada:       { emoji: "📞", label: "Llamada",        Icon: Phone },
+  email:         { emoji: "📧", label: "Correo",         Icon: Mail },
+  whatsapp:      { emoji: "💬", label: "WhatsApp",       Icon: MessageCircle },
+  linkedin:      { emoji: "💼", label: "LinkedIn",       Icon: Briefcase },
+  reunion:       { emoji: "🤝", label: "Reunión",        Icon: Users },
+  sin_respuesta: { emoji: "⏰", label: "Sin respuesta",  Icon: PhoneOff },
 };
 
 const BADGE_CONF: Record<BadgeEstado, { label: string; dot: string; bg: string; text: string; Icon: React.ElementType }> = {

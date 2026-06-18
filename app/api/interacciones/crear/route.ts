@@ -30,24 +30,31 @@ export async function POST(req: NextRequest) {
       tipo: TipoInteraccion;
       texto?: string;
       audio_url?: string;
+      fecha?: string;      // ISO string — si el usuario cambió la fecha/hora
+      sentimiento?: string; // resultado manual: positivo / neutro / negativo
     };
 
-    const { empresa_id, contacto_id, tipo, texto, audio_url } = body;
+    const { empresa_id, contacto_id, tipo, texto, audio_url, fecha, sentimiento } = body;
 
     if (!empresa_id || !tipo) {
       return NextResponse.json({ error: "empresa_id y tipo son requeridos" }, { status: 400 });
     }
 
+    const validSentimientos = ["positivo", "neutro", "negativo", "sin_respuesta"];
+    const sentimientoFinal = tipo === "sin_respuesta"
+      ? "sin_respuesta"
+      : (sentimiento && validSentimientos.includes(sentimiento) ? sentimiento as InteraccionInsert["sentimiento"] : null);
+
     const interaccionData: InteraccionInsert = {
       empresa_id,
       contacto_id: contacto_id ?? null,
       tipo,
-      fecha: new Date().toISOString(),
+      fecha: fecha ? new Date(fecha).toISOString() : new Date().toISOString(),
       audio_url: audio_url ?? null,
       transcripcion: texto?.trim() || null,
       resumen_ia: null,
       compromisos: null,
-      sentimiento: tipo === "sin_respuesta" ? "sin_respuesta" : null,
+      sentimiento: sentimientoFinal,
       tecnica_usada: null,
       coaching_ia: null,
       proximo_paso: tipo === "sin_respuesta" ? "Intentar contacto nuevamente" : null,

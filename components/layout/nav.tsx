@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Building2, Mic, BarChart2, Settings, DollarSign } from "lucide-react";
+import { Sun, Building2, BarChart2, Settings, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Secciones principales del copiloto
@@ -17,13 +17,7 @@ const navItems = [
     href: "/cuentas",
     label: "Cuentas",
     icon: Building2,
-    description: "Empresas y decisores",
-  },
-  {
-    href: "/llamadas",
-    label: "Interacciones",
-    icon: Mic,
-    description: "Registro de interacciones con IA",
+    description: "Empresas, decisores e interacciones",
   },
   {
     href: "/rendimiento",

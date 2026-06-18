@@ -40,6 +40,7 @@ const TIPO_LABEL: Record<TipoInteraccion, string> = {
   email: "Correo electrónico",
   linkedin: "Conversación de LinkedIn",
   whatsapp: "Conversación de WhatsApp",
+  reunion: "Reunión presencial o videollamada",
   sin_respuesta: "Sin respuesta",
 };
 
@@ -52,9 +53,10 @@ export async function POST(req: NextRequest) {
       texto?: string;
       audio_url?: string;
       asunto?: string; // para emails
+      fecha?: string;  // ISO string — si el usuario cambió la fecha/hora
     };
 
-    const { empresa_id, contacto_id, tipo, texto, audio_url, asunto } = body;
+    const { empresa_id, contacto_id, tipo, texto, audio_url, asunto, fecha } = body;
 
     if (!empresa_id || !tipo) {
       return NextResponse.json(
@@ -179,7 +181,7 @@ ${encabezadoEmail}${texto.trim()}
       empresa_id,
       contacto_id: contacto_id ?? null,
       tipo,
-      fecha: new Date().toISOString(),
+      fecha: fecha ? new Date(fecha).toISOString() : new Date().toISOString(),
       audio_url: audio_url ?? null,
       transcripcion: tipo === "llamada" ? texto : null,
       resumen_ia: resultado.resumen,
