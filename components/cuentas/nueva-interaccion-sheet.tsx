@@ -54,6 +54,7 @@ export function NuevaInteraccionSheet({
   const [error, setError] = useState<string | null>(null);
   const [fecha, setFecha] = useState<string>(() => new Date().toISOString().slice(0, 16));
   const [resultado, setResultado] = useState<string>("");
+  const [noContesto, setNoContesto] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reset() {
@@ -67,6 +68,7 @@ export function NuevaInteraccionSheet({
     setError(null);
     setFecha(new Date().toISOString().slice(0, 16));
     setResultado("");
+    setNoContesto(false);
   }
 
   function cerrar() {
@@ -166,6 +168,35 @@ export function NuevaInteraccionSheet({
       setTimeout(cerrar, 1200);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al analizar");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  // ── Llamada sin respuesta — sin audio, sin IA ───────────────
+  async function guardarNoContesto() {
+    setCargando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/interacciones/crear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          tipo: "llamada",
+          contacto_id: contactoId || undefined,
+          fecha: new Date(fecha).toISOString(),
+          texto: "Llamada sin respuesta",
+          sentimiento: "neutro",
+        }),
+      });
+      const data = await res.json() as { ok: boolean; interaccion: Interaccion; error?: string };
+      if (!res.ok) throw new Error(data.error);
+      onCreada(data.interaccion);
+      setFase("ok");
+      setTimeout(cerrar, 1200);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al registrar");
     } finally {
       setCargando(false);
     }
@@ -286,6 +317,32 @@ export function NuevaInteraccionSheet({
             </DialogHeader>
 
             <div className="px-5 py-4 space-y-4">
+              {/* Toggle "No contestó" — solo para llamadas, primer elemento visible */}
+              {tipo === "llamada" && (
+                <button
+                  type="button"
+                  onClick={() => setNoContesto(!noContesto)}
+                  className={[
+                    "w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all active:scale-[0.98]",
+                    noContesto
+                      ? "border-[#7C3AED] bg-[#7C3AED]/8"
+                      : "border-border hover:border-primary/40",
+                  ].join(" ")}
+                >
+                  <PhoneOff className={["w-4 h-4 shrink-0", noContesto ? "text-[#7C3AED]" : "text-muted-foreground"].join(" ")} />
+                  <div className="flex-1 text-left">
+                    <p className={["text-sm font-semibold", noContesto ? "text-[#7C3AED]" : "text-foreground"].join(" ")}>
+                      No contestó
+                    </p>
+                    <p className="text-xs text-muted-foreground">Registrar sin audio ni análisis</p>
+                  </div>
+                  {/* Toggle pill */}
+                  <div className={["w-10 h-6 rounded-full transition-colors relative shrink-0", noContesto ? "bg-[#7C3AED]" : "bg-muted"].join(" ")}>
+                    <div className={["absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all", noContesto ? "left-5" : "left-1"].join(" ")} />
+                  </div>
+                </button>
+              )}
+
               {/* Fecha y hora */}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
@@ -320,8 +377,8 @@ export function NuevaInteraccionSheet({
                 </div>
               )}
 
-              {/* Llamada: file upload */}
-              {tipo === "llamada" && (
+              {/* Llamada: file upload — se oculta cuando "No contestó" está activo */}
+              {tipo === "llamada" && !noContesto && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
                     Archivo de audio
@@ -420,7 +477,18 @@ export function NuevaInteraccionSheet({
 
               {/* Botones de acción */}
               <div className="flex gap-2 pt-1">
-                {tipo === "llamada" && (
+                {tipo === "llamada" && noContesto && (
+                  <Button
+                    className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-11 rounded-xl text-sm"
+                    onClick={guardarNoContesto}
+                    disabled={cargando}
+                  >
+                    {cargando ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+                    Registrar llamada
+                  </Button>
+                )}
+
+                {tipo === "llamada" && !noContesto && (
                   <Button
                     className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-11 rounded-xl text-sm"
                     onClick={subirYAnalizar}
