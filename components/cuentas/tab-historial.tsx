@@ -6,7 +6,7 @@
 // y análisis completo de la conversación.
 // =============================================================
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Trash2, ChevronDown, ChevronUp, Loader2, Plus, Zap,
