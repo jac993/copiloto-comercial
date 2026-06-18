@@ -1,28 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, UserPlus, User, CheckCircle, Trash2 } from "lucide-react";
+import { ExternalLink, UserPlus, User, CheckCircle, Trash2, Pencil, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
-import type { Contacto, DecisorIA } from "@/lib/types";
+import type { Contacto, DecisorIA, AreaContacto } from "@/lib/types";
 
-const AREA_LABEL: Record<string, string> = {
-  adquisiciones: "Adquisiciones",
-  compras: "Compras",
-  calidad: "Calidad",
-  operaciones: "Operaciones",
-  gerencia: "Gerencia",
-  otro: "Otro",
-};
+const AREA_OPCIONES: { value: AreaContacto; label: string }[] = [
+  { value: "calidad",       label: "Calidad" },
+  { value: "operaciones",   label: "Operaciones" },
+  { value: "adquisiciones", label: "Adquisiciones" },
+  { value: "compras",       label: "Compras" },
+  { value: "gerencia",      label: "Gerencia" },
+  { value: "otro",          label: "Otro" },
+];
+
+const AREA_LABEL: Record<string, string> = Object.fromEntries(
+  AREA_OPCIONES.map((o) => [o.value, o.label])
+);
 
 const AREA_COLOR: Record<string, string> = {
-  calidad: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  operaciones: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  calidad:       "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  operaciones:   "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   adquisiciones: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  compras: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  gerencia: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-  otro: "bg-muted text-muted-foreground",
+  compras:       "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  gerencia:      "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  otro:          "bg-muted text-muted-foreground",
 };
 
 const CONFIANZA_BADGE: Record<string, { label: string; cls: string }> = {
@@ -38,7 +42,6 @@ interface TabDecisoresProps {
 }
 
 export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisoresProps) {
-  // Estado local para gestionar persona_encontrada sin recargar la página
   const [decisoresLocales, setDecisoresLocales] = useState<DecisorIA[]>(decisoresIA);
 
   const eliminarPersonaDecisor = (index: number) => {
@@ -48,9 +51,7 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
   };
 
   const cargoRegistrado = new Set(contactos.map((c) => c.cargo));
-  const decisoresSugeridos = decisoresLocales.filter(
-    (d) => !cargoRegistrado.has(d.cargo)
-  );
+  const decisoresSugeridos = decisoresLocales.filter((d) => !cargoRegistrado.has(d.cargo));
 
   const personasIdentificadas = decisoresLocales.filter(
     (d) => d.persona_encontrada?.nombre != null
@@ -72,14 +73,13 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
         </div>
       )}
 
-      {/* Decisores sugeridos por IA (pendientes de encontrar) */}
+      {/* Decisores sugeridos por IA */}
       {decisoresSugeridos.length > 0 && (
         <div>
           <div className="flex items-center gap-1.5 mb-2 px-1">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               {contactos.length > 0 ? "Buscar también" : "Decisores clave"}
             </p>
-            {/* Contador de personas identificadas */}
             {personasIdentificadas > 0 && (
               <span className="text-xs text-[#7C3AED] font-semibold">
                 [{personasIdentificadas}/{decisoresLocales.length} identificados]
@@ -98,7 +98,6 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
                 decisor={decisor}
                 empresaId={empresaId}
                 onPersonaEliminada={() => {
-                  // Encontrar índice real en decisoresLocales (no en la lista filtrada)
                   const idxReal = decisoresLocales.findIndex((d) => d.cargo === decisor.cargo);
                   if (idxReal >= 0) eliminarPersonaDecisor(idxReal);
                 }}
@@ -119,14 +118,127 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
   );
 }
 
+// ── ContactoCard — muestra un contacto guardado, con edición inline ──────────
+
 function ContactoCard({ contacto }: { contacto: Contacto }) {
-  const areaColor = AREA_COLOR[contacto.area ?? "otro"] ?? AREA_COLOR.otro;
-  const iniciales = contacto.nombre
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+  const [datos, setDatos] = useState<Contacto>(contacto);
+  const [editando, setEditando] = useState(false);
+  const [form, setForm] = useState({
+    nombre:      datos.nombre,
+    cargo:       datos.cargo      ?? "",
+    area:        datos.area       ?? "",
+    email:       datos.email      ?? "",
+    telefono:    datos.telefono   ?? "",
+    linkedin_url: datos.linkedin_url ?? "",
+  });
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const areaColor = AREA_COLOR[datos.area ?? "otro"] ?? AREA_COLOR.otro;
+  const iniciales = datos.nombre
+    .split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+  const guardarEdicion = async () => {
+    if (!form.nombre.trim()) return;
+    setGuardando(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/contactos/${datos.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre:      form.nombre.trim(),
+          cargo:       form.cargo.trim()       || null,
+          area:        form.area               || null,
+          email:       form.email.trim()       || null,
+          telefono:    form.telefono.trim()    || null,
+          linkedin_url: form.linkedin_url.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar");
+      const actualizado = (await res.json()) as Contacto;
+      setDatos(actualizado);
+      setEditando(false);
+    } catch {
+      setError("Error al guardar. Intenta de nuevo.");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  if (editando) {
+    return (
+      <Card>
+        <CardContent className="pt-4 pb-4 space-y-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-semibold text-muted-foreground">Editar contacto</p>
+            <button
+              onClick={() => { setEditando(false); setError(null); }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Cancelar edición"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <input
+            type="text"
+            placeholder="Nombre completo *"
+            value={form.nombre}
+            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+            className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            autoFocus
+          />
+          <input
+            type="text"
+            placeholder="Cargo"
+            value={form.cargo}
+            onChange={(e) => setForm((f) => ({ ...f, cargo: e.target.value }))}
+            className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <select
+            value={form.area}
+            onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))}
+            className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">Área (opcional)</option>
+            {AREA_OPCIONES.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <input
+            type="email"
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <input
+            type="tel"
+            placeholder="Teléfono"
+            value={form.telefono}
+            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+            className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <input
+            type="url"
+            placeholder="URL de LinkedIn"
+            value={form.linkedin_url}
+            onChange={(e) => setForm((f) => ({ ...f, linkedin_url: e.target.value }))}
+            className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <Button
+            size="sm"
+            className="w-full bg-[#7C3AED] hover:bg-violet-700"
+            onClick={guardarEdicion}
+            disabled={!form.nombre.trim() || guardando}
+          >
+            {guardando ? "Guardando..." : "Guardar cambios"}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -136,47 +248,70 @@ function ContactoCard({ contacto }: { contacto: Contacto }) {
             {iniciales}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-semibold text-sm">{contacto.nombre}</p>
-              {contacto.es_decisor && (
-                <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                  Decisor
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">{contacto.cargo}</p>
-            {contacto.area && (
-              <span
-                className={`inline-block mt-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${areaColor}`}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold text-sm">{datos.nombre}</p>
+                  {datos.es_decisor && (
+                    <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                      Decisor
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">{datos.cargo}</p>
+                {datos.area && (
+                  <span className={`inline-block mt-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${areaColor}`}>
+                    {AREA_LABEL[datos.area]}
+                  </span>
+                )}
+              </div>
+              {/* Botón editar siempre visible */}
+              <button
+                onClick={() => setEditando(true)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-[#7C3AED] hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors shrink-0"
+                aria-label="Editar contacto"
               >
-                {AREA_LABEL[contacto.area]}
-              </span>
-            )}
-            {contacto.notas_ia && (
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {datos.notas_ia && (
               <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                {contacto.notas_ia.split("\n")[0]}
+                {datos.notas_ia.split("\n")[0]}
               </p>
             )}
           </div>
         </div>
 
-        {/* Acciones de contacto */}
-        <div className="flex gap-2 mt-3">
-          {contacto.telefono && (
-            <Button variant="outline" size="sm" className="flex-1 text-xs" asChild>
-              <a href={`tel:${contacto.telefono}`}>📞 {contacto.telefono}</a>
-            </Button>
-          )}
-          {contacto.email && (
-            <Button variant="outline" size="sm" className="flex-1 text-xs" asChild>
-              <a href={`mailto:${contacto.email}`}>✉️ Email</a>
-            </Button>
-          )}
-        </div>
+        {/* Acciones: teléfono, email, LinkedIn */}
+        {(datos.telefono || datos.email || datos.linkedin_url) && (
+          <div className="flex gap-2 mt-3 flex-wrap">
+            {datos.telefono && (
+              <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0" asChild>
+                <a href={`tel:${datos.telefono}`}>📞 {datos.telefono}</a>
+              </Button>
+            )}
+            {datos.email && (
+              <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0" asChild>
+                <a href={`mailto:${datos.email}`}>✉️ Email</a>
+              </Button>
+            )}
+            {datos.linkedin_url && (
+              <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0 gap-1" asChild>
+                <a href={datos.linkedin_url} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  LinkedIn
+                </a>
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
+
+// ── DecisorSugeridoCard — decisor de IA pendiente de encontrar ────────────────
 
 function DecisorSugeridoCard({
   decisor,
@@ -187,9 +322,10 @@ function DecisorSugeridoCard({
   empresaId: string;
   onPersonaEliminada: () => void;
 }) {
-  // Lista de contactos ya agregados para este cargo (permite múltiples)
   const [agregados, setAgregados] = useState<string[]>([]);
   const [nombre, setNombre] = useState("");
+  const [email, setEmail] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
   const [telefono, setTelefono] = useState("");
   const [mostrando, setMostrando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -206,17 +342,21 @@ function DecisorSugeridoCard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          empresa_id: empresaId,
-          nombre: nombre.trim(),
-          cargo: decisor.cargo,
-          area: decisor.area,
-          telefono: telefono.trim() || null,
-          es_decisor: true,
-          notas_ia: `${decisor.por_que_es_clave}\n\nDolor: ${decisor.dolor_especifico}`,
+          empresa_id:  empresaId,
+          nombre:      nombre.trim(),
+          cargo:       decisor.cargo,
+          area:        decisor.area,
+          telefono:    telefono.trim() || null,
+          email:       email.trim()    || null,
+          linkedin_url: linkedinUrl.trim() || null,
+          es_decisor:  true,
+          notas_ia:    `${decisor.por_que_es_clave}\n\nDolor: ${decisor.dolor_especifico}`,
         }),
       });
       setAgregados((prev) => [...prev, nombre.trim()]);
       setNombre("");
+      setEmail("");
+      setLinkedinUrl("");
       setTelefono("");
       setMostrando(false);
     } finally {
@@ -224,11 +364,8 @@ function DecisorSugeridoCard({
     }
   };
 
-  // Eliminar persona_encontrada: actualiza estado local y llama al API en background
   const eliminarPersona = async () => {
-    // 1. Actualizar estado local inmediatamente (optimistic update)
     onPersonaEliminada();
-    // 2. Llamar al API en background
     try {
       await fetch(`/api/empresas/${empresaId}/eliminar-contacto-encontrado`, {
         method: "POST",
@@ -243,7 +380,7 @@ function DecisorSugeridoCard({
   return (
     <Card className="border-dashed">
       <CardContent className="pt-4 pb-4">
-        {/* Encabezado: área badge + cargo */}
+        {/* Encabezado */}
         <div className="flex items-start gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -258,18 +395,12 @@ function DecisorSugeridoCard({
           </div>
         </div>
 
-        {/* Persona encontrada (si existe) */}
+        {/* Persona encontrada */}
         {tienePersona && persona ? (
           <div className="bg-violet-50 dark:bg-violet-900/10 rounded-lg p-3 mb-3 space-y-2">
             <div className="flex items-center gap-2.5">
-              {/* Avatar con iniciales */}
               <div className="h-9 w-9 rounded-full bg-[#7C3AED]/15 flex items-center justify-center text-xs font-bold text-[#7C3AED] shrink-0">
-                {(persona.nombre ?? "?")
-                  .split(" ")
-                  .slice(0, 2)
-                  .map((w) => w[0])
-                  .join("")
-                  .toUpperCase()}
+                {(persona.nombre ?? "?").split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{persona.nombre}</p>
@@ -280,7 +411,6 @@ function DecisorSugeridoCard({
                 )}
               </div>
             </div>
-            {/* LinkedIn si existe */}
             {persona.linkedin_url && (
               <a
                 href={persona.linkedin_url}
@@ -292,13 +422,11 @@ function DecisorSugeridoCard({
                 Ver perfil LinkedIn
               </a>
             )}
-            {/* Fuente */}
             {persona.fuente && (
               <p className="text-xs text-muted-foreground">Fuente: {persona.fuente}</p>
             )}
           </div>
         ) : (
-          /* Sin persona encontrada */
           <div className="flex items-center gap-2 mb-3 py-2 px-3 bg-muted/50 rounded-lg">
             <User className="h-4 w-4 text-muted-foreground shrink-0" />
             <p className="text-xs text-muted-foreground">
@@ -307,14 +435,11 @@ function DecisorSugeridoCard({
           </div>
         )}
 
-        {/* Contactos ya agregados para este cargo */}
+        {/* Contactos ya agregados */}
         {agregados.length > 0 && (
           <div className="mb-3 space-y-1.5">
             {agregados.map((n, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400"
-              >
+              <div key={i} className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
                 <CheckCircle className="h-3.5 w-3.5 shrink-0" />
                 <span>{n} agregado</span>
               </div>
@@ -322,18 +447,11 @@ function DecisorSugeridoCard({
           </div>
         )}
 
-        {/* Separador */}
         <div className="border-t border-dashed border-border mb-3" />
 
         {/* Acciones */}
         <div className="flex gap-2">
-          {/* Buscar en LinkedIn */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1 text-xs gap-1"
-            asChild
-          >
+          <Button variant="outline" size="sm" className="flex-1 text-xs gap-1" asChild>
             <a
               href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(decisor.query_linkedin)}`}
               target="_blank"
@@ -343,8 +461,6 @@ function DecisorSugeridoCard({
               Buscar en LinkedIn
             </a>
           </Button>
-
-          {/* Eliminar persona (solo si hay persona) */}
           {tienePersona && (
             <Button
               variant="outline"
@@ -368,12 +484,12 @@ function DecisorSugeridoCard({
           {agregados.length > 0 ? "+ Agregar otro" : "Agregar manualmente"}
         </Button>
 
-        {/* Mini-form para agregar — solo nombre + teléfono */}
+        {/* Mini-form con email y LinkedIn */}
         {mostrando && (
           <div className="mt-3 space-y-2 border-t border-border pt-3">
             <input
               type="text"
-              placeholder="Nombre completo"
+              placeholder="Nombre completo *"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -386,9 +502,23 @@ function DecisorSugeridoCard({
               onChange={(e) => setTelefono(e.target.value)}
               className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
+            <input
+              type="email"
+              placeholder="Email (opcional)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <input
+              type="url"
+              placeholder="URL de LinkedIn (opcional)"
+              value={linkedinUrl}
+              onChange={(e) => setLinkedinUrl(e.target.value)}
+              className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
             <Button
               size="sm"
-              className="w-full"
+              className="w-full bg-[#7C3AED] hover:bg-violet-700"
               onClick={guardar}
               disabled={!nombre.trim() || guardando}
             >

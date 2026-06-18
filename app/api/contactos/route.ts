@@ -37,6 +37,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const { linkedin_url } = body;
+
     const contacto: ContactoInsert = {
       empresa_id,
       nombre,
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
       area: typeof area === "string" ? area as AreaContacto : null,
       telefono: typeof telefono === "string" ? telefono : null,
       email: typeof email === "string" ? email : null,
-      linkedin_url: null,
+      linkedin_url: typeof linkedin_url === "string" ? linkedin_url : null,
       notas_ia: typeof notas_ia === "string" ? notas_ia : null,
       es_decisor: typeof es_decisor === "boolean" ? es_decisor : false,
     };
