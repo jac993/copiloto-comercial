@@ -318,6 +318,17 @@ export interface Interaccion {
 export type InteraccionInsert = Omit<Interaccion, "id" | "creado_en" | "actualizado_en">;
 export type InteraccionUpdate = Partial<InteraccionInsert>;
 
+// Interacción cuyo plazo de respuesta de 48h ya venció — usada por la API /vencidas
+export interface InteraccionVencida {
+  id: string;
+  empresa_id: string;
+  empresa_nombre: string;
+  tipo: Extract<TipoInteraccion, "whatsapp" | "email" | "linkedin">;
+  fecha: string;
+  transcripcion: string | null;
+  contacto_id: string | null;
+}
+
 // ─── TABLA: senales ──────────────────────────────────────────
 
 export interface Senal {

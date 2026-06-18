@@ -2,8 +2,26 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Building2, BarChart2, Settings, DollarSign } from "lucide-react";
+import { Sun, Building2, BarChart2, Settings, DollarSign, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
+
+// Carga el conteo de interacciones vencidas sin respuesta (sin bloquear el render)
+function useBadgeVencidas() {
+  const [total, setTotal] = useState(0);
+  useEffect(() => {
+    function fetch_() {
+      fetch("/api/interacciones/vencidas")
+        .then((r) => r.json())
+        .then((d: { total?: number }) => setTotal(d.total ?? 0))
+        .catch(() => {/* silent */});
+    }
+    fetch_();
+    const id = setInterval(fetch_, 5 * 60 * 1000); // refresca cada 5 min
+    return () => clearInterval(id);
+  }, []);
+  return total;
+}
 
 // Secciones principales del copiloto
 const navItems = [
@@ -42,49 +60,61 @@ const navItems = [
 // Navegación inferior para móvil
 export function BottomNav() {
   const pathname = usePathname();
+  const alertas = useBadgeVencidas();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-sm md:hidden">
-      <div className="flex h-16 items-stretch">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+    <>
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-sm md:hidden">
+        <div className="flex h-16 items-stretch">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium transition-colors",
-                isActive
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Icon
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
                 className={cn(
-                  "h-5 w-5 transition-all",
-                  isActive && "scale-110"
+                  "flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium transition-colors",
+                  isActive
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
-                strokeWidth={isActive ? 2.5 : 1.8}
-              />
-              <span>{item.label}</span>
-              {/* Indicador de sección activa */}
-              {isActive && (
-                <span className="absolute bottom-0 h-0.5 w-8 rounded-full bg-primary" />
-              )}
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+              >
+                <Icon
+                  className={cn("h-5 w-5 transition-all", isActive && "scale-110")}
+                  strokeWidth={isActive ? 2.5 : 1.8}
+                />
+                <span>{item.label}</span>
+                {isActive && (
+                  <span className="absolute bottom-0 h-0.5 w-8 rounded-full bg-primary" />
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* Badge flotante de alertas — aparece solo cuando hay vencidas */}
+      {alertas > 0 && (
+        <Link
+          href="/alertas"
+          className="fixed bottom-[72px] right-3 z-50 md:hidden flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-lg transition-colors animate-bounce"
+          style={{ animationDuration: "2s" }}
+        >
+          <Bell className="h-3 w-3" />
+          {alertas}
+        </Link>
+      )}
+    </>
   );
 }
 
 // Sidebar izquierdo para desktop
 export function Sidebar() {
   const pathname = usePathname();
+  const alertas = useBadgeVencidas();
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:left-0 md:z-50 border-r border-border bg-background">
@@ -122,6 +152,29 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Alertas — solo visible cuando hay interacciones vencidas */}
+        {alertas > 0 && (
+          <Link
+            href="/alertas"
+            className={cn(
+              "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all mt-1",
+              pathname.startsWith("/alertas")
+                ? "bg-red-500 text-white shadow-sm"
+                : "bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+            )}
+          >
+            <div className="relative">
+              <Bell className="h-5 w-5 shrink-0" />
+            </div>
+            <div className="flex items-center justify-between flex-1">
+              <span>Alertas</span>
+              <span className="text-xs font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                {alertas}
+              </span>
+            </div>
+          </Link>
+        )}
       </nav>
 
       {/* Footer del sidebar */}

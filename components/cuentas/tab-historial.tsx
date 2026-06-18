@@ -6,14 +6,15 @@
 // y análisis completo de la conversación.
 // =============================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Trash2, ChevronDown, ChevronUp, Loader2, Plus, Zap,
   TrendingUp, Minus, Brain, AlertCircle, Clock,
-  CheckCircle2, XCircle, AlertTriangle,
+  CheckCircle2, XCircle, AlertTriangle, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { NuevaInteraccionSheet } from "@/components/cuentas/nueva-interaccion-sheet";
-import type { Interaccion, BadgeEstado, AnalisisConversacion, CorreoDetectado, Contacto } from "@/lib/types";
+import type { Interaccion, BadgeEstado, AnalisisConversacion, CorreoDetectado, Contacto, TipoInteraccion, SentimientoInteraccion } from "@/lib/types";
 
 // ── Configuración visual de badges ───────────────────────────
 
@@ -83,6 +84,39 @@ function fechaCorta(iso: string) {
   });
 }
 
+// ── Countdown 48h ─────────────────────────────────────────────
+
+const TIPOS_COUNTDOWN: TipoInteraccion[] = ["whatsapp", "email", "linkedin"];
+
+type EstadoCountdown = "verde" | "amarillo" | "naranja" | "vencida";
+
+function calcCountdown(fechaIso: string, now: number): { estado: EstadoCountdown; texto: string } | null {
+  const ms = now - new Date(fechaIso).getTime();
+  const limite = 48 * 60 * 60 * 1000;
+  const restante = limite - ms;
+
+  if (ms < 0) return null; // fecha en el futuro
+  if (restante > 8 * 60 * 60 * 1000) {
+    // más de 8h hasta vencer — amarillo
+    const h = Math.floor(restante / (60 * 60 * 1000));
+    return { estado: "amarillo", texto: `${h}h para responder` };
+  }
+  if (restante > 0) {
+    // menos de 8h — naranja parpadeante
+    const h = Math.floor(restante / (60 * 60 * 1000));
+    const m = Math.floor((restante % (60 * 60 * 1000)) / (60 * 1000));
+    return { estado: "naranja", texto: `${h}h ${m}m restante` };
+  }
+  return { estado: "vencida", texto: "⚠️ Sin respuesta" };
+}
+
+const COUNTDOWN_STYLE: Record<EstadoCountdown, string> = {
+  verde:   "",
+  amarillo: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
+  naranja:  "bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400 animate-pulse",
+  vencida:  "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400",
+};
+
 // ── Props ─────────────────────────────────────────────────────
 
 interface TabHistorialProps {
@@ -103,6 +137,15 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
   const [analisisTodo, setAnalisisTodo] = useState<AnalisisConversacion | null>(null);
   const [errorTodo, setErrorTodo] = useState<string | null>(null);
   const [correos, setCorreos] = useState<CorreoDetectado[]>([]);
+  const [editando, setEditando] = useState<Interaccion | null>(null);
+  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
+  const [now, setNow] = useState(() => Date.now());
+
+  // Actualiza "ahora" cada minuto para refrescar los countdowns
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     fetch(`/api/correos/${empresaId}`)
@@ -153,6 +196,43 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
     } finally {
       setAnalizandoTodo(false);
     }
+  }
+
+  // ── Guardar edición ─────────────────────────────────────────
+  async function guardarEdicion(
+    id: string,
+    campos: { tipo: TipoInteraccion; contacto_id: string | null; fecha: string; texto: string; sentimiento: string }
+  ) {
+    const res = await fetch(`/api/interacciones/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(campos),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Error al guardar");
+    setLista((prev) => prev.map((i) => i.id === id ? { ...i, ...data.interaccion } : i));
+    setEditando(null);
+  }
+
+  // ── Resolver vencida desde la tarjeta ───────────────────────
+  async function resolverVencida(
+    interaccion: Interaccion,
+    resumen: string,
+    sentimiento: SentimientoInteraccion
+  ) {
+    await fetch("/api/interacciones/crear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        empresa_id: interaccion.empresa_id,
+        tipo: interaccion.tipo,
+        contacto_id: interaccion.contacto_id ?? undefined,
+        texto: resumen,
+        sentimiento,
+        fecha: new Date().toISOString(),
+      }),
+    });
+    setResolvedIds((prev) => new Set(Array.from(prev).concat(interaccion.id)));
   }
 
   // ── Nueva interacción guardada ───────────────────────────────
@@ -224,8 +304,12 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
               interaccion={interaccion}
               eliminando={eliminandoId === interaccion.id}
               analizando={analizandoId === interaccion.id}
+              resolved={resolvedIds.has(interaccion.id)}
+              now={now}
               onEliminar={() => setConfirmandoId(interaccion.id)}
               onAnalizar={() => analizarExistente(interaccion.id)}
+              onEditar={() => setEditando(interaccion)}
+              onResolver={(resumen, sent) => resolverVencida(interaccion, resumen, sent)}
             />
           ))}
         </div>
@@ -268,6 +352,16 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         </DialogContent>
       </Dialog>
 
+      {/* Modal de edición */}
+      {editando && (
+        <EditarInteraccionModal
+          interaccion={editando}
+          contactos={contactos}
+          onCerrar={() => setEditando(null)}
+          onGuardar={guardarEdicion}
+        />
+      )}
+
       {/* Panel nueva interacción */}
       <NuevaInteraccionSheet
         abierto={sheetAbierto}
@@ -298,16 +392,25 @@ function EntradaTimeline({
   interaccion,
   eliminando,
   analizando,
+  resolved,
+  now,
   onEliminar,
   onAnalizar,
+  onEditar,
+  onResolver,
 }: {
   interaccion: Interaccion;
   eliminando: boolean;
   analizando: boolean;
+  resolved: boolean;
+  now: number;
   onEliminar: () => void;
   onAnalizar: () => void;
+  onEditar: () => void;
+  onResolver: (resumen: string, sent: SentimientoInteraccion) => Promise<void>;
 }) {
   const [expandido, setExpandido] = useState(false);
+  const [resolviendoId, setResolviendoId] = useState<string | null>(null);
 
   const badgeConf = interaccion.badge_estado ? BADGE_CONF[interaccion.badge_estado] : null;
   const tipoConf = TIPO_CONF[interaccion.tipo] ?? TIPO_CONF.llamada;
@@ -325,6 +428,18 @@ function EntradaTimeline({
     ? (SENTIMIENTO_BADGE[interaccion.sentimiento] ?? null)
     : null;
 
+  // Countdown 48h para whatsapp/email/linkedin
+  const countdown = !resolved && TIPOS_COUNTDOWN.includes(interaccion.tipo as TipoInteraccion)
+    ? calcCountdown(interaccion.fecha, now)
+    : null;
+  const estaVencida = countdown?.estado === "vencida";
+
+  async function handleResolver(resumen: string, sent: SentimientoInteraccion) {
+    setResolviendoId(sent);
+    try { await onResolver(resumen, sent); }
+    finally { setResolviendoId(null); }
+  }
+
   return (
     <div
       className={`relative pl-7 transition-opacity ${eliminando ? "opacity-40 pointer-events-none" : ""}`}
@@ -339,7 +454,7 @@ function EntradaTimeline({
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="px-4 pt-3.5 pb-3">
 
-          {/* Fila 1: tipo + badge resultado */}
+          {/* Fila 1: tipo + badges */}
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-foreground">
@@ -349,11 +464,20 @@ function EntradaTimeline({
                 {fechaCorta(interaccion.fecha)}
               </p>
             </div>
-            {sentimientoConf && (
-              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0 mt-0.5 ${sentimientoConf.className}`}>
-                {sentimientoConf.label}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+              {/* Badge countdown */}
+              {countdown && (
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${COUNTDOWN_STYLE[countdown.estado]}`}>
+                  {countdown.texto}
+                </span>
+              )}
+              {/* Badge sentimiento manual */}
+              {sentimientoConf && !estaVencida && (
+                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${sentimientoConf.className}`}>
+                  {sentimientoConf.label}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Resumen — resumen_ia o transcripcion como fallback, siempre truncado */}
@@ -379,7 +503,37 @@ function EntradaTimeline({
             </div>
           )}
 
-          {/* Fila de acciones: analizar/ver análisis + eliminar */}
+          {/* Botones de resolución cuando está vencida */}
+          {estaVencida && !resolved && (
+            <div className="mt-3 pt-2.5 border-t border-border/50">
+              <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2">¿Hubo respuesta?</p>
+              <div className="flex gap-2">
+                <button
+                  disabled={!!resolviendoId}
+                  onClick={() => handleResolver("Respondió al contacto", "positivo")}
+                  className="flex-1 h-9 text-xs font-semibold rounded-xl bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 transition-colors disabled:opacity-50"
+                >
+                  {resolviendoId === "positivo" ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "✅ Sí contestó"}
+                </button>
+                <button
+                  disabled={!!resolviendoId}
+                  onClick={() => handleResolver("Vio el mensaje pero no respondió", "negativo")}
+                  className="flex-1 h-9 text-xs font-semibold rounded-xl bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-400 transition-colors disabled:opacity-50"
+                >
+                  {resolviendoId === "negativo" ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "👁️ Lo vio"}
+                </button>
+                <button
+                  disabled={!!resolviendoId}
+                  onClick={() => handleResolver("Sin respuesta tras 48h", "negativo")}
+                  className="flex-1 h-9 text-xs font-semibold rounded-xl bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-900/20 dark:border-gray-700 dark:text-gray-400 transition-colors disabled:opacity-50"
+                >
+                  {resolviendoId ? null : "❌ No contestó"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Fila de acciones: analizar/ver análisis + lápiz + eliminar */}
           <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between">
             {analizado ? (
               <button
@@ -404,13 +558,22 @@ function EntradaTimeline({
                 {analizando ? "Analizando…" : "⚡ Analizar ahora"}
               </button>
             )}
-            <button
-              onClick={onEliminar}
-              className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
-              aria-label="Eliminar"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-destructive/60 hover:text-destructive" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onEditar}
+                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-muted transition-colors"
+                aria-label="Editar"
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </button>
+              <button
+                onClick={onEliminar}
+                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
+                aria-label="Eliminar"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-destructive/60 hover:text-destructive" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -455,6 +618,177 @@ function EntradaTimeline({
         )}
       </div>
     </div>
+  );
+}
+
+// ── Modal editar interacción ──────────────────────────────────
+
+const TIPOS_EDITABLES: { value: TipoInteraccion; label: string; emoji: string }[] = [
+  { value: "llamada",       label: "Llamada",       emoji: "📞" },
+  { value: "reunion",       label: "Reunión",       emoji: "🤝" },
+  { value: "whatsapp",      label: "WhatsApp",      emoji: "💬" },
+  { value: "email",         label: "Correo",        emoji: "📧" },
+  { value: "linkedin",      label: "LinkedIn",      emoji: "💼" },
+  { value: "sin_respuesta", label: "Sin respuesta", emoji: "⏰" },
+];
+
+function EditarInteraccionModal({
+  interaccion,
+  contactos,
+  onCerrar,
+  onGuardar,
+}: {
+  interaccion: Interaccion;
+  contactos: Contacto[];
+  onCerrar: () => void;
+  onGuardar: (id: string, campos: { tipo: TipoInteraccion; contacto_id: string | null; fecha: string; texto: string; sentimiento: string }) => Promise<void>;
+}) {
+  const [tipo, setTipo] = useState<TipoInteraccion>(interaccion.tipo as TipoInteraccion);
+  const [contactoId, setContactoId] = useState<string>(interaccion.contacto_id ?? "");
+  const [fecha, setFecha] = useState<string>(
+    new Date(interaccion.fecha).toISOString().slice(0, 16)
+  );
+  const [texto, setTexto] = useState<string>(
+    interaccion.transcripcion ?? ""
+  );
+  const [sentimiento, setSentimiento] = useState<string>(
+    interaccion.sentimiento && interaccion.sentimiento !== "sin_respuesta"
+      ? interaccion.sentimiento
+      : ""
+  );
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGuardar() {
+    setGuardando(true);
+    setError(null);
+    try {
+      await onGuardar(interaccion.id, {
+        tipo,
+        contacto_id: contactoId || null,
+        fecha,
+        texto,
+        sentimiento,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onCerrar(); }}>
+      <DialogContent className="max-w-md rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-base font-extrabold">Editar interacción</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-1">
+          {/* Canal */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Canal</p>
+            <div className="flex flex-wrap gap-2">
+              {TIPOS_EDITABLES.map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => setTipo(t.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                    tipo === t.value
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {t.emoji} {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Contacto */}
+          {contactos.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1.5">Contacto</p>
+              <select
+                value={contactoId}
+                onChange={(e) => setContactoId(e.target.value)}
+                className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">Sin contacto específico</option>
+                {contactos.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre} {c.cargo ? `· ${c.cargo}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Fecha */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Fecha y hora</p>
+            <input
+              type="datetime-local"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          {/* Resumen */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Resumen</p>
+            <Textarea
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder="Resumen de la interacción..."
+              rows={3}
+              className="text-sm rounded-xl resize-none"
+            />
+          </div>
+
+          {/* Resultado */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Resultado</p>
+            <div className="flex gap-2">
+              {(["positivo", "neutro", "negativo"] as const).map((s) => {
+                const conf = {
+                  positivo: { label: "Positivo", active: "bg-green-500 text-white border-green-500", idle: "border-green-200 text-green-700 hover:bg-green-50" },
+                  neutro:   { label: "Neutro",   active: "bg-gray-500 text-white border-gray-500",  idle: "border-gray-200 text-gray-600 hover:bg-gray-50" },
+                  negativo: { label: "Negativo", active: "bg-red-500 text-white border-red-500",    idle: "border-red-200 text-red-700 hover:bg-red-50" },
+                }[s];
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setSentimiento(sentimiento === s ? "" : s)}
+                    className={`flex-1 h-9 rounded-xl text-xs font-semibold border transition-all ${
+                      sentimiento === s ? conf.active : conf.idle
+                    }`}
+                  >
+                    {conf.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-xs text-destructive flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
+            </p>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={onCerrar}>
+              Cancelar
+            </Button>
+            <Button className="flex-1 rounded-xl" disabled={guardando} onClick={handleGuardar}>
+              {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar cambios"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
