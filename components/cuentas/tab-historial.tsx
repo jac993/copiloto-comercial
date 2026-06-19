@@ -6,7 +6,7 @@
 // y análisis completo de la conversación.
 // =============================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Trash2, ChevronDown, ChevronUp, Loader2, Plus, Zap,
@@ -88,6 +88,13 @@ function fechaCorta(iso: string) {
 
 const TIPOS_COUNTDOWN: TipoInteraccion[] = ["whatsapp", "email", "linkedin"];
 
+// Textos fijos que identifican una interacción de resolución (creada por los botones "¿Hubo respuesta?")
+const TEXTOS_RESOLUCION = new Set([
+  "Respondió al contacto",
+  "Vio el mensaje pero no respondió",
+  "Sin respuesta tras 48h",
+]);
+
 type EstadoCountdown = "verde" | "amarillo" | "naranja" | "vencida";
 
 function calcCountdown(fechaIso: string, now: number): { estado: EstadoCountdown; texto: string } | null {
@@ -138,8 +145,28 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
   const [errorTodo, setErrorTodo] = useState<string | null>(null);
   const [correos, setCorreos] = useState<CorreoDetectado[]>([]);
   const [editando, setEditando] = useState<Interaccion | null>(null);
-  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [now, setNow] = useState(() => Date.now());
+
+  // Derivado de lista: una interacción countdown está "resuelta" si existe una interacción
+  // posterior del mismo tipo con uno de los textos de resolución en transcripcion.
+  // No necesita estado separado — se recalcula cuando lista cambia, incluso tras recarga.
+  const resolvedIds = useMemo(() => {
+    const resueltas = new Set<string>();
+    for (const i of lista) {
+      if (!TIPOS_COUNTDOWN.includes(i.tipo as TipoInteraccion)) continue;
+      if (TEXTOS_RESOLUCION.has(i.transcripcion ?? "")) continue; // es resolución, no original
+      const tieneResolucion = lista.some(
+        (j) =>
+          j.id !== i.id &&
+          j.tipo === i.tipo &&
+          j.empresa_id === i.empresa_id &&
+          new Date(j.fecha).getTime() > new Date(i.fecha).getTime() &&
+          TEXTOS_RESOLUCION.has(j.transcripcion ?? "")
+      );
+      if (tieneResolucion) resueltas.add(i.id);
+    }
+    return resueltas;
+  }, [lista]);
 
   // Actualiza "ahora" cada minuto para refrescar los countdowns
   useEffect(() => {
@@ -215,12 +242,14 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
   }
 
   // ── Resolver vencida desde la tarjeta ───────────────────────
+  // Agrega la interacción de resolución a lista para que el useMemo
+  // detecte el original como resuelto sin necesitar estado adicional.
   async function resolverVencida(
     interaccion: Interaccion,
     resumen: string,
     sentimiento: SentimientoInteraccion
   ) {
-    await fetch("/api/interacciones/crear", {
+    const res = await fetch("/api/interacciones/crear", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -232,7 +261,10 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         fecha: new Date().toISOString(),
       }),
     });
-    setResolvedIds((prev) => new Set(Array.from(prev).concat(interaccion.id)));
+    const data = await res.json() as { ok: boolean; interaccion?: Interaccion; error?: string };
+    if (!data.ok) throw new Error(data.error ?? "Error al registrar respuesta");
+    const nueva = data.interaccion;
+    if (nueva) setLista((prev) => [nueva, ...prev]);
   }
 
   // ── Nueva interacción guardada ───────────────────────────────
@@ -428,8 +460,12 @@ function EntradaTimeline({
     ? (SENTIMIENTO_BADGE[interaccion.sentimiento] ?? null)
     : null;
 
-  // Countdown 48h para whatsapp/email/linkedin
-  const countdown = !resolved && TIPOS_COUNTDOWN.includes(interaccion.tipo as TipoInteraccion)
+  // Las interacciones de resolución ("Respondió al contacto", etc.) no necesitan
+  // su propia cuenta regresiva — son el resultado de resolver otra interacción.
+  const esResolucion = TEXTOS_RESOLUCION.has(interaccion.transcripcion ?? "");
+
+  // Countdown 48h para whatsapp/email/linkedin (excluyendo resoluciones)
+  const countdown = !resolved && !esResolucion && TIPOS_COUNTDOWN.includes(interaccion.tipo as TipoInteraccion)
     ? calcCountdown(interaccion.fecha, now)
     : null;
   const estaVencida = countdown?.estado === "vencida";

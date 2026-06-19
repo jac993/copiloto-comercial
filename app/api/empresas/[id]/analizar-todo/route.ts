@@ -64,26 +64,74 @@ export async function POST(
       );
     }
 
-    // Construir el hilo cronológico completo
-    const hiloCompleto = interacciones
-      .map((i, idx) => {
-        const fecha = new Date(i.fecha).toLocaleDateString("es-CL", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
+    // Textos que marcan que el prospecto respondió (o no), guardados en transcripcion
+    const TEXTOS_RESOLUCION = new Set([
+      "Respondió al contacto",
+      "Vio el mensaje pero no respondió",
+      "Sin respuesta tras 48h",
+    ]);
+    const TIPOS_COUNTDOWN = new Set(["whatsapp", "email", "linkedin"]);
+
+    // Construir el hilo cronológico completo, agrupando respuestas del prospecto
+    const usados = new Set<string>();
+    const entradas: string[] = [];
+    let entradaIdx = 0;
+
+    for (let idx = 0; idx < interacciones.length; idx++) {
+      const i = interacciones[idx];
+      if (usados.has(i.id)) continue;
+
+      // Las resoluciones se emiten junto a su original, no solas
+      if (TEXTOS_RESOLUCION.has(i.transcripcion ?? "")) {
+        usados.add(i.id);
+        continue;
+      }
+
+      entradaIdx++;
+      const fecha = new Date(i.fecha).toLocaleDateString("es-CL", {
+        day: "numeric", month: "short", year: "numeric",
+      });
+      const tipo = TIPO_LABEL[i.tipo] ?? i.tipo;
+      const resumen = i.resumen_ia ?? i.transcripcion?.trim() ?? "(sin contenido registrado)";
+      const badge = i.badge_estado ? ` | Diagnóstico IA: ${i.badge_estado}` : "";
+      const proximo = i.proximo_paso ? ` | Próximo paso: ${i.proximo_paso}` : "";
+
+      // Buscar resolución posterior del mismo canal
+      let resolucionInfo: Interaccion | null = null;
+      if (TIPOS_COUNTDOWN.has(i.tipo)) {
+        for (let j = idx + 1; j < interacciones.length; j++) {
+          const j2 = interacciones[j];
+          if (usados.has(j2.id)) continue;
+          if (j2.tipo === i.tipo && TEXTOS_RESOLUCION.has(j2.transcripcion ?? "")) {
+            resolucionInfo = j2;
+            usados.add(j2.id);
+            break;
+          }
+        }
+      }
+
+      if (resolucionInfo) {
+        const fechaResp = new Date(resolucionInfo.fecha).toLocaleDateString("es-CL", {
+          day: "numeric", month: "short", year: "numeric",
         });
-        const tipo = TIPO_LABEL[i.tipo] ?? i.tipo;
-        const contenido = i.transcripcion?.trim()
-          || i.resumen_ia
-          || "(sin contenido registrado)";
-
+        const sentLabel =
+          resolucionInfo.sentimiento === "positivo" ? "positivo"
+          : resolucionInfo.sentimiento === "negativo" ? "negativo"
+          : "neutro";
+        entradas.push(
+          `INTERACCIÓN ${entradaIdx} — ${tipo} (${fecha})${badge}${proximo}\n` +
+          `Vendedor: "${resumen}"\n` +
+          `[${fechaResp}] Respuesta del prospecto: "${resolucionInfo.transcripcion ?? ""}" → Resultado: ${sentLabel}`
+        );
+      } else {
         const resultado = i.sentimiento ? ` | Resultado: ${SENTIMIENTO_LABEL[i.sentimiento] ?? i.sentimiento}` : "";
-        const badge = i.badge_estado ? ` | Diagnóstico IA: ${i.badge_estado}` : "";
-        const proximo = i.proximo_paso ? ` | Próximo paso: ${i.proximo_paso}` : "";
+        entradas.push(
+          `INTERACCIÓN ${entradaIdx} — ${tipo} (${fecha})${resultado}${badge}${proximo}\n${resumen}`
+        );
+      }
+    }
 
-        return `INTERACCIÓN ${idx + 1} — ${tipo} (${fecha})${resultado}${badge}${proximo}\n${contenido}`;
-      })
-      .join("\n\n---\n\n");
+    const hiloCompleto = entradas.join("\n\n---\n\n");
 
     const mensajeAnalisis = `
 EMPRESA: ${empresa.nombre}

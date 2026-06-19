@@ -577,28 +577,90 @@ export async function buscarEmpresas(query: string): Promise<Empresa[]> {
   return data ?? [];
 }
 
-// Devuelve las últimas 5 interacciones como texto compacto para inyectar en el prompt.
-// Evita mandar el JSON completo de cada interacción para no inflar el contexto de Claude.
+// Devuelve las últimas interacciones como hilo vendedor/prospecto para inyectar en el prompt.
+// Si hay una interacción de resolución posterior (ej: "Respondió al contacto"), la agrupa
+// con su original para que Claude vea la respuesta del prospecto en contexto.
+const TEXTOS_RESOLUCION_HISTORIAL = new Set([
+  "Respondió al contacto",
+  "Vio el mensaje pero no respondió",
+  "Sin respuesta tras 48h",
+]);
+const TIPOS_COUNTDOWN_HISTORIAL = new Set(["whatsapp", "email", "linkedin"]);
+
 export async function getHistorialResumido(empresaId: string): Promise<string> {
   const { data, error } = await getSupabase()
     .from("interacciones")
-    .select("tipo, fecha, resumen_ia, sentimiento, proximo_paso")
+    .select("tipo, fecha, resumen_ia, transcripcion, sentimiento, proximo_paso")
     .eq("empresa_id", empresaId)
     .order("fecha", { ascending: false })
-    .limit(5);
+    .limit(12); // más registros para poder parear original+resolución
 
   if (error) throw new Error(`getHistorialResumido: ${error.message}`);
   if (!data || data.length === 0) return "Sin interacciones previas registradas.";
 
-  return data
-    .map((i, idx) => {
-      const fecha = new Date(i.fecha).toLocaleDateString("es-CL");
-      const tipo = i.tipo ?? "interacción";
-      const resumen = i.resumen_ia ?? "Sin resumen";
-      const sentimiento = i.sentimiento ? ` | Sentimiento: ${i.sentimiento}` : "";
-      const proximo = i.proximo_paso ? ` | Próximo paso: ${i.proximo_paso}` : "";
-      return `${idx + 1}. [${fecha}] ${tipo}: ${resumen}${sentimiento}${proximo}`;
-    })
+  // Ordenar cronológicamente para detectar pares
+  const sorted = [...data].sort(
+    (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+  );
+
+  const lines: string[] = [];
+  const usados = new Set<number>();
+
+  for (let idx = 0; idx < sorted.length; idx++) {
+    if (usados.has(idx)) continue;
+
+    const item = sorted[idx];
+
+    // Las resoluciones se muestran junto a su original, no solas
+    if (TEXTOS_RESOLUCION_HISTORIAL.has(item.transcripcion ?? "")) {
+      usados.add(idx);
+      continue;
+    }
+
+    const fecha = new Date(item.fecha).toLocaleDateString("es-CL");
+    const resumen = item.resumen_ia ?? item.transcripcion ?? "Sin resumen";
+
+    // Buscar resolución posterior para este canal
+    let resolucionInfo: { transcripcion: string; sentimiento: string | null; fecha: string } | null = null;
+    if (TIPOS_COUNTDOWN_HISTORIAL.has(item.tipo)) {
+      for (let j = idx + 1; j < sorted.length; j++) {
+        if (usados.has(j)) continue;
+        const jItem = sorted[j];
+        if (
+          jItem.tipo === item.tipo &&
+          TEXTOS_RESOLUCION_HISTORIAL.has(jItem.transcripcion ?? "")
+        ) {
+          resolucionInfo = {
+            transcripcion: jItem.transcripcion ?? "",
+            sentimiento: jItem.sentimiento,
+            fecha: new Date(jItem.fecha).toLocaleDateString("es-CL"),
+          };
+          usados.add(j);
+          break;
+        }
+      }
+    }
+
+    if (resolucionInfo) {
+      const sentLabel =
+        resolucionInfo.sentimiento === "positivo" ? "positivo"
+        : resolucionInfo.sentimiento === "negativo" ? "negativo"
+        : "neutro";
+      lines.push(
+        `[${fecha}] ${item.tipo} — Vendedor: "${resumen}"` +
+          (item.proximo_paso ? ` | Próximo paso: ${item.proximo_paso}` : "") +
+          `\n[${resolucionInfo.fecha}] Respuesta del prospecto: "${resolucionInfo.transcripcion}" → Resultado: ${sentLabel}`
+      );
+    } else {
+      const sentimiento = item.sentimiento ? ` | Sentimiento: ${item.sentimiento}` : "";
+      const proximo = item.proximo_paso ? ` | Próximo paso: ${item.proximo_paso}` : "";
+      lines.push(`[${fecha}] ${item.tipo}: ${resumen}${sentimiento}${proximo}`);
+    }
+  }
+
+  return lines
+    .slice(-5) // últimas 5 entradas del hilo
+    .map((entry, i) => `${i + 1}. ${entry}`)
     .join("\n");
 }
 
