@@ -222,6 +222,7 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             contactos={empresa.contactos}
             decisoresIA={ficha?.decisores ?? []}
             empresaId={empresa.id}
+            nombreBusqueda={empresa.nombre_comercial ?? empresa.nombre}
           />
         )}
 

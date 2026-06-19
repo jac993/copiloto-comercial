@@ -39,9 +39,10 @@ interface TabDecisoresProps {
   contactos: Contacto[];
   decisoresIA: DecisorIA[];
   empresaId: string;
+  nombreBusqueda: string;
 }
 
-export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisoresProps) {
+export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda }: TabDecisoresProps) {
   const [decisoresLocales, setDecisoresLocales] = useState<DecisorIA[]>(decisoresIA);
   // Estado local para soportar eliminaciones sin recargar la página
   const [contactosLocales, setContactosLocales] = useState<Contacto[]>(contactos);
@@ -111,6 +112,7 @@ export function TabDecisores({ contactos, decisoresIA, empresaId }: TabDecisores
                 key={i}
                 decisor={decisor}
                 empresaId={empresaId}
+                nombreBusqueda={nombreBusqueda}
                 onContactoAgregado={handleContactoAgregado}
                 onPersonaEliminada={() => {
                   const idxReal = decisoresLocales.findIndex((d) => d.cargo === decisor.cargo);
@@ -356,11 +358,13 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
 function DecisorSugeridoCard({
   decisor,
   empresaId,
+  nombreBusqueda,
   onContactoAgregado,
   onPersonaEliminada,
 }: {
   decisor: DecisorIA;
   empresaId: string;
+  nombreBusqueda: string;
   onContactoAgregado: (c: Contacto) => void;
   onPersonaEliminada: () => void;
 }) {
@@ -498,7 +502,14 @@ function DecisorSugeridoCard({
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="flex-1 text-xs gap-1" asChild>
             <a
-              href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(decisor.query_linkedin)}`}
+              href={(() => {
+                // Extrae el prefijo de cargo (primeras 2 palabras: "Jefe Calidad", "Gerente General"…)
+                // y reemplaza el nombre de empresa por el nombre comercial si existe
+                const partes = decisor.query_linkedin.trim().split(/\s+/);
+                const prefijoCargo = partes.slice(0, 2).join(" ");
+                const query = `${prefijoCargo} ${nombreBusqueda} Chile`;
+                return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(query)}`;
+              })()}
               target="_blank"
               rel="noopener noreferrer"
             >
