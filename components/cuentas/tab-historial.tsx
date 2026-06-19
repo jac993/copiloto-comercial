@@ -1,17 +1,21 @@
 "use client";
 
 // =============================================================
-// Tab Historial — timeline visual tipo WhatsApp con badge de
-// diagnóstico por interacción. Incluye panel "Nueva interacción"
-// y análisis completo de la conversación.
+// Tab Historial — hilo tipo chat WhatsApp por cada interacción.
+// Tarjeta colapsada: nombre contacto + canal + fecha + resumen.
+// Tarjeta expandida: burbujas vendedor (derecha) y prospecto
+// (izquierda), badge countdown, botones de resolución y análisis.
+// Las respuestas del prospecto se vinculan via parent_id o se
+// detectan por TEXTOS_RESOLUCION para datos anteriores.
 // =============================================================
 
 import { useState, useEffect, useMemo } from "react";
 import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
-  Trash2, ChevronDown, ChevronUp, Loader2, Plus, Zap,
+  Trash2, ChevronDown, Loader2, Plus, Zap,
   TrendingUp, Minus, Brain, AlertCircle, Clock,
-  CheckCircle2, XCircle, AlertTriangle, Pencil,
+  CheckCircle2, XCircle, AlertTriangle, MessageSquarePlus,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,15 +36,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { NuevaInteraccionSheet } from "@/components/cuentas/nueva-interaccion-sheet";
-import type { Interaccion, BadgeEstado, AnalisisConversacion, CorreoDetectado, Contacto, TipoInteraccion, SentimientoInteraccion } from "@/lib/types";
+import type {
+  Interaccion, BadgeEstado, AnalisisConversacion,
+  CorreoDetectado, Contacto, TipoInteraccion, SentimientoInteraccion,
+} from "@/lib/types";
 
-// ── Configuración visual de badges ───────────────────────────
+// ── Configuración visual de badges ──────────────────────────
 
 interface BadgeConf {
   label: string;
-  dot: string;        // color del punto en el timeline
-  bg: string;         // fondo del badge
-  text: string;       // color del texto
+  dot: string;
+  bg: string;
+  text: string;
   Icon: React.ElementType;
 }
 
@@ -49,14 +56,10 @@ const BADGE_CONF: Record<BadgeEstado, BadgeConf> = {
   neutral:      { label: "Neutral",         dot: "#F59E0B", bg: "bg-amber-100 dark:bg-amber-900/20",   text: "text-amber-700 dark:text-amber-400",   Icon: Minus },
   evaluando:    { label: "Evaluando",       dot: "#3B82F6", bg: "bg-blue-100 dark:bg-blue-900/20",     text: "text-blue-700 dark:text-blue-400",     Icon: Brain },
   resistente:   { label: "Resistente",      dot: "#F97316", bg: "bg-orange-100 dark:bg-orange-900/20", text: "text-orange-700 dark:text-orange-400", Icon: AlertTriangle },
-  senal_cierre: { label: "Señal de cierre", dot: "#DC2626", bg: "bg-red-100 dark:bg-red-900/20",       text: "text-red-600 dark:text-red-400",       Icon: CheckCircle2 },
+  senal_cierre: { label: "Señal de cierre", dot: "#22C55E", bg: "bg-green-100 dark:bg-green-900/20",   text: "text-green-700 dark:text-green-400",   Icon: CheckCircle2 },
   sin_respuesta:{ label: "Sin respuesta",   dot: "#6B7280", bg: "bg-gray-100 dark:bg-gray-800",        text: "text-gray-500 dark:text-gray-400",     Icon: Clock },
   rechazado:    { label: "Rechazado",       dot: "#7F1D1D", bg: "bg-red-200 dark:bg-red-950/40",       text: "text-red-900 dark:text-red-300",       Icon: XCircle },
 };
-
-const DEFAULT_DOT = "#A78BFA";
-
-// ── Badge de resultado (sentimiento manual) ───────────────────
 
 const SENTIMIENTO_BADGE: Record<string, { label: string; className: string }> = {
   positivo: { label: "Positivo", className: "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400" },
@@ -64,7 +67,7 @@ const SENTIMIENTO_BADGE: Record<string, { label: string; className: string }> = 
   negativo: { label: "Negativo", className: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" },
 };
 
-// ── Icono por tipo ────────────────────────────────────────────
+// ── Icono y label por tipo ────────────────────────────────────
 
 const TIPO_CONF: Record<string, { emoji: string; Icon: React.ElementType; label: string }> = {
   llamada:      { emoji: "📞", Icon: Phone,         label: "Llamada" },
@@ -77,10 +80,7 @@ const TIPO_CONF: Record<string, { emoji: string; Icon: React.ElementType; label:
 
 function fechaCorta(iso: string) {
   return new Date(iso).toLocaleString("es-CL", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
   });
 }
 
@@ -88,28 +88,32 @@ function fechaCorta(iso: string) {
 
 const TIPOS_COUNTDOWN: TipoInteraccion[] = ["whatsapp", "email", "linkedin"];
 
-// Textos fijos que identifican una interacción de resolución (creada por los botones "¿Hubo respuesta?")
+// Textos fijos que identifican una respuesta del prospecto guardada sin parent_id (datos legacy)
 const TEXTOS_RESOLUCION = new Set([
   "Respondió al contacto",
   "Vio el mensaje pero no respondió",
   "Sin respuesta tras 48h",
 ]);
 
-type EstadoCountdown = "verde" | "amarillo" | "naranja" | "vencida";
+// Mapa de texto de resolución → sentimiento visual en burbuja
+const RESOLUCION_LABEL: Record<string, { texto: string; positivo: boolean }> = {
+  "Respondió al contacto":         { texto: "✅ Respondió", positivo: true },
+  "Vio el mensaje pero no respondió": { texto: "👁️ Lo vio, no respondió", positivo: false },
+  "Sin respuesta tras 48h":        { texto: "❌ Sin respuesta", positivo: false },
+};
+
+type EstadoCountdown = "amarillo" | "naranja" | "vencida";
 
 function calcCountdown(fechaIso: string, now: number): { estado: EstadoCountdown; texto: string } | null {
   const ms = now - new Date(fechaIso).getTime();
   const limite = 48 * 60 * 60 * 1000;
   const restante = limite - ms;
-
-  if (ms < 0) return null; // fecha en el futuro
+  if (ms < 0) return null;
   if (restante > 8 * 60 * 60 * 1000) {
-    // más de 8h hasta vencer — amarillo
     const h = Math.floor(restante / (60 * 60 * 1000));
     return { estado: "amarillo", texto: `${h}h para responder` };
   }
   if (restante > 0) {
-    // menos de 8h — naranja parpadeante
     const h = Math.floor(restante / (60 * 60 * 1000));
     const m = Math.floor((restante % (60 * 60 * 1000)) / (60 * 1000));
     return { estado: "naranja", texto: `${h}h ${m}m restante` };
@@ -118,7 +122,6 @@ function calcCountdown(fechaIso: string, now: number): { estado: EstadoCountdown
 }
 
 const COUNTDOWN_STYLE: Record<EstadoCountdown, string> = {
-  verde:   "",
   amarillo: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
   naranja:  "bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400 animate-pulse",
   vencida:  "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400",
@@ -130,6 +133,13 @@ interface TabHistorialProps {
   interacciones: Interaccion[];
   empresaId: string;
   contactos: Contacto[];
+}
+
+// ── Hilo de interacciones (parent + children agrupados) ───────
+
+interface Hilo {
+  parent: Interaccion;
+  respuestas: Interaccion[]; // hijas directas (parent_id) + legacy (TEXTOS_RESOLUCION)
 }
 
 // ── Componente principal ──────────────────────────────────────
@@ -144,31 +154,67 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
   const [analisisTodo, setAnalisisTodo] = useState<AnalisisConversacion | null>(null);
   const [errorTodo, setErrorTodo] = useState<string | null>(null);
   const [correos, setCorreos] = useState<CorreoDetectado[]>([]);
-  const [editando, setEditando] = useState<Interaccion | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  // Derivado de lista: una interacción countdown está "resuelta" si existe una interacción
-  // posterior del mismo tipo con uno de los textos de resolución en transcripcion.
-  // No necesita estado separado — se recalcula cuando lista cambia, incluso tras recarga.
-  const resolvedIds = useMemo(() => {
-    const resueltas = new Set<string>();
+  // Agrupa interacciones en hilos: las hijas (por parent_id o texto legacy) se
+  // anidan dentro de su padre. Las demás aparecen como hilos independientes.
+  const hilos = useMemo((): Hilo[] => {
+    // IDs que son hijas por parent_id
+    const hijasConParent = new Set(
+      lista.filter((i) => i.parent_id != null).map((i) => i.id)
+    );
+    // IDs legacy: misma estrategia de detección de resolución anterior
+    const legacyHijas = new Set<string>();
     for (const i of lista) {
-      if (!TIPOS_COUNTDOWN.includes(i.tipo as TipoInteraccion)) continue;
-      if (TEXTOS_RESOLUCION.has(i.transcripcion ?? "")) continue; // es resolución, no original
-      const tieneResolucion = lista.some(
-        (j) =>
-          j.id !== i.id &&
-          j.tipo === i.tipo &&
-          j.empresa_id === i.empresa_id &&
-          new Date(j.fecha).getTime() > new Date(i.fecha).getTime() &&
-          TEXTOS_RESOLUCION.has(j.transcripcion ?? "")
-      );
-      if (tieneResolucion) resueltas.add(i.id);
+      if (!TEXTOS_RESOLUCION.has(i.transcripcion ?? "")) continue;
+      if (i.parent_id != null) continue; // ya tiene parent, no legacy
+      legacyHijas.add(i.id);
     }
-    return resueltas;
+
+    const esHija = (i: Interaccion) =>
+      hijasConParent.has(i.id) || legacyHijas.has(i.id);
+
+    // Padres = interacciones que no son hijas, ordenados desc por fecha
+    const padres = lista
+      .filter((i) => !esHija(i))
+      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+    return padres.map((padre) => {
+      // Hijas con parent_id explícito
+      const hijasDirectas = lista
+        .filter((i) => i.parent_id === padre.id)
+        .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
+      // Hijas legacy: misma detection anterior (mismo tipo + texto resolución + fecha posterior)
+      const hijasLegacy = lista
+        .filter(
+          (i) =>
+            legacyHijas.has(i.id) &&
+            i.tipo === padre.tipo &&
+            new Date(i.fecha).getTime() > new Date(padre.fecha).getTime()
+        )
+        .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
+      // Unir evitando duplicados (si alguien tiene parent_id Y texto resolución)
+      const idsDirectas = new Set(hijasDirectas.map((h) => h.id));
+      const respuestas = [
+        ...hijasDirectas,
+        ...hijasLegacy.filter((h) => !idsDirectas.has(h.id)),
+      ];
+
+      return { parent: padre, respuestas };
+    });
   }, [lista]);
 
-  // Actualiza "ahora" cada minuto para refrescar los countdowns
+  // resolvedIds: hilos que ya tienen al menos una respuesta
+  const resolvedIds = useMemo(() => {
+    const r = new Set<string>();
+    for (const hilo of hilos) {
+      if (hilo.respuestas.length > 0) r.add(hilo.parent.id);
+    }
+    return r;
+  }, [hilos]);
+
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
@@ -225,52 +271,36 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
     }
   }
 
-  // ── Guardar edición ─────────────────────────────────────────
-  async function guardarEdicion(
-    id: string,
-    campos: { tipo: TipoInteraccion; contacto_id: string | null; fecha: string; texto: string; sentimiento: string }
-  ) {
-    const res = await fetch(`/api/interacciones/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(campos),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Error al guardar");
-    setLista((prev) => prev.map((i) => i.id === id ? { ...i, ...data.interaccion } : i));
-    setEditando(null);
-  }
-
-  // ── Resolver vencida desde la tarjeta ───────────────────────
-  // Agrega la interacción de resolución a lista para que el useMemo
-  // detecte el original como resuelto sin necesitar estado adicional.
-  async function resolverVencida(
-    interaccion: Interaccion,
-    resumen: string,
+  // ── Agregar respuesta del prospecto (crea hija con parent_id) ─
+  async function agregarRespuesta(
+    padre: Interaccion,
+    texto: string,
     sentimiento: SentimientoInteraccion
   ) {
     const res = await fetch("/api/interacciones/crear", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        empresa_id: interaccion.empresa_id,
-        tipo: interaccion.tipo,
-        contacto_id: interaccion.contacto_id ?? undefined,
-        texto: resumen,
+        empresa_id: padre.empresa_id,
+        tipo: padre.tipo,
+        contacto_id: padre.contacto_id ?? undefined,
+        parent_id: padre.id,
+        texto,
         sentimiento,
         fecha: new Date().toISOString(),
       }),
     });
     const data = await res.json() as { ok: boolean; interaccion?: Interaccion; error?: string };
     if (!data.ok) throw new Error(data.error ?? "Error al registrar respuesta");
-    const nueva = data.interaccion;
-    if (nueva) setLista((prev) => [nueva, ...prev]);
+    if (data.interaccion) setLista((prev) => [data.interaccion!, ...prev]);
   }
 
-  // ── Nueva interacción guardada ───────────────────────────────
   function handleCreada(nueva: Interaccion) {
     setLista((prev) => [nueva, ...prev]);
   }
+
+  // Número de hilos "raíz" (excluye hijas) para el botón "Analizar todo"
+  const hilosRaiz = hilos.length;
 
   return (
     <div className="space-y-3 pb-28">
@@ -297,7 +327,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           Historial
         </p>
-        {lista.length >= 2 && (
+        {hilosRaiz >= 2 && (
           <button
             onClick={analizarTodo}
             disabled={analizandoTodo}
@@ -306,48 +336,39 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
             {analizandoTodo
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <Zap className="w-3.5 h-3.5" />}
-            Analizar conversación completa
+            ⚡ Analizar conversación
           </button>
         )}
       </div>
 
       {/* Lista vacía */}
-      {lista.length === 0 && (
+      {hilos.length === 0 && (
         <div className="text-center py-12 space-y-3">
           <Clock className="h-10 w-10 mx-auto text-muted-foreground opacity-30" />
           <p className="text-sm text-muted-foreground">Sin interacciones aún</p>
-          <p className="text-xs text-muted-foreground">
-            Toca el botón + para registrar la primera
-          </p>
+          <p className="text-xs text-muted-foreground">Toca el botón + para registrar la primera</p>
         </div>
       )}
 
-      {/* Timeline */}
-      <div className="relative">
-        {/* Línea vertical del timeline */}
-        {lista.length > 0 && (
-          <div className="absolute left-[11px] top-4 bottom-4 w-px bg-border" />
-        )}
-
-        <div className="space-y-4">
-          {lista.map((interaccion) => (
-            <EntradaTimeline
-              key={interaccion.id}
-              interaccion={interaccion}
-              eliminando={eliminandoId === interaccion.id}
-              analizando={analizandoId === interaccion.id}
-              resolved={resolvedIds.has(interaccion.id)}
-              now={now}
-              onEliminar={() => setConfirmandoId(interaccion.id)}
-              onAnalizar={() => analizarExistente(interaccion.id)}
-              onEditar={() => setEditando(interaccion)}
-              onResolver={(resumen, sent) => resolverVencida(interaccion, resumen, sent)}
-            />
-          ))}
-        </div>
+      {/* Hilos */}
+      <div className="space-y-3">
+        {hilos.map((hilo) => (
+          <TarjetaHilo
+            key={hilo.parent.id}
+            hilo={hilo}
+            contactos={contactos}
+            eliminando={eliminandoId === hilo.parent.id}
+            analizando={analizandoId === hilo.parent.id}
+            resolved={resolvedIds.has(hilo.parent.id)}
+            now={now}
+            onEliminar={() => setConfirmandoId(hilo.parent.id)}
+            onAnalizar={() => analizarExistente(hilo.parent.id)}
+            onAgregarRespuesta={(texto, sent) => agregarRespuesta(hilo.parent, texto, sent)}
+          />
+        ))}
       </div>
 
-      {/* Dialog de confirmación de eliminación */}
+      {/* Dialog confirmación eliminación */}
       <AlertDialog open={confirmandoId !== null} onOpenChange={(open) => { if (!open) setConfirmandoId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -367,7 +388,10 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
       </AlertDialog>
 
       {/* Modal análisis completo */}
-      <Dialog open={analisisTodo !== null || errorTodo !== null} onOpenChange={(open) => { if (!open) { setAnalisisTodo(null); setErrorTodo(null); } }}>
+      <Dialog
+        open={analisisTodo !== null || errorTodo !== null}
+        onOpenChange={(open) => { if (!open) { setAnalisisTodo(null); setErrorTodo(null); } }}
+      >
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-extrabold">
@@ -383,16 +407,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
           {analisisTodo && <AnalisisTodoView analisis={analisisTodo} />}
         </DialogContent>
       </Dialog>
-
-      {/* Modal de edición */}
-      {editando && (
-        <EditarInteraccionModal
-          interaccion={editando}
-          contactos={contactos}
-          onCerrar={() => setEditando(null)}
-          onGuardar={guardarEdicion}
-        />
-      )}
 
       {/* Panel nueva interacción */}
       <NuevaInteraccionSheet
@@ -418,168 +432,346 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
   );
 }
 
-// ── Entrada individual del timeline ──────────────────────────
+// ── Tarjeta individual (hilo padre + respuestas) ──────────────
 
-function EntradaTimeline({
-  interaccion,
+function TarjetaHilo({
+  hilo,
+  contactos,
   eliminando,
   analizando,
   resolved,
   now,
   onEliminar,
   onAnalizar,
-  onEditar,
-  onResolver,
+  onAgregarRespuesta,
 }: {
-  interaccion: Interaccion;
+  hilo: Hilo;
+  contactos: Contacto[];
   eliminando: boolean;
   analizando: boolean;
   resolved: boolean;
   now: number;
   onEliminar: () => void;
   onAnalizar: () => void;
-  onEditar: () => void;
-  onResolver: (resumen: string, sent: SentimientoInteraccion) => Promise<void>;
+  onAgregarRespuesta: (texto: string, sent: SentimientoInteraccion) => Promise<void>;
 }) {
+  const { parent, respuestas } = hilo;
   const [expandido, setExpandido] = useState(false);
-  const [resolviendoId, setResolviendoId] = useState<string | null>(null);
+  const [mostrarFormRespuesta, setMostrarFormRespuesta] = useState(false);
+  const [textoRespuesta, setTextoRespuesta] = useState("");
+  const [sentimientoRespuesta, setSentimientoRespuesta] = useState<SentimientoInteraccion | "">("");
+  const [guardandoRespuesta, setGuardandoRespuesta] = useState(false);
+  const [errorRespuesta, setErrorRespuesta] = useState<string | null>(null);
+  const [resolviendoId, setResolviendoId] = useState<SentimientoInteraccion | null>(null);
+  const [mostrarCoaching, setMostrarCoaching] = useState(false);
 
-  const badgeConf = interaccion.badge_estado ? BADGE_CONF[interaccion.badge_estado] : null;
-  const tipoConf = TIPO_CONF[interaccion.tipo] ?? TIPO_CONF.llamada;
-  const dotColor = badgeConf?.dot ?? DEFAULT_DOT;
-
-  // Parsear coaching_ia si existe
-  let coaching: { coaching?: { bien?: string; mejorar?: string; oportunidad_perdida?: string }; borrador_respuesta?: string; lo_que_no_respondio?: string } | null = null;
-  if (interaccion.coaching_ia) {
-    try { coaching = JSON.parse(interaccion.coaching_ia); } catch { /* ignorar */ }
-  }
-
-  const analizado = !!interaccion.resumen_ia;
-  const resumen = interaccion.resumen_ia ?? interaccion.transcripcion;
-  const sentimientoConf = interaccion.sentimiento && interaccion.sentimiento !== "sin_respuesta"
-    ? (SENTIMIENTO_BADGE[interaccion.sentimiento] ?? null)
+  const tipoConf = TIPO_CONF[parent.tipo] ?? TIPO_CONF.llamada;
+  const badgeConf = parent.badge_estado ? BADGE_CONF[parent.badge_estado] : null;
+  const sentimientoConf = parent.sentimiento && parent.sentimiento !== "sin_respuesta"
+    ? (SENTIMIENTO_BADGE[parent.sentimiento] ?? null)
     : null;
 
-  // Las interacciones de resolución ("Respondió al contacto", etc.) no necesitan
-  // su propia cuenta regresiva — son el resultado de resolver otra interacción.
-  const esResolucion = TEXTOS_RESOLUCION.has(interaccion.transcripcion ?? "");
+  // Contacto asociado
+  const contacto = contactos.find((c) => c.id === parent.contacto_id);
 
-  // Countdown 48h para whatsapp/email/linkedin (excluyendo resoluciones)
-  const countdown = !resolved && !esResolucion && TIPOS_COUNTDOWN.includes(interaccion.tipo as TipoInteraccion)
-    ? calcCountdown(interaccion.fecha, now)
-    : null;
+  // Contenido del mensaje del vendedor
+  const mensajeVendedor = parent.resumen_ia ?? parent.transcripcion ?? null;
+
+  // Countdown (solo para canales de espera, sin resolución)
+  const countdown =
+    !resolved &&
+    TIPOS_COUNTDOWN.includes(parent.tipo as TipoInteraccion)
+      ? calcCountdown(parent.fecha, now)
+      : null;
   const estaVencida = countdown?.estado === "vencida";
 
-  async function handleResolver(resumen: string, sent: SentimientoInteraccion) {
+  // Parsear coaching_ia
+  let coaching: {
+    coaching?: { bien?: string; mejorar?: string; oportunidad_perdida?: string };
+    borrador_respuesta?: string;
+    lo_que_no_respondio?: string;
+  } | null = null;
+  if (parent.coaching_ia) {
+    try { coaching = JSON.parse(parent.coaching_ia); } catch { /* ignorar */ }
+  }
+
+  async function handleResolverVencida(resumen: string, sent: SentimientoInteraccion) {
     setResolviendoId(sent);
-    try { await onResolver(resumen, sent); }
-    finally { setResolviendoId(null); }
+    try {
+      await onAgregarRespuesta(resumen, sent);
+    } finally {
+      setResolviendoId(null);
+    }
+  }
+
+  async function handleGuardarRespuesta() {
+    if (!textoRespuesta.trim()) {
+      setErrorRespuesta("Escribe la respuesta antes de guardar.");
+      return;
+    }
+    setGuardandoRespuesta(true);
+    setErrorRespuesta(null);
+    try {
+      await onAgregarRespuesta(textoRespuesta.trim(), (sentimientoRespuesta || "neutro") as SentimientoInteraccion);
+      setTextoRespuesta("");
+      setSentimientoRespuesta("");
+      setMostrarFormRespuesta(false);
+    } catch (e) {
+      setErrorRespuesta(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setGuardandoRespuesta(false);
+    }
   }
 
   return (
-    <div
-      className={`relative pl-7 transition-opacity ${eliminando ? "opacity-40 pointer-events-none" : ""}`}
-    >
-      {/* Punto del timeline */}
-      <div
-        className="absolute left-0 top-3.5 w-5 h-5 rounded-full border-2 border-background flex items-center justify-center z-10"
-        style={{ backgroundColor: dotColor }}
-      />
+    <div className={`rounded-2xl border border-border bg-card shadow-sm overflow-hidden transition-opacity ${eliminando ? "opacity-40 pointer-events-none" : ""}`}>
 
-      {/* Tarjeta */}
-      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="px-4 pt-3.5 pb-3">
+      {/* ── Encabezado (siempre visible, tappable para expandir) ── */}
+      <button
+        onClick={() => setExpandido(!expandido)}
+        className="w-full text-left px-4 pt-3.5 pb-3 flex items-start gap-3 hover:bg-muted/30 transition-colors active:bg-muted/50"
+      >
+        {/* Avatar / ícono canal */}
+        <div className="w-9 h-9 rounded-full bg-[#EDE9FE] dark:bg-[#1E1B4B]/50 flex items-center justify-center shrink-0 mt-0.5">
+          <tipoConf.Icon className="w-4 h-4 text-[#7C3AED]" />
+        </div>
 
-          {/* Fila 1: tipo + badges */}
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                {tipoConf.emoji} {tipoConf.label}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {fechaCorta(interaccion.fecha)}
-              </p>
+        <div className="flex-1 min-w-0">
+          {/* Fila: nombre + canal + eliminar */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {contacto ? (
+                <span className="text-sm font-semibold text-foreground truncate">{contacto.nombre}</span>
+              ) : (
+                <span className="text-sm font-medium text-muted-foreground">Sin contacto</span>
+              )}
+              <span className="text-muted-foreground/50 text-xs shrink-0">·</span>
+              <span className="text-xs text-muted-foreground shrink-0">{tipoConf.emoji} {tipoConf.label}</span>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-              {/* Badge countdown */}
-              {countdown && (
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${COUNTDOWN_STYLE[countdown.estado]}`}>
-                  {countdown.texto}
-                </span>
-              )}
-              {/* Badge sentimiento manual */}
-              {sentimientoConf && !estaVencida && (
-                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${sentimientoConf.className}`}>
-                  {sentimientoConf.label}
-                </span>
-              )}
+            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={onEliminar}
+                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
+                aria-label="Eliminar"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-destructive/50 hover:text-destructive" />
+              </button>
             </div>
           </div>
 
-          {/* Resumen — resumen_ia o transcripcion como fallback, siempre truncado */}
-          {resumen && (
-            <p className="text-xs text-foreground/70 mt-2 line-clamp-2 leading-relaxed">
-              {resumen}
-            </p>
-          )}
+          {/* Fecha */}
+          <p className="text-xs text-muted-foreground mt-0.5">{fechaCorta(parent.fecha)}</p>
 
-          {/* Badge de estado IA */}
-          {badgeConf && (
-            <div className={`mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badgeConf.bg} ${badgeConf.text}`}>
-              <badgeConf.Icon className="w-3 h-3" />
-              {badgeConf.label}
-            </div>
-          )}
-
-          {/* Próximo paso */}
-          {interaccion.proximo_paso && (
-            <div className="mt-2 flex items-start gap-1.5 text-xs">
-              <span className="text-primary font-medium shrink-0">→</span>
-              <span className="text-foreground/80">{interaccion.proximo_paso}</span>
-            </div>
-          )}
-
-          {/* Botones de resolución cuando está vencida */}
-          {estaVencida && !resolved && (
-            <div className="mt-3 pt-2.5 border-t border-border/50">
-              <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2">¿Hubo respuesta?</p>
-              <div className="flex gap-2">
-                <button
-                  disabled={!!resolviendoId}
-                  onClick={() => handleResolver("Respondió al contacto", "positivo")}
-                  className="flex-1 h-9 text-xs font-semibold rounded-xl bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 transition-colors disabled:opacity-50"
-                >
-                  {resolviendoId === "positivo" ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "✅ Sí contestó"}
-                </button>
-                <button
-                  disabled={!!resolviendoId}
-                  onClick={() => handleResolver("Vio el mensaje pero no respondió", "negativo")}
-                  className="flex-1 h-9 text-xs font-semibold rounded-xl bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-400 transition-colors disabled:opacity-50"
-                >
-                  {resolviendoId === "negativo" ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "👁️ Lo vio"}
-                </button>
-                <button
-                  disabled={!!resolviendoId}
-                  onClick={() => handleResolver("Sin respuesta tras 48h", "negativo")}
-                  className="flex-1 h-9 text-xs font-semibold rounded-xl bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-900/20 dark:border-gray-700 dark:text-gray-400 transition-colors disabled:opacity-50"
-                >
-                  {resolviendoId ? null : "❌ No contestó"}
-                </button>
+          {/* Resumen colapsado + badges */}
+          {!expandido && (
+            <>
+              {mensajeVendedor && (
+                <p className="text-xs text-foreground/70 mt-1.5 line-clamp-2 leading-relaxed">
+                  {mensajeVendedor}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                {countdown && (
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${COUNTDOWN_STYLE[countdown.estado]}`}>
+                    {countdown.texto}
+                  </span>
+                )}
+                {sentimientoConf && !estaVencida && (
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sentimientoConf.className}`}>
+                    {sentimientoConf.label}
+                  </span>
+                )}
+                {badgeConf && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${badgeConf.bg} ${badgeConf.text}`}>
+                    <badgeConf.Icon className="w-3 h-3" />
+                    {badgeConf.label}
+                  </span>
+                )}
+                {respuestas.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {respuestas.length} respuesta{respuestas.length > 1 ? "s" : ""}
+                  </span>
+                )}
               </div>
-            </div>
+            </>
           )}
+        </div>
 
-          {/* Fila de acciones: analizar/ver análisis + lápiz + eliminar */}
-          <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between">
-            {analizado ? (
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground shrink-0 mt-1 transition-transform ${expandido ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {/* ── Hilo expandido ────────────────────────────────────── */}
+      {expandido && (
+        <div className="border-t border-border">
+
+          {/* Área de burbujas */}
+          <div className="px-4 py-4 space-y-3 bg-[#F8F7FF] dark:bg-[#0F0A1E]/30">
+
+            {/* Burbuja del vendedor (derecha) */}
+            {mensajeVendedor && (
+              <div className="flex justify-end">
+                <div className="max-w-[82%] bg-[#7C3AED] text-white rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-sm">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{mensajeVendedor}</p>
+                  <p className="text-[10px] text-white/60 text-right mt-1">{fechaCorta(parent.fecha)} ✓✓</p>
+                </div>
+              </div>
+            )}
+
+            {/* Sin mensaje propio */}
+            {!mensajeVendedor && (
+              <div className="flex justify-end">
+                <div className="max-w-[82%] bg-[#7C3AED]/80 text-white rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-sm">
+                  <p className="text-sm italic text-white/80">
+                    {parent.tipo === "llamada" ? "Llamada registrada" : "Interacción registrada"}
+                  </p>
+                  <p className="text-[10px] text-white/60 text-right mt-1">{fechaCorta(parent.fecha)}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Burbujas de respuestas del prospecto (izquierda) */}
+            {respuestas.map((resp) => {
+              const resolucionInfo = RESOLUCION_LABEL[resp.transcripcion ?? ""];
+              const textoMostrar = resolucionInfo?.texto ?? resp.resumen_ia ?? resp.transcripcion ?? "Respuesta registrada";
+              const esPositiva = resolucionInfo
+                ? resolucionInfo.positivo
+                : resp.sentimiento === "positivo";
+
+              return (
+                <div key={resp.id} className="flex justify-start items-end gap-2">
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0">
+                    <User className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                  <div
+                    className={`max-w-[82%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm ${
+                      esPositiva
+                        ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40"
+                        : "bg-card border border-border"
+                    }`}
+                  >
+                    <p className="text-sm text-foreground leading-relaxed">{textoMostrar}</p>
+                    <p className="text-[10px] text-muted-foreground text-right mt-1">
+                      {fechaCorta(resp.fecha)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Badge countdown (dentro del hilo, antes de los botones) */}
+            {countdown && (
+              <div className="flex justify-center">
+                <span className={`text-xs font-semibold px-3 py-1 rounded-full ${COUNTDOWN_STYLE[countdown.estado]}`}>
+                  {countdown.texto}
+                </span>
+              </div>
+            )}
+
+            {/* Botones "¿Hubo respuesta?" cuando está vencida */}
+            {estaVencida && !resolved && (
+              <div className="pt-1">
+                <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2 text-center">
+                  ¿Hubo respuesta?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    disabled={!!resolviendoId}
+                    onClick={() => handleResolverVencida("Respondió al contacto", "positivo")}
+                    className="flex-1 h-9 text-xs font-semibold rounded-xl bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 transition-colors disabled:opacity-50"
+                  >
+                    {resolviendoId === "positivo" ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "✅ Sí contestó"}
+                  </button>
+                  <button
+                    disabled={!!resolviendoId}
+                    onClick={() => handleResolverVencida("Vio el mensaje pero no respondió", "negativo")}
+                    className="flex-1 h-9 text-xs font-semibold rounded-xl bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-400 transition-colors disabled:opacity-50"
+                  >
+                    {resolviendoId === "negativo" ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "👁️ Lo vio"}
+                  </button>
+                  <button
+                    disabled={!!resolviendoId}
+                    onClick={() => handleResolverVencida("Sin respuesta tras 48h", "negativo")}
+                    className="flex-1 h-9 text-xs font-semibold rounded-xl bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-900/20 dark:border-gray-700 dark:text-gray-400 transition-colors disabled:opacity-50"
+                  >
+                    {resolviendoId ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "❌ No contestó"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* "+ Agregar respuesta" inline — si no hay respuestas y no está vencida */}
+            {!estaVencida && !resolved && TIPOS_COUNTDOWN.includes(parent.tipo as TipoInteraccion) && (
+              !mostrarFormRespuesta ? (
+                <button
+                  onClick={() => setMostrarFormRespuesta(true)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED] hover:text-[#6D28D9] transition-colors"
+                >
+                  <MessageSquarePlus className="w-3.5 h-3.5" />
+                  + Agregar respuesta
+                </button>
+              ) : (
+                <div className="space-y-2 pt-1">
+                  <Textarea
+                    autoFocus
+                    value={textoRespuesta}
+                    onChange={(e) => setTextoRespuesta(e.target.value)}
+                    placeholder="¿Qué respondió el prospecto?"
+                    rows={3}
+                    className="text-sm rounded-xl resize-none bg-card"
+                  />
+                  {/* Resultado de la respuesta */}
+                  <div className="flex gap-2">
+                    {(["positivo", "neutro", "negativo"] as const).map((s) => {
+                      const conf = {
+                        positivo: { label: "👍 Positivo", active: "bg-green-100 border-green-400 text-green-700", idle: "border-border text-muted-foreground" },
+                        neutro:   { label: "😐 Neutro",   active: "bg-amber-100 border-amber-400 text-amber-700", idle: "border-border text-muted-foreground" },
+                        negativo: { label: "👎 Negativo", active: "bg-red-100 border-red-400 text-red-700",       idle: "border-border text-muted-foreground" },
+                      }[s];
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => setSentimientoRespuesta(sentimientoRespuesta === s ? "" : s)}
+                          className={`flex-1 py-1.5 rounded-xl text-xs font-semibold border transition-all ${sentimientoRespuesta === s ? conf.active : conf.idle}`}
+                        >
+                          {conf.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {errorRespuesta && (
+                    <p className="text-xs text-destructive">{errorRespuesta}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setMostrarFormRespuesta(false); setTextoRespuesta(""); setErrorRespuesta(null); }}
+                      className="flex-1 h-9 rounded-xl border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleGuardarRespuesta}
+                      disabled={guardandoRespuesta}
+                      className="flex-1 h-9 rounded-xl bg-[#7C3AED] text-white text-xs font-semibold hover:bg-[#6D28D9] transition-colors disabled:opacity-50"
+                    >
+                      {guardandoRespuesta ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "Guardar respuesta"}
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+
+          {/* ── Barra de acciones (análisis + coaching) ─────────── */}
+          <div className="px-4 py-3 flex items-center justify-between border-t border-border/50">
+            {parent.resumen_ia ? (
               <button
-                onClick={() => setExpandido(!expandido)}
+                onClick={() => setMostrarCoaching(!mostrarCoaching)}
                 className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
               >
-                {expandido
-                  ? <><ChevronUp className="w-3.5 h-3.5" /> Ocultar análisis</>
-                  : <><ChevronDown className="w-3.5 h-3.5" /> Ver análisis</>
-                }
+                <Brain className="w-3.5 h-3.5" />
+                {mostrarCoaching ? "Ocultar coaching" : "Ver coaching IA"}
               </button>
             ) : (
               <button
@@ -587,280 +779,100 @@ function EntradaTimeline({
                 disabled={analizando}
                 className="flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED] hover:text-[#6D28D9] transition-colors disabled:opacity-50"
               >
-                {analizando
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Zap className="w-3.5 h-3.5" />
-                }
-                {analizando ? "Analizando…" : "⚡ Analizar ahora"}
+                {analizando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                {analizando ? "Analizando…" : "⚡ Analizar"}
               </button>
             )}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={onEditar}
-                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-muted transition-colors"
-                aria-label="Editar"
-              >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-              </button>
-              <button
-                onClick={onEliminar}
-                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
-                aria-label="Eliminar"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-destructive/60 hover:text-destructive" />
-              </button>
+
+            {/* Info secundaria */}
+            <div className="flex items-center gap-2">
+              {sentimientoConf && (
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sentimientoConf.className}`}>
+                  {sentimientoConf.label}
+                </span>
+              )}
+              {badgeConf && (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${badgeConf.bg} ${badgeConf.text}`}>
+                  <badgeConf.Icon className="w-3 h-3" />
+                  {badgeConf.label}
+                </span>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Sección expandida de coaching */}
-        {expandido && coaching && (
-          <div className="px-4 pb-4 pt-2 border-t border-border space-y-3">
-            {coaching.coaching && (
-              <>
-                {coaching.coaching.bien && (
-                  <div>
-                    <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1">✅ Qué hiciste bien</p>
-                    <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.bien}</p>
-                  </div>
-                )}
-                {coaching.coaching.mejorar && (
-                  <div>
-                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">🎯 Qué mejorar</p>
-                    <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.mejorar}</p>
-                  </div>
-                )}
-                {coaching.coaching.oportunidad_perdida && (
-                  <div>
-                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-1">💡 Oportunidad perdida</p>
-                    <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.oportunidad_perdida}</p>
-                  </div>
-                )}
-              </>
-            )}
-            {coaching.lo_que_no_respondio && (
-              <div>
-                <p className="text-xs font-semibold text-orange-700 dark:text-orange-400 mb-1">🔍 Lo que no respondió</p>
-                <p className="text-xs text-foreground/80 leading-relaxed">{coaching.lo_que_no_respondio}</p>
-              </div>
-            )}
-            {coaching.borrador_respuesta && (
-              <div className="bg-[#F5F3FF] dark:bg-[#1E1B4B]/30 border border-violet-200 dark:border-violet-800/40 rounded-xl p-3">
-                <p className="text-xs font-semibold text-[#7C3AED] mb-1.5">✉️ Borrador de respuesta</p>
-                <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{coaching.borrador_respuesta}</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          {/* ── Sección coaching expandida ──────────────────────── */}
+          {mostrarCoaching && coaching && (
+            <div className="px-4 pb-4 pt-1 border-t border-border space-y-3">
+              {coaching.coaching?.bien && (
+                <div>
+                  <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1">✅ Qué hiciste bien</p>
+                  <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.bien}</p>
+                </div>
+              )}
+              {coaching.coaching?.mejorar && (
+                <div>
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">🎯 Qué mejorar</p>
+                  <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.mejorar}</p>
+                </div>
+              )}
+              {coaching.coaching?.oportunidad_perdida && (
+                <div>
+                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-1">💡 Oportunidad perdida</p>
+                  <p className="text-xs text-foreground/80 leading-relaxed">{coaching.coaching.oportunidad_perdida}</p>
+                </div>
+              )}
+              {coaching.lo_que_no_respondio && (
+                <div>
+                  <p className="text-xs font-semibold text-orange-700 dark:text-orange-400 mb-1">🔍 Lo que no respondió</p>
+                  <p className="text-xs text-foreground/80 leading-relaxed">{coaching.lo_que_no_respondio}</p>
+                </div>
+              )}
+              {coaching.borrador_respuesta && (
+                <div className="bg-[#F5F3FF] dark:bg-[#1E1B4B]/30 border border-violet-200 dark:border-violet-800/40 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-[#7C3AED] mb-1.5">✉️ Borrador de respuesta</p>
+                  <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{coaching.borrador_respuesta}</p>
+                </div>
+              )}
+              {parent.proximo_paso && (
+                <div className="flex items-start gap-1.5 text-xs">
+                  <span className="text-primary font-medium shrink-0">→</span>
+                  <span className="text-foreground/80">{parent.proximo_paso}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Modal editar interacción ──────────────────────────────────
-
-const TIPOS_EDITABLES: { value: TipoInteraccion; label: string; emoji: string }[] = [
-  { value: "llamada",       label: "Llamada",       emoji: "📞" },
-  { value: "reunion",       label: "Reunión",       emoji: "🤝" },
-  { value: "whatsapp",      label: "WhatsApp",      emoji: "💬" },
-  { value: "email",         label: "Correo",        emoji: "📧" },
-  { value: "linkedin",      label: "LinkedIn",      emoji: "💼" },
-  { value: "sin_respuesta", label: "Sin respuesta", emoji: "⏰" },
-];
-
-function EditarInteraccionModal({
-  interaccion,
-  contactos,
-  onCerrar,
-  onGuardar,
-}: {
-  interaccion: Interaccion;
-  contactos: Contacto[];
-  onCerrar: () => void;
-  onGuardar: (id: string, campos: { tipo: TipoInteraccion; contacto_id: string | null; fecha: string; texto: string; sentimiento: string }) => Promise<void>;
-}) {
-  const [tipo, setTipo] = useState<TipoInteraccion>(interaccion.tipo as TipoInteraccion);
-  const [contactoId, setContactoId] = useState<string>(interaccion.contacto_id ?? "");
-  const [fecha, setFecha] = useState<string>(
-    new Date(interaccion.fecha).toISOString().slice(0, 16)
-  );
-  const [texto, setTexto] = useState<string>(
-    interaccion.transcripcion ?? ""
-  );
-  const [sentimiento, setSentimiento] = useState<string>(
-    interaccion.sentimiento && interaccion.sentimiento !== "sin_respuesta"
-      ? interaccion.sentimiento
-      : ""
-  );
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleGuardar() {
-    setGuardando(true);
-    setError(null);
-    try {
-      await onGuardar(interaccion.id, {
-        tipo,
-        contacto_id: contactoId || null,
-        fecha,
-        texto,
-        sentimiento,
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al guardar");
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) onCerrar(); }}>
-      <DialogContent className="max-w-md rounded-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-base font-extrabold">Editar interacción</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 pt-1">
-          {/* Canal */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-2">Canal</p>
-            <div className="flex flex-wrap gap-2">
-              {TIPOS_EDITABLES.map((t) => (
-                <button
-                  key={t.value}
-                  onClick={() => setTipo(t.value)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                    tipo === t.value
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "border-border text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {t.emoji} {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Contacto */}
-          {contactos.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-1.5">Contacto</p>
-              <select
-                value={contactoId}
-                onChange={(e) => setContactoId(e.target.value)}
-                className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="">Sin contacto específico</option>
-                {contactos.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre} {c.cargo ? `· ${c.cargo}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Fecha */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Fecha y hora</p>
-            <input
-              type="datetime-local"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-
-          {/* Resumen */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Resumen</p>
-            <Textarea
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="Resumen de la interacción..."
-              rows={3}
-              className="text-sm rounded-xl resize-none"
-            />
-          </div>
-
-          {/* Resultado */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-2">Resultado</p>
-            <div className="flex gap-2">
-              {(["positivo", "neutro", "negativo"] as const).map((s) => {
-                const conf = {
-                  positivo: { label: "Positivo", active: "bg-green-500 text-white border-green-500", idle: "border-green-200 text-green-700 hover:bg-green-50" },
-                  neutro:   { label: "Neutro",   active: "bg-gray-500 text-white border-gray-500",  idle: "border-gray-200 text-gray-600 hover:bg-gray-50" },
-                  negativo: { label: "Negativo", active: "bg-red-500 text-white border-red-500",    idle: "border-red-200 text-red-700 hover:bg-red-50" },
-                }[s];
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setSentimiento(sentimiento === s ? "" : s)}
-                    className={`flex-1 h-9 rounded-xl text-xs font-semibold border transition-all ${
-                      sentimiento === s ? conf.active : conf.idle
-                    }`}
-                  >
-                    {conf.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {error && (
-            <p className="text-xs text-destructive flex items-center gap-1.5">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
-            </p>
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <Button variant="outline" className="flex-1 rounded-xl" onClick={onCerrar}>
-              Cancelar
-            </Button>
-            <Button className="flex-1 rounded-xl" disabled={guardando} onClick={handleGuardar}>
-              {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar cambios"}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Modal análisis completo ───────────────────────────────────
+// ── Vista análisis completo ───────────────────────────────────
 
 function AnalisisTodoView({ analisis }: { analisis: AnalisisConversacion }) {
-  const probConf: Record<string, { color: string; label: string }> = {
-    alta:  { color: "text-green-600 bg-green-100",  label: "Alta" },
-    media: { color: "text-amber-600 bg-amber-100",  label: "Media" },
-    baja:  { color: "text-red-600 bg-red-100",      label: "Baja" },
+  const probConf: Record<string, { color: string }> = {
+    alta:  { color: "text-green-600 bg-green-100" },
+    media: { color: "text-amber-600 bg-amber-100" },
+    baja:  { color: "text-red-600 bg-red-100" },
   };
   const prob = probConf[analisis.probabilidad_cierre] ?? probConf.media;
 
   return (
     <div className="space-y-5">
-      {/* Probabilidad */}
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-muted-foreground">Probabilidad de cierre</p>
         <span className={`text-sm font-bold px-3 py-1 rounded-full ${prob.color}`}>
-          {prob.label}
+          {analisis.probabilidad_cierre.charAt(0).toUpperCase() + analisis.probabilidad_cierre.slice(1)}
         </span>
       </div>
-
-      {/* Evolución */}
       <section>
         <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Evolución de la relación</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.evolucion}</p>
       </section>
-
-      {/* Justificación probabilidad */}
       <section>
         <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Justificación</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.justificacion_probabilidad}</p>
       </section>
-
-      {/* Momentos clave */}
       {analisis.momentos_clave.length > 0 && (
         <section>
           <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-2">Momentos clave</p>
@@ -877,26 +889,18 @@ function AnalisisTodoView({ analisis }: { analisis: AnalisisConversacion }) {
           </div>
         </section>
       )}
-
-      {/* Patrón del prospecto */}
       <section>
         <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Patrón del prospecto</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.patron_prospecto}</p>
       </section>
-
-      {/* Estado actual real */}
       <section>
         <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Estado actual real</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.estado_actual_real}</p>
       </section>
-
-      {/* Estrategia */}
       <section>
         <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Estrategia recomendada</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.estrategia_recomendada}</p>
       </section>
-
-      {/* Próximos 3 pasos */}
       <section>
         <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-2">Próximos 3 pasos</p>
         <div className="space-y-2">

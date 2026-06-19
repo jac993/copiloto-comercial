@@ -161,7 +161,7 @@ export function NuevaInteraccionSheet({
       onCreada(data.interaccion_id
         // El endpoint devuelve interaccion_id, no el objeto completo.
         // Construimos un objeto mínimo para actualizar la lista.
-        ? { ...data.resultado, id: data.interaccion_id, empresa_id: empresaId, tipo, fecha: new Date().toISOString(), contacto_id: contactoId || null, audio_url: null, transcripcion: tipo === "llamada" ? texto : null, resumen_ia: data.resultado?.resumen ?? null, compromisos: null, sentimiento: data.resultado?.sentimiento_prospecto ?? null, tecnica_usada: data.resultado?.tecnica_recomendada ?? null, coaching_ia: JSON.stringify(data.resultado), proximo_paso: data.resultado?.proximo_paso ?? null, proximo_paso_fecha: null, badge_estado: data.resultado?.badge_estado ?? null, decision_sugerida: data.resultado?.decision_sugerida ?? null, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() } as Interaccion
+        ? { ...data.resultado, id: data.interaccion_id, empresa_id: empresaId, tipo, fecha: new Date().toISOString(), contacto_id: contactoId || null, parent_id: null, audio_url: null, transcripcion: tipo === "llamada" ? texto : null, resumen_ia: data.resultado?.resumen ?? null, compromisos: null, sentimiento: data.resultado?.sentimiento_prospecto ?? null, tecnica_usada: data.resultado?.tecnica_recomendada ?? null, coaching_ia: JSON.stringify(data.resultado), proximo_paso: data.resultado?.proximo_paso ?? null, proximo_paso_fecha: null, badge_estado: data.resultado?.badge_estado ?? null, decision_sugerida: data.resultado?.decision_sugerida ?? null, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() } as Interaccion
         : data.interaccion
       );
       setFase("ok");
@@ -239,6 +239,7 @@ export function NuevaInteraccionSheet({
         id: dataA.interaccion_id,
         empresa_id: empresaId,
         contacto_id: contactoId || null,
+        parent_id: null,
         tipo: "llamada",
         fecha: new Date().toISOString(),
         audio_url: dataT.audio_url ?? null,

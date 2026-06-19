@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
       const interaccion = await insertInteraccion({
         empresa_id,
         contacto_id: contacto_id ?? null,
+        parent_id: null,
         tipo,
         fecha: new Date().toISOString(),
         audio_url: null,
@@ -180,6 +181,7 @@ ${encabezadoEmail}${texto.trim()}
     const interaccionData: InteraccionInsert = {
       empresa_id,
       contacto_id: contacto_id ?? null,
+      parent_id: null,
       tipo,
       fecha: fecha ? new Date(fecha).toISOString() : new Date().toISOString(),
       audio_url: audio_url ?? null,
