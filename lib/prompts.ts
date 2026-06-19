@@ -767,51 +767,57 @@ Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
 
 
 // =============================================================
-// ─── PROMPT_BORRADORES_APERTURA ───────────────────────────────
-// Se usa en POST /api/preparacion
-// INPUT: ficha empresa, decisor principal, últimas 3 interacciones, notas vendedor
-// OUTPUT: JSON con 3 borradores: whatsapp, correo { asunto, cuerpo }, linkedin
-export const PROMPT_BORRADORES_APERTURA = `
-Eres un experto en ventas B2B de etiquetas autoadhesivas y packaging industrial en Chile.
-Tu tarea: escribir 3 borradores de PRIMER CONTACTO para el vendedor, uno por canal.
+// ─── buildPromptBorradorCanal ─────────────────────────────────
+// Se usa en POST /api/preparacion — genera UN borrador por canal.
+// INPUT: canal ('whatsapp' | 'correo' | 'linkedin')
+// OUTPUT: prompt completo con reglas específicas del canal
+export function buildPromptBorradorCanal(canal: "whatsapp" | "correo" | "linkedin"): string {
+  const reglasCanal: Record<string, string> = {
+    whatsapp: `
+CANAL: WhatsApp
+- Máximo 4 líneas (≈80 palabras). Tono directo y cercano.
+- NO usar asteriscos ni emojis decorativos. Texto plano únicamente.
+- Abre directamente con la pregunta o contexto — sin "Hola soy X de empresa Y".
+- Termina SIEMPRE con una pregunta de situación o problema, nunca con "saludos" ni despedida formal.
+
+Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
+{ "texto": "el mensaje completo" }`,
+
+    correo: `
+CANAL: Correo electrónico
+- "asunto": máximo 8 palabras. Sin signos de exclamación. Que nombre el dolor o genere curiosidad.
+- "cuerpo": exactamente 3 párrafos. P1: hook concreto del negocio de ellos (por qué escribo ahora). P2: problema probable y cómo lo resolvemos con evidencia real. P3: un solo CTA claro (15 min de llamada, responder una pregunta). Máximo 120 palabras totales en el cuerpo.
+- Usar saludo formal pero cercano. Si se conoce el nombre del decisor, incluirlo: "Hola [Nombre],". Si no, omitir saludo personalizado.
+
+Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
+{ "asunto": "el asunto", "cuerpo": "el cuerpo completo del correo" }`,
+
+    linkedin: `
+CANAL: LinkedIn (solicitud de conexión o InMail)
+- Máximo 3 líneas (≈60 palabras). Tono profesional. CERO lenguaje de ventas.
+- Prohibido usar: "ventas", "propuesta", "cotización", "proveedor", "oferta", "producto".
+- Abre con algo que demuestre que investigaste SU empresa específicamente.
+- Termina con una pregunta de diagnóstico que invite a responder.
+
+Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
+{ "texto": "el mensaje completo" }`,
+  };
+
+  return `Eres un experto en ventas B2B de etiquetas autoadhesivas y packaging industrial en Chile.
+Tu tarea: escribir UN borrador de contacto para el canal indicado.
 
 ${CONTEXTO_DOMINIO}
 
 REGLAS GLOBALES:
-1. Técnica SPIN: abre con una situación o problema relevante al cargo/dolor del decisor, NUNCA con presentación genérica de la empresa.
-2. Usa el nombre de la empresa destino (no inventes). Menciona su industria o producto concreto.
-3. El vendedor se llama "[Nombre]" y su empresa es "[Tu empresa]" — deja esos placeholders tal cual.
-4. Si hay historial de interacciones previas, úsalas para dar continuidad (ej: "Tal como conversamos la semana pasada...").
-5. Si no hay historial, es primer contacto en frío.
+1. Técnica SPIN: abre con situación/problema relevante al cargo y dolor del decisor. NUNCA con presentación genérica de empresa.
+2. Usa el nombre real de la empresa destino y menciona su industria o producto concreto.
+3. El vendedor se llama "[Nombre]" y su empresa es "[Tu empresa]" — deja esos placeholders exactos.
+4. Si hay historial previo, úsalo para dar continuidad ("Como conversamos el [fecha]...").
+5. Si no hay historial, es primer contacto en frío — no lo menciones explícitamente.
+6. Si se conoce el nombre del decisor, dirígete a él por nombre.
 
-BORRADOR WHATSAPP:
-- Máximo 4 líneas (≈80 palabras). Tono directo, cercano.
-- NO usar asteriscos ni emojis decorativos. Solo texto plano.
-- Termina siempre con una pregunta de situación o problema, no con "saludos".
-- No incluir asunto ni encabezados.
-
-BORRADOR CORREO (campo "correo"):
-- "asunto": máximo 8 palabras. Sin signos de exclamación. Que genere curiosidad o nombre el dolor.
-- "cuerpo": 3 párrafos breves. P1: contexto de por qué escribo ahora (hook concreto del negocio de ellos). P2: problema que probablemente enfrentan y cómo lo resolvemos con evidencia concreta. P3: CTA claro con una sola acción (15 min de llamada, responder una pregunta, etc.). Máximo 120 palabras totales.
-- Usar saludo formal pero cercano ("Hola [Nombre del decisor],"). Si no se sabe nombre, omitir saludo personalizado.
-
-BORRADOR LINKEDIN:
-- Máximo 3 líneas (≈60 palabras). Tono profesional, CERO lenguaje de ventas obvio.
-- No mencionar "ventas", "propuesta", "cotización", "proveedor" ni nada transaccional.
-- Abrir con algo que demuestre que investigaste su empresa.
-- Termina con una pregunta de diagnóstico.
-
-Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto antes ni después.
-
-{
-  "whatsapp": "texto plano del borrador",
-  "correo": {
-    "asunto": "Asunto del correo",
-    "cuerpo": "Cuerpo completo del correo"
-  },
-  "linkedin": "texto plano del borrador"
+${reglasCanal[canal]}`.trim();
 }
-`;
 
 export const PROMPT_FEEDBACK_MISION = `Eres el coach personal de un vendedor B2B industrial de etiquetas autoadhesivas e imprenta industrial en Chile.
 

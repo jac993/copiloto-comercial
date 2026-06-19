@@ -1,80 +1,95 @@
 // =============================================================
 // POST /api/preparacion
-// Genera 3 borradores de apertura (WhatsApp, Correo, LinkedIn)
-// usando técnica SPIN, datos del decisor principal y historial
-// reciente. Solo se llama cuando el usuario presiona el botón.
+// Genera UN borrador de apertura para un canal específico y un
+// decisor específico. Se llama solo cuando el usuario pincha el
+// botón del canal — nunca en background ni para los tres a la vez.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { PROMPT_BORRADORES_APERTURA } from "@/lib/prompts";
+import { buildPromptBorradorCanal } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
-import type { FichaIA, Interaccion, Contacto } from "@/lib/types";
 
 export const maxDuration = 30;
 
 const MODEL = "claude-haiku-4-5-20251001";
 
-export interface BorradoresApertura {
-  whatsapp: string;
-  correo: { asunto: string; cuerpo: string };
-  linkedin: string;
+export type CanalBorrador = "whatsapp" | "correo" | "linkedin";
+
+// Discriminated union para type-safe acceso en el cliente
+export type BorradorCanalResult =
+  | { canal: "whatsapp"; texto: string }
+  | { canal: "linkedin"; texto: string }
+  | { canal: "correo"; asunto: string; cuerpo: string };
+
+interface HistorialItem {
+  fecha: string;
+  tipo: string;
+  resumen: string;
+  proximoPaso?: string | null;
+}
+
+interface PrepararBody {
+  empresaId: string;
+  canal: CanalBorrador;
+  nombreEmpresa: string;
+  industria?: string | null;
+  notasVendedor?: string | null;
+  decisorNombre?: string | null;
+  decisorCargo: string;
+  decisorArea?: string | null;
+  dolorEspecifico: string;
+  tecnicaRecomendada: string;
+  anguloEntrada: string;
+  descripcion: string;
+  porQueNecesitanEtiquetas: string;
+  historial: HistorialItem[];
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as {
-      empresaId: string;
-      nombreEmpresa: string;
-      industria?: string | null;
-      notasVendedor?: string | null;
-      ficha: FichaIA;
-      interacciones: Interaccion[];
-      contactos: Contacto[];
-    };
+    const body = await req.json() as PrepararBody;
+    const {
+      empresaId, canal, nombreEmpresa, industria, notasVendedor,
+      decisorNombre, decisorCargo, decisorArea,
+      dolorEspecifico, tecnicaRecomendada,
+      anguloEntrada, descripcion, porQueNecesitanEtiquetas,
+      historial,
+    } = body;
 
-    const { empresaId, nombreEmpresa, industria, notasVendedor, ficha, interacciones, contactos } = body;
-
-    if (!empresaId || !nombreEmpresa || !ficha) {
-      return NextResponse.json({ error: "empresaId, nombreEmpresa y ficha son requeridos" }, { status: 400 });
+    if (!empresaId || !canal || !nombreEmpresa || !decisorCargo) {
+      return NextResponse.json(
+        { error: "empresaId, canal, nombreEmpresa y decisorCargo son requeridos" },
+        { status: 400 }
+      );
     }
 
-    // Decisor principal: primero buscar en contactos reales, luego en decisores IA
-    const decisorReal = contactos.find((c) => c.es_decisor) ?? contactos[0] ?? null;
-    const decisorIA = ficha.decisores[0] ?? null;
+    const canalesValidos: CanalBorrador[] = ["whatsapp", "correo", "linkedin"];
+    if (!canalesValidos.includes(canal)) {
+      return NextResponse.json({ error: `Canal inválido: ${canal}` }, { status: 400 });
+    }
 
-    const nombreDecisor = decisorReal?.nombre ?? null;
-    const cargoDecisor = decisorReal?.cargo ?? decisorIA?.cargo ?? "decisor de compras";
-    const areaDecisor = decisorReal?.area ?? decisorIA?.area ?? "";
-    const dolorPrincipal = decisorIA?.dolor_especifico ?? "problemas de calidad y continuidad en el suministro de etiquetas";
-    const tecnica = decisorIA?.tecnica_recomendada ?? ficha.tecnica_recomendada ?? "consultiva";
-
-    // Últimas 3 interacciones con resumen
-    const ultimasInteracciones = interacciones
-      .filter((i) => i.resumen_ia)
-      .slice(0, 3);
-
-    const historialTexto = ultimasInteracciones.length > 0
-      ? ultimasInteracciones.map((i) => {
+    const historialTexto = historial.length > 0
+      ? historial.map((i) => {
           const fecha = new Date(i.fecha).toLocaleDateString("es-CL");
-          return `- ${fecha} (${i.tipo}): ${i.resumen_ia}${i.proximo_paso ? ` → Próximo paso acordado: ${i.proximo_paso}` : ""}`;
+          return `- ${fecha} (${i.tipo}): ${i.resumen}${i.proximoPaso ? ` → Próximo paso acordado: ${i.proximoPaso}` : ""}`;
         }).join("\n")
       : "Sin interacciones previas registradas (primer contacto en frío).";
 
-    const contextoVendedor = `
+    const contexto = `
 EMPRESA DESTINO:
 - Nombre: ${nombreEmpresa}
-- Industria: ${industria ?? ficha.industria ?? "no especificada"}
-- Descripción: ${ficha.descripcion}
-- Por qué necesitan etiquetas: ${ficha.por_que_necesitan_etiquetas}
-- Ángulo de entrada: ${ficha.angulo_entrada}
+- Industria: ${industria ?? "no especificada"}
+- Descripción: ${descripcion}
+- Por qué necesitan etiquetas: ${porQueNecesitanEtiquetas}
+- Ángulo de entrada: ${anguloEntrada}
 
-DECISOR PRINCIPAL:
-- Nombre: ${nombreDecisor ?? "(no identificado aún)"}
-- Cargo: ${cargoDecisor}
-- Área: ${areaDecisor}
-- Dolor específico: ${dolorPrincipal}
-- Técnica recomendada: ${tecnica}
+DECISOR A CONTACTAR:
+- Nombre: ${decisorNombre ?? "(no identificado aún)"}
+- Cargo: ${decisorCargo}
+- Área: ${decisorArea ?? "no especificada"}
+- Dolor específico: ${dolorEspecifico}
+- Técnica recomendada: ${tecnicaRecomendada}
 
 CONTEXTO DEL VENDEDOR (lo que solo él sabe):
 ${notasVendedor?.trim() ? notasVendedor : "Sin notas adicionales."}
@@ -83,15 +98,14 @@ HISTORIAL DE INTERACCIONES PREVIAS:
 ${historialTexto}
 `.trim();
 
+    const prompt = buildPromptBorradorCanal(canal);
+
     const client = new Anthropic();
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 800,
+      max_tokens: 400,
       messages: [
-        {
-          role: "user",
-          content: `${PROMPT_BORRADORES_APERTURA}\n\n---\n\n${contextoVendedor}`,
-        },
+        { role: "user", content: `${prompt}\n\n---\n\n${contexto}` },
       ],
     });
 
@@ -103,22 +117,34 @@ ${historialTexto}
       empresa_id: empresaId,
     });
 
-    const texto = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
-
-    // Extraer JSON aunque venga con markdown fence
-    const jsonMatch = texto.match(/\{[\s\S]*\}/);
+    const textoRaw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    const jsonMatch = textoRaw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error("[preparacion] respuesta sin JSON válido:", texto.slice(0, 300));
+      console.error("[preparacion] respuesta sin JSON:", textoRaw.slice(0, 300));
       return NextResponse.json({ error: "La IA no devolvió un JSON válido" }, { status: 500 });
     }
 
-    const borradores = JSON.parse(jsonMatch[0]) as BorradoresApertura;
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, string>;
 
-    if (!borradores.whatsapp || !borradores.correo?.asunto || !borradores.correo?.cuerpo || !borradores.linkedin) {
-      return NextResponse.json({ error: "Respuesta incompleta de la IA" }, { status: 500 });
+    let borrador: BorradorCanalResult;
+    if (canal === "correo") {
+      if (!parsed.asunto || !parsed.cuerpo) {
+        return NextResponse.json({ error: "Respuesta incompleta: faltan asunto o cuerpo" }, { status: 500 });
+      }
+      borrador = { canal: "correo", asunto: parsed.asunto, cuerpo: parsed.cuerpo };
+    } else if (canal === "whatsapp") {
+      if (!parsed.texto) {
+        return NextResponse.json({ error: "Respuesta incompleta: falta texto" }, { status: 500 });
+      }
+      borrador = { canal: "whatsapp", texto: parsed.texto };
+    } else {
+      if (!parsed.texto) {
+        return NextResponse.json({ error: "Respuesta incompleta: falta texto" }, { status: 500 });
+      }
+      borrador = { canal: "linkedin", texto: parsed.texto };
     }
 
-    return NextResponse.json({ ok: true, borradores });
+    return NextResponse.json({ ok: true, borrador });
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : "Error desconocido";
     console.error("[preparacion] error:", mensaje);
