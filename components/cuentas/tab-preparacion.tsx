@@ -1,19 +1,59 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, CheckCheck, HelpCircle, Clock, MessageSquare } from "lucide-react";
+import {
+  Copy, CheckCheck, HelpCircle, Clock, MessageSquare, Zap,
+  RefreshCw, Loader2, Mail, ExternalLink, AlertCircle,
+} from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { FichaIA, Interaccion, Compromiso } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import type { FichaIA, Interaccion, Compromiso, Contacto } from "@/lib/types";
+import type { BorradoresApertura } from "@/app/api/preparacion/route";
 
 interface TabPreparacionProps {
   ficha: FichaIA;
   ultimaInteraccion: Interaccion | null;
   notasVendedor?: string | null;
+  // Datos adicionales para generar borradores
+  empresaId: string;
+  nombreEmpresa: string;
+  industria?: string | null;
+  interacciones: Interaccion[];
+  contactos: Contacto[];
 }
 
-export function TabPreparacion({ ficha, ultimaInteraccion, notasVendedor }: TabPreparacionProps) {
+type CanalBorrador = "whatsapp" | "correo" | "linkedin";
+
+const CANAL_CONFIG: Record<CanalBorrador, { label: string; icon: React.ReactNode; color: string }> = {
+  whatsapp: {
+    label: "WhatsApp",
+    icon: <MessageSquare className="h-3.5 w-3.5" />,
+    color: "text-[#22C55E]",
+  },
+  correo: {
+    label: "Correo",
+    icon: <Mail className="h-3.5 w-3.5" />,
+    color: "text-blue-500",
+  },
+  linkedin: {
+    label: "LinkedIn",
+    icon: <ExternalLink className="h-3.5 w-3.5" />,
+    color: "text-[#0077B5]",
+  },
+};
+
+export function TabPreparacion({
+  ficha,
+  ultimaInteraccion,
+  notasVendedor,
+  empresaId,
+  nombreEmpresa,
+  industria,
+  interacciones,
+  contactos,
+}: TabPreparacionProps) {
   const compromisosPendientes =
     (ultimaInteraccion?.compromisos as Compromiso[] | null)?.filter(
       (c) => c.responsable?.toLowerCase().includes("vendedor") ||
@@ -21,12 +61,45 @@ export function TabPreparacion({ ficha, ultimaInteraccion, notasVendedor }: TabP
              c.responsable?.toLowerCase().includes("yo")
     ) ?? [];
 
-  // Borrador de mensaje de apertura basado en el ángulo de entrada.
-  // Si hay notas del vendedor, se genera una versión más personalizada.
-  const contextoExtra = notasVendedor?.trim()
-    ? ` Tengo entendido que ${notasVendedor.split("\n")[0].toLowerCase().replace(/\.$/, "")}.`
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [borradores, setBorradores] = useState<BorradoresApertura | null>(null);
+  const [tabCanal, setTabCanal] = useState<CanalBorrador>("whatsapp");
+
+  const generarBorradores = async () => {
+    setCargando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/preparacion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresaId,
+          nombreEmpresa,
+          industria,
+          notasVendedor,
+          ficha,
+          interacciones: interacciones.slice(0, 5), // últimas 5 para contexto
+          contactos,
+        }),
+      });
+      const data = await res.json() as { ok: boolean; borradores?: BorradoresApertura; error?: string };
+      if (!data.ok || !data.borradores) throw new Error(data.error ?? "Error al generar borradores");
+      setBorradores(data.borradores);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error desconocido");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const textoCanalActivo = borradores
+    ? tabCanal === "correo"
+      ? `Asunto: ${borradores.correo.asunto}\n\n${borradores.correo.cuerpo}`
+      : tabCanal === "whatsapp"
+      ? borradores.whatsapp
+      : borradores.linkedin
     : "";
-  const mensajeApertura = `Hola, buenos días. Mi nombre es [Nombre] de [Tu empresa], proveedor de etiquetas autoadhesivas.${contextoExtra} Contacto a ${ficha.nombre} porque ${ficha.angulo_entrada.split(".")[0].toLowerCase()}. ¿Podría hablar con ${ficha.decisores[0]?.cargo ?? "alguien del área de calidad o producción"}?`;
 
   return (
     <div className="space-y-4 pb-6">
@@ -106,51 +179,132 @@ export function TabPreparacion({ ficha, ultimaInteraccion, notasVendedor }: TabP
         </div>
       )}
 
-      {/* Borrador de mensaje */}
+      {/* Borradores de apertura — por canal */}
       <div>
         <div className="flex items-center gap-1.5 mb-2 px-1">
           <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Borrador de apertura
+            Borradores de apertura
           </p>
           <HelpTooltip
-            titulo="¿Cómo usar el borrador?"
-            explicacion="Es un mensaje de primer contacto generado por la IA basado en el análisis de la empresa. Úsalo como punto de partida — adáptalo con tu propio estilo antes de enviarlo."
-            ejemplo={"Nunca copies y pegues directo. Lee el borrador, personalízalo con algo que solo tú sabes, y envíalo desde tu correo o WhatsApp habitual."}
+            titulo="¿Cómo usar los borradores?"
+            explicacion="La IA genera un mensaje personalizado por canal usando técnica SPIN basada en el decisor principal y el historial de la empresa. Adáptalo con tu estilo antes de enviar."
+            ejemplo={"Lee el borrador, añade algo que solo tú sabes, y envíalo desde tu WhatsApp o correo habitual."}
           />
         </div>
-        <Card>
-          <CardContent className="pt-4">
-            {notasVendedor?.trim() && (
-              <div className="mb-3 flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
-                <span className="text-amber-600 shrink-0 mt-0.5 text-xs">📒</span>
-                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed line-clamp-2">
-                  Tu contexto: {notasVendedor}
+
+        {/* Estado: sin generar */}
+        {!borradores && !cargando && (
+          <Card>
+            <CardContent className="pt-5 pb-5 flex flex-col items-center gap-3 text-center">
+              {notasVendedor?.trim() && (
+                <div className="w-full mb-1 flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
+                  <span className="text-amber-600 shrink-0 text-xs">📒</span>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed line-clamp-2 text-left">
+                    Tu contexto: {notasVendedor}
+                  </p>
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground">
+                Genera borradores personalizados para WhatsApp, correo y LinkedIn
+                usando la técnica SPIN y el perfil del decisor principal.
+              </p>
+              {error && (
+                <div className="w-full flex items-start gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-left">
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-xs text-destructive leading-relaxed">{error}</p>
+                </div>
+              )}
+              <Button size="lg" className="gap-2 w-full" onClick={generarBorradores}>
+                <Zap className="h-4 w-4" />
+                ⚡ Generar borradores
+              </Button>
+              <p className="text-xs text-muted-foreground">Usa créditos de IA — Claude Haiku</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Estado: cargando */}
+        {cargando && (
+          <Card>
+            <CardContent className="pt-6 pb-6 flex flex-col items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Redactando borradores con SPIN...</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Estado: borradores listos */}
+        {borradores && !cargando && (
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              {/* Selector de canal */}
+              <div className="flex gap-1 p-1 bg-muted rounded-xl mb-4">
+                {(Object.keys(CANAL_CONFIG) as CanalBorrador[]).map((canal) => {
+                  const cfg = CANAL_CONFIG[canal];
+                  return (
+                    <button
+                      key={canal}
+                      onClick={() => setTabCanal(canal)}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all",
+                        tabCanal === canal
+                          ? "bg-background shadow-sm text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <span className={cn(tabCanal === canal ? cfg.color : "")}>
+                        {cfg.icon}
+                      </span>
+                      {cfg.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Contenido del canal activo */}
+              {tabCanal === "correo" && (
+                <div className="mb-3 flex items-center gap-2 p-2.5 rounded-lg bg-muted/60 border border-border">
+                  <span className="text-xs font-semibold text-muted-foreground shrink-0">Asunto:</span>
+                  <span className="text-xs font-medium">{borradores.correo.asunto}</span>
+                </div>
+              )}
+
+              <div className="bg-muted/50 rounded-xl p-3">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {tabCanal === "whatsapp"
+                    ? borradores.whatsapp
+                    : tabCanal === "correo"
+                    ? borradores.correo.cuerpo
+                    : borradores.linkedin}
                 </p>
               </div>
-            )}
-            <p className="text-xs text-muted-foreground mb-2 italic">
-              Adaptar antes de usar — es un punto de partida
-            </p>
-            <div className="bg-muted/50 rounded-xl p-3">
-              <p className="text-sm leading-relaxed">{mensajeApertura}</p>
-            </div>
-            <CopiarBoton texto={mensajeApertura} label="Copiar borrador" className="mt-3 w-full" />
-          </CardContent>
-        </Card>
+
+              <div className="flex gap-2 mt-3">
+                <CopiarBoton texto={textoCanalActivo} label="Copiar" className="flex-1" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground"
+                  onClick={generarBorradores}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Regenerar
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground text-center mt-2 italic">
+                Adapta con tu estilo antes de enviar
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
 }
 
 // Pregunta con botón de copiar
-function PreguntaCopiable({
-  label,
-  texto,
-}: {
-  label: string;
-  texto: string;
-}) {
+function PreguntaCopiable({ label, texto }: { label: string; texto: string }) {
   const [copiado, setCopiado] = useState(false);
 
   const copiar = async () => {
@@ -182,15 +336,7 @@ function PreguntaCopiable({
 }
 
 // Botón de copiar reutilizable
-function CopiarBoton({
-  texto,
-  label,
-  className,
-}: {
-  texto: string;
-  label: string;
-  className?: string;
-}) {
+function CopiarBoton({ texto, label, className }: { texto: string; label: string; className?: string }) {
   const [copiado, setCopiado] = useState(false);
 
   const copiar = async () => {

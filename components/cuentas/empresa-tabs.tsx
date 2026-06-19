@@ -239,6 +239,11 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             ficha={ficha}
             ultimaInteraccion={empresa.ultima_interaccion}
             notasVendedor={empresa.notas_vendedor}
+            empresaId={empresa.id}
+            nombreEmpresa={empresa.nombre_comercial ?? empresa.nombre}
+            industria={empresa.industria}
+            interacciones={interacciones}
+            contactos={empresa.contactos as Contacto[]}
           />
         )}
         {tabActivo === "preparacion" && !ficha && <SinFicha />}
