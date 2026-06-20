@@ -10,17 +10,84 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { FichaIA, Interaccion, Compromiso, Contacto } from "@/lib/types";
-import type { CanalBorrador, BorradorCanalResult } from "@/app/api/preparacion/route";
+import type { CanalBorrador, BorradorCanalResult, TipoBorrador } from "@/app/api/preparacion/route";
 
 // ─── Tipos internos ───────────────────────────────────────────
 
+interface HistorialEntrada {
+  fecha: string;
+  tipo: string;
+  remitente: string;
+  resumen: string;
+  proximoPaso?: string | null;
+}
+
 interface DecisorDisplay {
   id: string;
+  contactoId: string | null; // UUID real del contacto en Supabase (null = sugerido por IA)
   nombre: string | null;
   cargo: string;
   area: string | null;
   dolorEspecifico: string;
   tecnicaRecomendada: string;
+  tipo: TipoBorrador;
+  historialContacto: HistorialEntrada[];
+}
+
+const TIPO_TITULO: Record<TipoBorrador, string> = {
+  apertura:     "Borrador de apertura",
+  seguimiento:  "Borrador de seguimiento",
+  continuacion: "Borrador de continuación",
+  reactivacion: "Borrador de reactivación",
+};
+
+const TIPO_BADGE: Record<TipoBorrador, string> = {
+  apertura:     "bg-[#EDE9FE] text-[#7C3AED]",
+  seguimiento:  "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
+  continuacion: "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400",
+  reactivacion: "bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400",
+};
+
+const TEXTOS_RESOLUCION_POSITIVA = new Set(["Respondió al contacto"]);
+const TEXTOS_RESOLUCION_NEGATIVA = new Set([
+  "Sin respuesta tras 48h",
+  "Vio el mensaje pero no respondió",
+]);
+
+function detectarTipo(ints: Interaccion[]): TipoBorrador {
+  if (ints.length === 0) return "apertura";
+  const tienePositiva = ints.some(
+    (i) => i.sentimiento === "positivo" || TEXTOS_RESOLUCION_POSITIVA.has(i.transcripcion ?? "")
+  );
+  if (tienePositiva) return "continuacion";
+  const todasNegativas = ints.every(
+    (i) =>
+      i.sentimiento === "negativo" ||
+      i.sentimiento === "sin_respuesta" ||
+      i.tipo === "sin_respuesta" ||
+      TEXTOS_RESOLUCION_NEGATIVA.has(i.transcripcion ?? "")
+  );
+  if (todasNegativas) return "reactivacion";
+  return "seguimiento";
+}
+
+function buildHistorialItems(ints: Interaccion[]): HistorialEntrada[] {
+  return [...ints]
+    .filter(
+      (i) =>
+        (i.resumen_ia ?? i.transcripcion ?? "").trim() !== "" &&
+        !TEXTOS_RESOLUCION_POSITIVA.has(i.transcripcion ?? "") &&
+        !TEXTOS_RESOLUCION_NEGATIVA.has(i.transcripcion ?? "")
+    )
+    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+    .slice(0, 5)
+    .map((i) => ({
+      fecha: i.fecha,
+      tipo: i.tipo,
+      remitente: i.remitente ?? "vendedor",
+      resumen: i.resumen_ia ?? i.transcripcion ?? "",
+      proximoPaso: i.proximo_paso,
+    }));
 }
 
 interface TabPreparacionProps {
@@ -65,14 +132,13 @@ export function TabPreparacion({
         c.responsable?.toLowerCase().includes("yo")
     ) ?? [];
 
-  // Lista de decisores a mostrar: primero contactos reales decisores,
-  // luego decisores IA si no hay ninguno real.
+  // Lista de decisores: detecta tipo (apertura/seguimiento/continuacion/reactivacion)
+  // según las interacciones reales con ese contacto específico.
   const decisores = useMemo((): DecisorDisplay[] => {
     const reales = contactos.filter((c) => c.es_decisor);
 
     if (reales.length > 0) {
       return reales.map((c) => {
-        // Buscar en ficha el decisor con área o cargo más parecido para sacar dolor/técnica
         const fichaD =
           ficha.decisores.find(
             (d) => c.area && d.area && d.area.toLowerCase().includes(c.area.toLowerCase())
@@ -82,45 +148,36 @@ export function TabPreparacion({
           ) ??
           ficha.decisores[0];
 
+        const ints = interacciones.filter((i) => i.contacto_id === c.id);
         return {
           id: `c-${c.id}`,
+          contactoId: c.id,
           nombre: c.nombre,
           cargo: c.cargo ?? fichaD?.cargo ?? "Decisor",
           area: c.area,
           dolorEspecifico:
-            fichaD?.dolor_especifico ??
-            "continuidad y calidad en el suministro de etiquetas",
+            fichaD?.dolor_especifico ?? "continuidad y calidad en el suministro de etiquetas",
           tecnicaRecomendada:
             fichaD?.tecnica_recomendada ?? ficha.tecnica_recomendada ?? "consultiva",
+          tipo: detectarTipo(ints),
+          historialContacto: buildHistorialItems(ints),
         };
       });
     }
 
-    // Fallback: decisores sugeridos por la IA
+    // Fallback: decisores sugeridos por la IA — usa todas las interacciones de la empresa
     return ficha.decisores.map((d, i) => ({
       id: `f-${i}`,
+      contactoId: null,
       nombre: d.persona_encontrada?.nombre ?? null,
       cargo: d.cargo,
       area: d.area,
       dolorEspecifico: d.dolor_especifico,
       tecnicaRecomendada: d.tecnica_recomendada ?? ficha.tecnica_recomendada ?? "consultiva",
+      tipo: detectarTipo(interacciones),
+      historialContacto: buildHistorialItems(interacciones),
     }));
-  }, [contactos, ficha]);
-
-  // Historial reciente para contexto del prompt (máx 3)
-  const historial = useMemo(
-    () =>
-      interacciones
-        .filter((i): i is Interaccion & { resumen_ia: string } => i.resumen_ia !== null)
-        .slice(0, 3)
-        .map((i) => ({
-          fecha: i.fecha,
-          tipo: i.tipo,
-          resumen: i.resumen_ia,
-          proximoPaso: i.proximo_paso,
-        })),
-    [interacciones]
-  );
+  }, [contactos, ficha, interacciones]);
 
   // Estado por decisor: cache, cargando, errores, canal abierto
   const [cache, setCache] = useState<
@@ -134,6 +191,7 @@ export function TabPreparacion({
 
   // Llama a la API y guarda el resultado en cache
   const cargarBorrador = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
+    console.log("[preparacion] cargarBorrador — decisor:", decisor.id, "canal:", canal, "tipo:", decisor.tipo);
     setCargando((prev) => ({ ...prev, [decisor.id]: canal }));
 
     try {
@@ -143,6 +201,7 @@ export function TabPreparacion({
         body: JSON.stringify({
           empresaId,
           canal,
+          tipo: decisor.tipo,
           nombreEmpresa,
           industria,
           notasVendedor,
@@ -154,15 +213,17 @@ export function TabPreparacion({
           anguloEntrada: ficha.angulo_entrada,
           descripcion: ficha.descripcion,
           porQueNecesitanEtiquetas: ficha.por_que_necesitan_etiquetas,
-          historial,
+          historial: decisor.historialContacto,
         }),
       });
+      console.log("[preparacion] fetch respondió HTTP", res.status);
 
       const data = (await res.json()) as {
         ok: boolean;
         borrador?: BorradorCanalResult;
         error?: string;
       };
+      console.log("[preparacion] data.ok:", data.ok, "canal borrador:", data.borrador?.canal, "error:", data.error);
 
       if (!data.ok || !data.borrador) throw new Error(data.error ?? "Error al generar");
 
@@ -184,6 +245,8 @@ export function TabPreparacion({
 
   // Click en botón de canal: toggle open/close + carga si no hay cache
   const handleCanal = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
+    console.log("[preparacion] handleCanal — canal:", canal, "decisor:", decisor.id, "cargando actual:", cargando[decisor.id]);
+
     // Toggle: cerrar si ya estaba abierto
     if (abiertos[decisor.id] === canal) {
       setAbiertos((prev) => ({ ...prev, [decisor.id]: undefined }));
@@ -196,15 +259,16 @@ export function TabPreparacion({
     // Ya cacheado → solo mostrar
     if (cache[decisor.id]?.[canal]) return;
 
-    // Otro canal ya cargando → esperar (no lanzar segundo fetch)
-    if (cargando[decisor.id] !== null) return;
+    // Otro canal ya cargando → esperar (cargando[d] es string solo cuando carga activamente)
+    // IMPORTANTE: usar != null (loose) para tratar undefined igual que null
+    if (cargando[decisor.id] != null) return;
 
     await cargarBorrador(decisor, canal);
   };
 
   // Reintentar sin pasar por el toggle
   const handleReintentar = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
-    if (cargando[decisor.id] !== null) return;
+    if (cargando[decisor.id] != null) return;
     setErrores((prev) => ({
       ...prev,
       [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: undefined },
@@ -293,11 +357,11 @@ export function TabPreparacion({
         <div className="flex items-center gap-1.5 mb-2 px-1">
           <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Borradores de apertura
+            Borradores personalizados
           </p>
           <HelpTooltip
             titulo="¿Cómo usar los borradores?"
-            explicacion="Pincha el canal para generar un mensaje personalizado con técnica SPIN para ese decisor. Se genera una sola vez y se guarda hasta que salgas de la ficha."
+            explicacion="El tipo de borrador se adapta automáticamente según el historial con ese contacto: apertura si es nuevo, seguimiento si hubo contacto sin respuesta clara, continuación si hay relación positiva, o reactivación si los intentos anteriores fallaron."
             ejemplo={"Lee el borrador, añade algo que solo tú sabes, y envíalo desde tu canal habitual."}
           />
         </div>
@@ -335,7 +399,12 @@ export function TabPreparacion({
                   <CardContent className="pt-4 pb-4">
                     {/* Encabezado del decisor */}
                     <div className="mb-3">
-                      <p className="text-sm font-semibold leading-tight">{d.cargo}</p>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold leading-tight">{d.cargo}</p>
+                        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap", TIPO_BADGE[d.tipo])}>
+                          {TIPO_TITULO[d.tipo]}
+                        </span>
+                      </div>
                       {d.nombre && (
                         <p className="text-xs text-muted-foreground mt-0.5">{d.nombre}</p>
                       )}

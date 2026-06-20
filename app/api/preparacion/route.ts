@@ -1,8 +1,9 @@
 // =============================================================
 // POST /api/preparacion
-// Genera UN borrador de apertura para un canal específico y un
-// decisor específico. Se llama solo cuando el usuario pincha el
-// botón del canal — nunca en background ni para los tres a la vez.
+// Genera UN borrador personalizado para un canal y decisor.
+// El tipo (apertura/seguimiento/continuacion/reactivacion) se
+// detecta en el cliente según historial real con ese contacto.
+// Se llama solo cuando el usuario pincha el canal — nunca en bg.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,6 +16,7 @@ export const maxDuration = 30;
 const MODEL = "claude-haiku-4-5-20251001";
 
 export type CanalBorrador = "whatsapp" | "correo" | "linkedin";
+export type TipoBorrador = "apertura" | "seguimiento" | "continuacion" | "reactivacion";
 
 // Discriminated union para type-safe acceso en el cliente
 export type BorradorCanalResult =
@@ -25,6 +27,7 @@ export type BorradorCanalResult =
 interface HistorialItem {
   fecha: string;
   tipo: string;
+  remitente: string;
   resumen: string;
   proximoPaso?: string | null;
 }
@@ -32,6 +35,7 @@ interface HistorialItem {
 interface PrepararBody {
   empresaId: string;
   canal: CanalBorrador;
+  tipo?: TipoBorrador;
   nombreEmpresa: string;
   industria?: string | null;
   notasVendedor?: string | null;
@@ -46,16 +50,30 @@ interface PrepararBody {
   historial: HistorialItem[];
 }
 
+// Instrucción explícita por tipo para que Claude no meta la pata
+const INSTRUCCION_TIPO: Record<TipoBorrador, string> = {
+  apertura:
+    "PRIMER CONTACTO. Preséntate brevemente y presenta el motivo del contacto. El decisor no te conoce.",
+  seguimiento:
+    "YA HUBO CONTACTO PREVIO pero no se llegó a nada concreto. NO te presentes de nuevo. Retoma el hilo reconociendo el contacto anterior y propone un paso concreto.",
+  continuacion:
+    "HAY HISTORIAL POSITIVO. NO te presentes. Construye directamente sobre lo conversado, referencia lo acordado y propulsa el siguiente paso.",
+  reactivacion:
+    "LOS INTENTOS ANTERIORES NO TUVIERON ÉXITO. NO te presentes. Intenta con un ángulo completamente distinto al anterior — no repitas el mismo mensaje.",
+};
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as PrepararBody;
     const {
-      empresaId, canal, nombreEmpresa, industria, notasVendedor,
+      empresaId, canal, tipo: tipoRaw, nombreEmpresa, industria, notasVendedor,
       decisorNombre, decisorCargo, decisorArea,
       dolorEspecifico, tecnicaRecomendada,
       anguloEntrada, descripcion, porQueNecesitanEtiquetas,
       historial,
     } = body;
+
+    const tipo: TipoBorrador = tipoRaw ?? "apertura";
 
     if (!empresaId || !canal || !nombreEmpresa || !decisorCargo) {
       return NextResponse.json(
@@ -71,12 +89,19 @@ export async function POST(req: NextRequest) {
 
     const historialTexto = historial.length > 0
       ? historial.map((i) => {
-          const fecha = new Date(i.fecha).toLocaleDateString("es-CL");
-          return `- ${fecha} (${i.tipo}): ${i.resumen}${i.proximoPaso ? ` → Próximo paso acordado: ${i.proximoPaso}` : ""}`;
+          const fecha = new Date(i.fecha).toLocaleString("es-CL", {
+            day: "numeric", month: "short", year: "numeric",
+            hour: "2-digit", minute: "2-digit", hour12: false,
+          });
+          const rem = i.remitente === "prospecto" ? "Prospecto" : "Vendedor";
+          return `- [${fecha}] ${i.tipo} — ${rem}: "${i.resumen}"${i.proximoPaso ? ` → Próximo: ${i.proximoPaso}` : ""}`;
         }).join("\n")
-      : "Sin interacciones previas registradas (primer contacto en frío).";
+      : "Sin interacciones previas registradas.";
 
     const contexto = `
+TIPO DE BORRADOR: ${tipo.toUpperCase()}
+INSTRUCCIÓN CRÍTICA: ${INSTRUCCION_TIPO[tipo]}
+
 EMPRESA DESTINO:
 - Nombre: ${nombreEmpresa}
 - Industria: ${industria ?? "no especificada"}
@@ -94,7 +119,7 @@ DECISOR A CONTACTAR:
 CONTEXTO DEL VENDEDOR (lo que solo él sabe):
 ${notasVendedor?.trim() ? notasVendedor : "Sin notas adicionales."}
 
-HISTORIAL DE INTERACCIONES PREVIAS:
+HISTORIAL CON ESTE CONTACTO (últimas 5 interacciones):
 ${historialTexto}
 `.trim();
 
