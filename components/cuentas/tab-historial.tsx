@@ -330,9 +330,35 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         fecha: new Date().toISOString(),
       }),
     });
-    const data = await res.json() as { ok: boolean; interaccion?: Interaccion; error?: string };
+    const data = await res.json() as { ok: boolean; interaccion?: Interaccion | null; error?: string };
     if (!data.ok) throw new Error(data.error ?? "Error al registrar respuesta");
-    if (data.interaccion) setLista((prev) => [...prev, data.interaccion!]);
+
+    // Optimistic update: construir el objeto local con datos conocidos.
+    // Usar el ID real de la BD si está disponible; si no, generar uno temporal.
+    // remitente siempre 'prospecto' — no depender de lo que devuelva la API.
+    const nueva: Interaccion = {
+      id: data.interaccion?.id ?? crypto.randomUUID(),
+      empresa_id: padre.empresa_id,
+      contacto_id: padre.contacto_id,
+      parent_id: padre.id,
+      remitente: "prospecto",
+      tipo: padre.tipo,
+      fecha: new Date().toISOString(),
+      audio_url: null,
+      transcripcion: texto,
+      resumen_ia: null,
+      compromisos: null,
+      sentimiento,
+      tecnica_usada: null,
+      coaching_ia: null,
+      proximo_paso: null,
+      proximo_paso_fecha: null,
+      badge_estado: null,
+      decision_sugerida: null,
+      creado_en: new Date().toISOString(),
+      actualizado_en: new Date().toISOString(),
+    };
+    setLista((prev) => [...prev, nueva]);
   }
 
   return (
@@ -593,9 +619,33 @@ function TarjetaHilo({
           fecha: new Date().toISOString(),
         }),
       });
-      const data = await res.json() as { ok: boolean; interaccion?: Interaccion; error?: string };
+      const data = await res.json() as { ok: boolean; interaccion?: Interaccion | null; error?: string };
       if (!data.ok) throw new Error(data.error ?? "Error al enviar");
-      if (data.interaccion) onMensajeAgregado(data.interaccion);
+
+      // Optimistic update: burbuja aparece de inmediato sin esperar refetch.
+      const nueva: Interaccion = {
+        id: data.interaccion?.id ?? crypto.randomUUID(),
+        empresa_id: empresaId,
+        contacto_id: hilo.contactoId,
+        parent_id: hilo.rootId,
+        remitente: inputBar.remitente,
+        tipo: hilo.tipo,
+        fecha: new Date().toISOString(),
+        audio_url: null,
+        transcripcion: texto,
+        resumen_ia: null,
+        compromisos: null,
+        sentimiento: inputBar.remitente === "prospecto" ? "neutro" : null,
+        tecnica_usada: null,
+        coaching_ia: null,
+        proximo_paso: null,
+        proximo_paso_fecha: null,
+        badge_estado: null,
+        decision_sugerida: null,
+        creado_en: new Date().toISOString(),
+        actualizado_en: new Date().toISOString(),
+      };
+      onMensajeAgregado(nueva);
       setInputBar((prev) => ({ ...prev, texto: "", enviando: false }));
       textareaRef.current?.focus();
     } catch (e) {
