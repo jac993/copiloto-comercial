@@ -223,8 +223,17 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
 
         for (const root of sorted) {
           if (!allIds.has(root.id)) { allMsgs.push(root); allIds.add(root.id); }
-          for (const child of childrenByParent.get(root.id) ?? []) {
-            if (!allIds.has(child.id)) { allMsgs.push(child); allIds.add(child.id); }
+          // BFS para incluir todos los descendientes sin importar la profundidad
+          const queue = [root.id];
+          while (queue.length > 0) {
+            const parentId = queue.shift()!;
+            for (const child of childrenByParent.get(parentId) ?? []) {
+              if (!allIds.has(child.id)) {
+                allMsgs.push(child);
+                allIds.add(child.id);
+                queue.push(child.id);
+              }
+            }
           }
         }
 
