@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { buildPromptBorradorCanal } from "@/lib/prompts";
+import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 
 export const maxDuration = 30;
@@ -123,14 +123,13 @@ HISTORIAL CON ESTE CONTACTO (últimas 5 interacciones):
 ${historialTexto}
 `.trim();
 
-    const prompt = buildPromptBorradorCanal(canal);
-
     const client = new Anthropic();
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 400,
+      system: `${SYSTEM_PROMPT_VALE}\n\n${buildPromptBorradorCanal(canal)}`,
       messages: [
-        { role: "user", content: `${prompt}\n\n---\n\n${contexto}` },
+        { role: "user", content: contexto },
       ],
     });
 

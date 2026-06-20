@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { getEmpresaById } from "@/lib/queries";
-import { PROMPT_ANALISIS_CONVERSACION } from "@/lib/prompts";
+import { PROMPT_ANALISIS_CONVERSACION, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 import type { Interaccion, AnalisisConversacion } from "@/lib/types";
 
@@ -154,7 +154,7 @@ ${hiloCompleto}
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2048,
-      system: PROMPT_ANALISIS_CONVERSACION,
+      system: `${SYSTEM_PROMPT_VALE}\n\n${PROMPT_ANALISIS_CONVERSACION}`,
       messages: [{ role: "user", content: mensajeAnalisis }],
     });
 

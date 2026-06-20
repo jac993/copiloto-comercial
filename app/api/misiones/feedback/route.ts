@@ -9,7 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { updateRendimientoEjecutivo } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
-import { PROMPT_FEEDBACK_MISION } from "@/lib/prompts";
+import { PROMPT_FEEDBACK_MISION, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import type { ResultadoMision } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -115,9 +115,7 @@ Resumen: ${(empresa.ficha_ia as Record<string, string>).resumen_ejecutivo ?? "Si
 Ángulo de entrada: ${(empresa.ficha_ia as Record<string, string>).angulo_entrada ?? "Sin definir"}`
           : "Sin ficha de IA disponible para esta empresa.";
 
-        const prompt = `${PROMPT_FEEDBACK_MISION}
-
-CONTEXTO DE LA EMPRESA:
+        const contextoFeedback = `CONTEXTO DE LA EMPRESA:
 Nombre: ${nombreEmpresa}
 ${fichaResumen}
 
@@ -132,7 +130,8 @@ ${mision.detalle?.trim() || "No proporcionó detalle adicional."}`;
         const response = await client.messages.create({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 600,
-          messages: [{ role: "user", content: prompt }],
+          system: `${SYSTEM_PROMPT_VALE}\n\n${PROMPT_FEEDBACK_MISION}`,
+          messages: [{ role: "user", content: contextoFeedback }],
         });
 
         const texto = response.content[0].type === "text" ? response.content[0].text.trim() : "";

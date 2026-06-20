@@ -13,7 +13,7 @@ import {
   updateRendimientoEjecutivo,
 } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
-import { PROMPT_EVALUAR } from "@/lib/prompts";
+import { PROMPT_EVALUAR, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import type { EvaluacionSemanalInsert } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -144,14 +144,13 @@ export async function POST() {
   // ── Llamar a la IA ────────────────────────────────────────
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const mensaje = `${PROMPT_EVALUAR}
-
-Datos de la semana:
+  const mensaje = `Datos de la semana:
 ${JSON.stringify(contextoSemana, null, 2)}`;
 
   const respuestaAI = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1200,
+    system: `${SYSTEM_PROMPT_VALE}\n\n${PROMPT_EVALUAR}`,
     messages: [{ role: "user", content: mensaje }],
   });
 

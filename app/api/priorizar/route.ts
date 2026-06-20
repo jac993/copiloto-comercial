@@ -10,7 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { getEmpresasPriorizadas, getAprendizajesActivos, guardarPrioridadesCache } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
-import { PROMPT_PRIORIZAR } from "@/lib/prompts";
+import { PROMPT_PRIORIZAR, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import type { PrioridadCacheItem } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -95,8 +95,6 @@ export async function POST() {
   const aprendizajes = await getAprendizajesActivos();
 
   const mensajeUsuario = `
-${PROMPT_PRIORIZAR}
-
 Pipeline actual (${empresas.length} cuentas activas):
 ${JSON.stringify(empresasConContexto, null, 2)}
 
@@ -132,6 +130,7 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
   const message = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 2000,
+    system: `${SYSTEM_PROMPT_VALE}\n\n${PROMPT_PRIORIZAR}`,
     messages: [{ role: "user", content: mensajeUsuario }],
   });
 

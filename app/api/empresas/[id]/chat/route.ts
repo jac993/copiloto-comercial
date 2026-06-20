@@ -15,6 +15,7 @@ import {
   limpiarChatEmpresa,
 } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
+import { SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 
 export const maxDuration = 60;
 
@@ -144,7 +145,7 @@ ${
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 800,
-    system: systemPrompt,
+    system: `${SYSTEM_PROMPT_VALE}\n\n${systemPrompt}`,
     messages: mensajes,
   });
 

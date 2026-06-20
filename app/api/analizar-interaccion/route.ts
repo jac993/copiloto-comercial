@@ -13,7 +13,7 @@ import {
   getHistorialResumido,
   insertInteraccion,
 } from "@/lib/queries";
-import { PROMPT_COACH_ESCRITO } from "@/lib/prompts";
+import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 import type {
   ResultadoAnalisis,
@@ -144,7 +144,7 @@ ${encabezadoEmail}${texto.trim()}
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2048,
-      system: PROMPT_COACH_ESCRITO,
+      system: `${SYSTEM_PROMPT_VALE}\n\n${PROMPT_COACH_ESCRITO}`,
       messages: [{ role: "user", content: mensajeAnalisis }],
     });
 
