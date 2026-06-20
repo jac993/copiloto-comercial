@@ -300,6 +300,7 @@ export interface Interaccion {
   empresa_id: string;
   contacto_id: string | null;
   parent_id: string | null;
+  remitente: string | null;
   tipo: TipoInteraccion;
   fecha: string;
   audio_url: string | null;

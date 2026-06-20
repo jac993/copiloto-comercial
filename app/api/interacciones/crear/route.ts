@@ -33,9 +33,10 @@ export async function POST(req: NextRequest) {
       audio_url?: string;
       fecha?: string;      // ISO string — si el usuario cambió la fecha/hora
       sentimiento?: string; // resultado manual: positivo / neutro / negativo
+      remitente?: "vendedor" | "prospecto"; // quién envió el mensaje
     };
 
-    const { empresa_id, contacto_id, parent_id, tipo, texto, audio_url, fecha, sentimiento } = body;
+    const { empresa_id, contacto_id, parent_id, tipo, texto, audio_url, fecha, sentimiento, remitente } = body;
 
     if (!empresa_id || !tipo) {
       return NextResponse.json({ error: "empresa_id y tipo son requeridos" }, { status: 400 });
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
       proximo_paso_fecha: tipo === "sin_respuesta" ? sumarDiasHabiles(5) : null,
       badge_estado: tipo === "sin_respuesta" ? "sin_respuesta" : null,
       decision_sugerida: null,
+      remitente: remitente ?? "vendedor",
     };
 
     const interaccion = await insertInteraccion(interaccionData);

@@ -3,9 +3,9 @@
 // =============================================================
 // Tab Historial — hilos tipo WhatsApp agrupados por contacto+canal.
 // Un hilo = todos los mensajes con el mismo contacto Y canal.
-// Cada mensaje del vendedor es burbuja derecha (violeta).
-// Cada respuesta del prospecto (parent_id) es burbuja izquierda.
-// Botones "✅ Respondió / ❌ No respondió" bajo cada burbuja sin respuesta.
+// Rendering plano y cronológico: dirección de burbuja según `remitente`.
+// MEJORA 1: Barra de input fija entre scroll area y barra de acciones.
+// MEJORA 2: Nombre del contacto encima de cada burbuja del prospecto.
 // =============================================================
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -13,7 +13,7 @@ import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Trash2, ChevronDown, Loader2, Plus, Zap,
   TrendingUp, Minus, Brain, AlertCircle, Clock,
-  CheckCircle2, XCircle, AlertTriangle, User,
+  CheckCircle2, XCircle, AlertTriangle, User, Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,6 +65,7 @@ function fechaCorta(iso: string) {
 
 const TIPOS_COUNTDOWN: TipoInteraccion[] = ["whatsapp", "email", "linkedin"];
 
+// Textos legacy que identifican respuestas del prospecto sin parent_id
 const TEXTOS_RESOLUCION = new Set([
   "Respondió al contacto",
   "Vio el mensaje pero no respondió",
@@ -102,6 +103,12 @@ const COUNTDOWN_STYLE: Record<EstadoCountdown, string> = {
   vencida:  "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400",
 };
 
+// Una interacción es del prospecto si: remitente explícito = 'prospecto'
+// o coincide con los textos legacy de resolución (para retrocompatibilidad).
+function esProspectoMsg(i: Interaccion): boolean {
+  return i.remitente === "prospecto" || TEXTOS_RESOLUCION.has(i.transcripcion ?? "");
+}
+
 // ── Data model ────────────────────────────────────────────────
 
 interface TabHistorialProps {
@@ -110,27 +117,31 @@ interface TabHistorialProps {
   contactos: Contacto[];
 }
 
-// Un mensaje del vendedor con sus respuestas del prospecto
-interface MensajeConRespuestas {
-  vendedor: Interaccion;
-  respuestas: Interaccion[]; // ordered asc
-}
-
-// Hilo = todos los mensajes del mismo contacto+canal
+// Hilo = todos los mensajes del mismo contacto+canal, en orden cronológico
 interface Hilo {
   key: string;
   contactoId: string | null;
   tipo: TipoInteraccion;
-  mensajes: MensajeConRespuestas[]; // ordered asc (oldest first)
+  todosMensajes: Interaccion[]; // asc por fecha (vendedor + prospecto mezclados)
+  rootId: string | null;        // ID del primer mensaje — parent_id para mensajes nuevos
   ultimaFecha: string;
   todosLosIds: string[];
 }
 
+// Estado del formulario inline de respuesta (botones ✅ / ❌)
 interface FormRespuesta {
   open: boolean;
   texto: string;
   sentimiento: SentimientoInteraccion | "";
   guardando: boolean;
+  error: string | null;
+}
+
+// Estado de la barra de input fija del hilo
+interface InputBarState {
+  texto: string;
+  remitente: "vendedor" | "prospecto";
+  enviando: boolean;
   error: string | null;
 }
 
@@ -148,89 +159,100 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
   const [correos, setCorreos] = useState<CorreoDetectado[]>([]);
   const [now, setNow] = useState(() => Date.now());
 
-  // Agrupa la lista plana en hilos por contacto+canal.
-  // Interacciones con parent_id (o texto legacy de resolución) NO aparecen
-  // como hilos independientes — se anidan dentro del mensaje padre.
+  // Agrupa lista plana en hilos por contacto+canal.
+  // Rendering plano y cronológico: la dirección de burbuja se decide por `remitente`.
   const hilos = useMemo((): Hilo[] => {
-    // Detectar IDs que son respuestas del prospecto (NO mensajes del vendedor)
+    // 1. IDs legacy (TEXTOS_RESOLUCION sin parent_id) — retrocompatibilidad
     const legacyRespIds = new Set<string>();
     for (const i of lista) {
       if (i.parent_id == null && TEXTOS_RESOLUCION.has(i.transcripcion ?? "")) {
         legacyRespIds.add(i.id);
       }
     }
-    const esRespuesta = (i: Interaccion) => i.parent_id != null || legacyRespIds.has(i.id);
 
-    const vendedor = lista.filter((i) => !esRespuesta(i));
-    const respuestas = lista.filter((i) => esRespuesta(i));
+    // 2. Mensajes raíz (sin parent_id, no legacy) — forman los hilos
+    const rootMsgs = lista.filter(
+      (i) => i.parent_id == null && !legacyRespIds.has(i.id)
+    );
 
-    // Mapa parentId → respuestas del prospecto (explicit parent_id)
-    const respByParent = new Map<string, Interaccion[]>();
-    for (const r of respuestas) {
-      if (!r.parent_id) continue;
-      const arr = respByParent.get(r.parent_id) ?? [];
-      arr.push(r);
-      respByParent.set(r.parent_id, arr);
+    // 3. Mensajes legacy sin parent_id
+    const legacyMsgs = lista.filter((i) => legacyRespIds.has(i.id));
+
+    // 4. Mapa parentId → hijos (mensajes con parent_id: desde botones o input bar)
+    const childrenByParent = new Map<string, Interaccion[]>();
+    for (const i of lista) {
+      if (i.parent_id) {
+        const arr = childrenByParent.get(i.parent_id) ?? [];
+        arr.push(i);
+        childrenByParent.set(i.parent_id, arr);
+      }
     }
 
-    // Legacy: asignar la respuesta al padre más cercano anterior del mismo tipo
-    for (const r of respuestas) {
-      if (r.parent_id) continue; // ya tiene parent_id, no legacy
-      const rTime = new Date(r.fecha).getTime();
+    // 5. Pre-calcular qué mensaje raíz "reclama" cada legacy
+    const legacyToRootId = new Map<string, string>();
+    for (const leg of legacyMsgs) {
+      const legTime = new Date(leg.fecha).getTime();
       let best: Interaccion | null = null;
       let bestDiff = Infinity;
-      for (const p of vendedor) {
-        if (p.tipo !== r.tipo) continue;
-        const pTime = new Date(p.fecha).getTime();
-        if (pTime <= rTime && rTime - pTime < bestDiff) {
-          bestDiff = rTime - pTime;
-          best = p;
-        }
+      for (const r of rootMsgs) {
+        if (r.tipo !== leg.tipo) continue;
+        const diff = legTime - new Date(r.fecha).getTime();
+        if (diff >= 0 && diff < bestDiff) { bestDiff = diff; best = r; }
       }
-      if (best) {
-        const arr = respByParent.get(best.id) ?? [];
-        if (!arr.some((x) => x.id === r.id)) {
-          arr.push(r);
-          respByParent.set(best.id, arr);
-        }
-      }
+      if (best) legacyToRootId.set(leg.id, best.id);
     }
 
-    // Agrupar mensajes del vendedor por (contacto_id + tipo) → hilo
+    // 6. Agrupar raíces por (contacto_id + tipo)
     const hiloMap = new Map<string, Interaccion[]>();
-    for (const p of vendedor) {
-      const key = `${p.contacto_id ?? "__none__"}::${p.tipo}`;
+    for (const r of rootMsgs) {
+      const key = `${r.contacto_id ?? "__none__"}::${r.tipo}`;
       const arr = hiloMap.get(key) ?? [];
-      arr.push(p);
+      arr.push(r);
       hiloMap.set(key, arr);
     }
 
+    // 7. Construir objeto Hilo
     return Array.from(hiloMap.entries())
-      .map(([key, msgs]) => {
-        const sorted = [...msgs].sort(
+      .map(([key, roots]) => {
+        const sorted = [...roots].sort(
           (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
         );
-        const mensajes: MensajeConRespuestas[] = sorted.map((p) => ({
-          vendedor: p,
-          respuestas: (respByParent.get(p.id) ?? []).sort(
-            (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
-          ),
-        }));
-        const ultimaFecha = msgs.reduce(
+
+        const allMsgs: Interaccion[] = [];
+        const allIds = new Set<string>();
+
+        for (const root of sorted) {
+          if (!allIds.has(root.id)) { allMsgs.push(root); allIds.add(root.id); }
+          for (const child of childrenByParent.get(root.id) ?? []) {
+            if (!allIds.has(child.id)) { allMsgs.push(child); allIds.add(child.id); }
+          }
+        }
+
+        // Agregar legacy que apuntan a alguna raíz de este hilo
+        const rootIdSet = new Set(sorted.map((r) => r.id));
+        for (const leg of legacyMsgs) {
+          const rid = legacyToRootId.get(leg.id);
+          if (rid && rootIdSet.has(rid) && !allIds.has(leg.id)) {
+            allMsgs.push(leg);
+            allIds.add(leg.id);
+          }
+        }
+
+        allMsgs.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
+        const ultimaFecha = allMsgs.reduce(
           (max, m) => (new Date(m.fecha) > new Date(max) ? m.fecha : max),
-          msgs[0].fecha
+          allMsgs[0].fecha
         );
-        const todosLosIds = [
-          ...msgs.map((m) => m.id),
-          ...msgs.flatMap((m) => (respByParent.get(m.id) ?? []).map((r) => r.id)),
-        ];
+
         return {
           key,
-          contactoId: msgs[0].contacto_id,
-          tipo: msgs[0].tipo as TipoInteraccion,
-          mensajes,
+          contactoId: sorted[0].contacto_id,
+          tipo: sorted[0].tipo as TipoInteraccion,
+          todosMensajes: allMsgs,
+          rootId: sorted[0]?.id ?? null,
           ultimaFecha,
-          todosLosIds,
+          todosLosIds: Array.from(allIds),
         };
       })
       .sort((a, b) => new Date(b.ultimaFecha).getTime() - new Date(a.ultimaFecha).getTime());
@@ -288,6 +310,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
     }
   }
 
+  // Registrar respuesta del prospecto via botones ✅/❌ — siempre remitente='prospecto'
   async function agregarRespuesta(
     padre: Interaccion,
     texto: string,
@@ -303,6 +326,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         parent_id: padre.id,
         texto,
         sentimiento,
+        remitente: "prospecto",
         fecha: new Date().toISOString(),
       }),
     });
@@ -365,9 +389,11 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
             eliminandoIds={eliminandoIds}
             analizandoId={analizandoId}
             now={now}
+            empresaId={empresaId}
             onEliminar={() => setConfirmandoHilo({ ids: hilo.todosLosIds, count: hilo.todosLosIds.length })}
             onAgregarRespuesta={agregarRespuesta}
             onAnalizar={analizarExistente}
+            onMensajeAgregado={(nueva) => setLista((prev) => [...prev, nueva])}
           />
         ))}
       </div>
@@ -448,38 +474,55 @@ function TarjetaHilo({
   eliminandoIds,
   analizandoId,
   now,
+  empresaId,
   onEliminar,
   onAgregarRespuesta,
   onAnalizar,
+  onMensajeAgregado,
 }: {
   hilo: Hilo;
   contactos: Contacto[];
   eliminandoIds: Set<string>;
   analizandoId: string | null;
   now: number;
+  empresaId: string;
   onEliminar: () => void;
   onAgregarRespuesta: (padre: Interaccion, texto: string, sent: SentimientoInteraccion) => Promise<void>;
   onAnalizar: (id: string) => Promise<void>;
+  onMensajeAgregado: (i: Interaccion) => void;
 }) {
   const [expandido, setExpandido] = useState(false);
-  // Estado de formulario de respuesta por ID del mensaje padre
   const [forms, setForms] = useState<Record<string, FormRespuesta>>({});
-  // IDs de mensajes para los que hay una petición en vuelo
   const [enVuelo, setEnVuelo] = useState<Set<string>>(new Set());
   const [mostrarCoaching, setMostrarCoaching] = useState(false);
+  const [inputBar, setInputBar] = useState<InputBarState>({
+    texto: "", remitente: "vendedor", enviando: false, error: null,
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const tipoConf = TIPO_CONF[hilo.tipo] ?? TIPO_CONF.llamada;
   const contacto = contactos.find((c) => c.id === hilo.contactoId);
   const tieneAlgunEliminado = hilo.todosLosIds.some((id) => eliminandoIds.has(id));
 
-  // Último mensaje del vendedor para badges y coaching
-  const ultimoMsj = hilo.mensajes[hilo.mensajes.length - 1]?.vendedor;
+  // Último mensaje del vendedor (para coaching/analizar y badges)
+  const ultimoMsj = [...hilo.todosMensajes].reverse().find((m) => !esProspectoMsg(m)) ?? null;
   const badgeConf = ultimoMsj?.badge_estado ? BADGE_CONF[ultimoMsj.badge_estado] : null;
   const sentimientoConf =
     ultimoMsj?.sentimiento && ultimoMsj.sentimiento !== "sin_respuesta"
       ? (SENTIMIENTO_BADGE[ultimoMsj.sentimiento] ?? null)
       : null;
+
+  // Índice del último mensaje del vendedor — para mostrar countdown y botones de respuesta
+  const lastVendorIdx = hilo.todosMensajes.reduceRight(
+    (found, msg, idx) => (found === -1 && !esProspectoMsg(msg) ? idx : found),
+    -1
+  );
+  // Solo mostrar botones de respuesta si el último mensaje del vendedor no tiene prospecto después
+  const showResponseButtons =
+    TIPOS_COUNTDOWN.includes(hilo.tipo) &&
+    lastVendorIdx >= 0 &&
+    !hilo.todosMensajes.slice(lastVendorIdx + 1).some(esProspectoMsg);
 
   let coaching: {
     coaching?: { bien?: string; mejorar?: string; oportunidad_perdida?: string };
@@ -490,14 +533,14 @@ function TarjetaHilo({
     try { coaching = JSON.parse(ultimoMsj.coaching_ia); } catch { /* */ }
   }
 
-  // Scroll al fondo cuando se expande
+  // Scroll al fondo cuando se expande o llegan mensajes nuevos
   useEffect(() => {
     if (expandido && scrollRef.current) {
       setTimeout(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }, 50);
     }
-  }, [expandido]);
+  }, [expandido, hilo.todosMensajes.length]);
 
   function getForm(pid: string): FormRespuesta {
     return forms[pid] ?? { open: false, texto: "", sentimiento: "", guardando: false, error: null };
@@ -531,9 +574,42 @@ function TarjetaHilo({
     }
   }
 
+  async function handleEnviarInputBar() {
+    const texto = inputBar.texto.trim();
+    if (!texto || !hilo.rootId) return;
+    setInputBar((prev) => ({ ...prev, enviando: true, error: null }));
+    try {
+      const res = await fetch("/api/interacciones/crear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          tipo: hilo.tipo,
+          contacto_id: hilo.contactoId ?? undefined,
+          parent_id: hilo.rootId,
+          texto,
+          remitente: inputBar.remitente,
+          sentimiento: inputBar.remitente === "prospecto" ? "neutro" : null,
+          fecha: new Date().toISOString(),
+        }),
+      });
+      const data = await res.json() as { ok: boolean; interaccion?: Interaccion; error?: string };
+      if (!data.ok) throw new Error(data.error ?? "Error al enviar");
+      if (data.interaccion) onMensajeAgregado(data.interaccion);
+      setInputBar((prev) => ({ ...prev, texto: "", enviando: false }));
+      textareaRef.current?.focus();
+    } catch (e) {
+      setInputBar((prev) => ({
+        ...prev,
+        enviando: false,
+        error: e instanceof Error ? e.message : "Error al enviar",
+      }));
+    }
+  }
+
   const previewTexto =
-    hilo.mensajes[hilo.mensajes.length - 1]?.vendedor.resumen_ia ??
-    hilo.mensajes[hilo.mensajes.length - 1]?.vendedor.transcripcion;
+    hilo.todosMensajes[hilo.todosMensajes.length - 1]?.resumen_ia ??
+    hilo.todosMensajes[hilo.todosMensajes.length - 1]?.transcripcion;
 
   return (
     <div className={`rounded-2xl border border-border bg-card shadow-sm overflow-hidden ${tieneAlgunEliminado ? "opacity-40 pointer-events-none" : ""}`}>
@@ -555,8 +631,10 @@ function TarjetaHilo({
               </span>
               <span className="text-muted-foreground/40 text-xs shrink-0">·</span>
               <span className="text-xs text-muted-foreground shrink-0">{tipoConf.emoji} {tipoConf.label}</span>
-              {hilo.mensajes.length > 1 && (
-                <span className="text-[10px] text-muted-foreground/60 shrink-0">({hilo.mensajes.length})</span>
+              {hilo.todosMensajes.length > 1 && (
+                <span className="text-[10px] text-muted-foreground/60 shrink-0">
+                  ({hilo.todosMensajes.length})
+                </span>
               )}
             </div>
             <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -605,32 +683,60 @@ function TarjetaHilo({
           {/* Chat scroll area */}
           <div
             ref={scrollRef}
-            className="px-4 py-4 space-y-5 bg-[#F8F7FF] dark:bg-[#0F0A1E]/30 max-h-[400px] overflow-y-auto"
+            className="px-4 py-4 space-y-3 bg-[#F8F7FF] dark:bg-[#0F0A1E]/30 max-h-[400px] overflow-y-auto"
           >
-            {hilo.mensajes.map(({ vendedor: v, respuestas }) => {
-              const texto = v.resumen_ia ?? v.transcripcion;
-              const tieneRespuesta = respuestas.length > 0;
-              const countdown = !tieneRespuesta && TIPOS_COUNTDOWN.includes(hilo.tipo)
-                ? calcCountdown(v.fecha, now)
+            {hilo.todosMensajes.map((msg, idx) => {
+              const esProsp = esProspectoMsg(msg);
+              const form = getForm(msg.id);
+              const volando = enVuelo.has(msg.id);
+              const isLastVendor = !esProsp && idx === lastVendorIdx;
+              const countdown = isLastVendor && showResponseButtons
+                ? calcCountdown(msg.fecha, now)
                 : null;
               const estaVencida = countdown?.estado === "vencida";
-              const form = getForm(v.id);
-              const volando = enVuelo.has(v.id);
 
+              if (esProsp) {
+                // ── Burbuja prospecto (izquierda) ──
+                const resInfo = RESOLUCION_LABEL[msg.transcripcion ?? ""];
+                const textoResp = resInfo?.texto ?? msg.resumen_ia ?? msg.transcripcion ?? "Respuesta registrada";
+                const esPos = resInfo ? resInfo.positivo : msg.sentimiento === "positivo";
+                return (
+                  <div key={msg.id} className="space-y-0.5">
+                    {/* Nombre del contacto encima (estilo grupos de WhatsApp) */}
+                    <p className="text-[10px] font-medium text-[#7C3AED] ml-8">
+                      {contacto?.nombre ?? "Prospecto"}
+                    </p>
+                    <div className="flex justify-start items-end gap-2">
+                      <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mb-0.5">
+                        <User className="w-3.5 h-3.5 text-muted-foreground" />
+                      </div>
+                      <div className={`max-w-[84%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm ${
+                        esPos
+                          ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40"
+                          : "bg-card border border-border"
+                      }`}>
+                        <p className="text-sm text-foreground leading-relaxed">{textoResp}</p>
+                        <p className="text-[10px] text-muted-foreground text-right mt-1">{fechaCorta(msg.fecha)}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ── Burbuja vendedor (derecha) ──
+              const texto = msg.resumen_ia ?? msg.transcripcion;
               return (
-                <div key={v.id} className="space-y-2">
-
-                  {/* Burbuja vendedor → derecha */}
+                <div key={msg.id} className="space-y-2">
                   <div className="flex justify-end">
                     <div className="max-w-[84%] bg-[#7C3AED] text-white rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-sm">
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                        {texto ?? (v.tipo === "llamada" ? "Llamada registrada" : "Interacción registrada")}
+                        {texto ?? (msg.tipo === "llamada" ? "Llamada registrada" : "Interacción registrada")}
                       </p>
-                      <p className="text-[10px] text-white/60 text-right mt-1">{fechaCorta(v.fecha)} ✓✓</p>
+                      <p className="text-[10px] text-white/60 text-right mt-1">{fechaCorta(msg.fecha)} ✓✓</p>
                     </div>
                   </div>
 
-                  {/* Badge countdown alineado a la derecha */}
+                  {/* Badge countdown */}
                   {countdown && (
                     <div className="flex justify-end">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${COUNTDOWN_STYLE[countdown.estado]}`}>
@@ -639,68 +745,44 @@ function TarjetaHilo({
                     </div>
                   )}
 
-                  {/* Burbujas prospecto ← izquierda */}
-                  {respuestas.map((resp) => {
-                    const resInfo = RESOLUCION_LABEL[resp.transcripcion ?? ""];
-                    const textoResp = resInfo?.texto ?? resp.resumen_ia ?? resp.transcripcion ?? "Respuesta registrada";
-                    const esPos = resInfo ? resInfo.positivo : resp.sentimiento === "positivo";
-                    return (
-                      <div key={resp.id} className="flex justify-start items-end gap-2">
-                        <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mb-0.5">
-                          <User className="w-3.5 h-3.5 text-muted-foreground" />
-                        </div>
-                        <div className={`max-w-[84%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm ${
-                          esPos
-                            ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40"
-                            : "bg-card border border-border"
-                        }`}>
-                          <p className="text-sm text-foreground leading-relaxed">{textoResp}</p>
-                          <p className="text-[10px] text-muted-foreground text-right mt-1">{fechaCorta(resp.fecha)}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Botones de respuesta (solo si no hay respuesta y es canal countdown) */}
-                  {!tieneRespuesta && !form.open && TIPOS_COUNTDOWN.includes(hilo.tipo) && (
+                  {/* Botones de respuesta rápida (solo bajo el último mensaje sin respuesta) */}
+                  {isLastVendor && showResponseButtons && !form.open && (
                     <div className="flex justify-end">
                       {estaVencida ? (
-                        // Vencida: 3 botones
                         <div className="flex gap-1.5 flex-wrap justify-end">
                           <button
                             disabled={volando}
-                            onClick={() => setForm(v.id, { open: true })}
+                            onClick={() => setForm(msg.id, { open: true })}
                             className="h-8 px-2.5 text-xs font-semibold rounded-xl bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 transition-colors disabled:opacity-50"
                           >
                             {volando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✅ Sí contestó"}
                           </button>
                           <button
                             disabled={volando}
-                            onClick={() => handleDirecto(v, "Vio el mensaje pero no respondió", "negativo")}
+                            onClick={() => handleDirecto(msg, "Vio el mensaje pero no respondió", "negativo")}
                             className="h-8 px-2.5 text-xs font-semibold rounded-xl bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-400 transition-colors disabled:opacity-50"
                           >
                             {volando ? <Loader2 className="h-3 w-3 animate-spin" /> : "👁️ Lo vio"}
                           </button>
                           <button
                             disabled={volando}
-                            onClick={() => handleDirecto(v, "Sin respuesta tras 48h", "negativo")}
+                            onClick={() => handleDirecto(msg, "Sin respuesta tras 48h", "negativo")}
                             className="h-8 px-2.5 text-xs font-semibold rounded-xl bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-900/20 dark:border-gray-700 dark:text-gray-400 transition-colors disabled:opacity-50"
                           >
                             {volando ? <Loader2 className="h-3 w-3 animate-spin" /> : "❌ No contestó"}
                           </button>
                         </div>
                       ) : (
-                        // No vencida: 2 botones
                         <div className="flex gap-1.5">
                           <button
-                            onClick={() => setForm(v.id, { open: true })}
+                            onClick={() => setForm(msg.id, { open: true })}
                             className="h-7 px-2.5 text-xs font-semibold rounded-xl bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 transition-colors"
                           >
                             ✅ Respondió
                           </button>
                           <button
                             disabled={volando}
-                            onClick={() => handleDirecto(v, "Sin respuesta tras 48h", "negativo")}
+                            onClick={() => handleDirecto(msg, "Sin respuesta tras 48h", "negativo")}
                             className="h-7 px-2.5 text-xs font-semibold rounded-xl bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 dark:bg-gray-900/20 dark:border-gray-700 dark:text-gray-400 transition-colors disabled:opacity-50"
                           >
                             {volando ? <Loader2 className="h-3 w-3 animate-spin" /> : "❌ No respondió"}
@@ -716,7 +798,7 @@ function TarjetaHilo({
                       <Textarea
                         autoFocus
                         value={form.texto}
-                        onChange={(e) => setForm(v.id, { texto: e.target.value })}
+                        onChange={(e) => setForm(msg.id, { texto: e.target.value })}
                         placeholder="¿Qué respondió el prospecto?"
                         rows={3}
                         className="text-sm rounded-xl resize-none bg-card"
@@ -731,7 +813,7 @@ function TarjetaHilo({
                           return (
                             <button
                               key={s}
-                              onClick={() => setForm(v.id, { sentimiento: form.sentimiento === s ? "" : s })}
+                              onClick={() => setForm(msg.id, { sentimiento: form.sentimiento === s ? "" : s })}
                               className={`flex-1 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                                 form.sentimiento === s ? c.act : "border-border text-muted-foreground hover:bg-muted"
                               }`}
@@ -744,13 +826,13 @@ function TarjetaHilo({
                       {form.error && <p className="text-xs text-destructive">{form.error}</p>}
                       <div className="flex gap-2">
                         <button
-                          onClick={() => setForm(v.id, { open: false, texto: "", sentimiento: "", error: null })}
+                          onClick={() => setForm(msg.id, { open: false, texto: "", sentimiento: "", error: null })}
                           className="flex-1 h-9 rounded-xl border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
                         >
                           Cancelar
                         </button>
                         <button
-                          onClick={() => handleGuardar(v)}
+                          onClick={() => handleGuardar(msg)}
                           disabled={form.guardando}
                           className="flex-1 h-9 rounded-xl bg-[#7C3AED] text-white text-xs font-semibold hover:bg-[#6D28D9] transition-colors disabled:opacity-50"
                         >
@@ -762,6 +844,69 @@ function TarjetaHilo({
                 </div>
               );
             })}
+          </div>
+
+          {/* ── Barra de input fija ── */}
+          <div className="border-t border-border bg-card px-3 py-2.5">
+            <div className="flex items-end gap-2">
+              {/* Toggle Yo / Prospecto */}
+              <div className="flex rounded-lg border border-border overflow-hidden shrink-0 text-[11px] font-semibold">
+                <button
+                  onClick={() => setInputBar((prev) => ({ ...prev, remitente: "vendedor" }))}
+                  className={`px-2.5 py-1.5 transition-colors ${
+                    inputBar.remitente === "vendedor"
+                      ? "bg-[#7C3AED] text-white"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Yo
+                </button>
+                <button
+                  onClick={() => setInputBar((prev) => ({ ...prev, remitente: "prospecto" }))}
+                  className={`px-2 py-1.5 transition-colors ${
+                    inputBar.remitente === "prospecto"
+                      ? "bg-gray-600 dark:bg-gray-500 text-white"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Prospecto
+                </button>
+              </div>
+
+              {/* Input */}
+              <Textarea
+                ref={textareaRef}
+                value={inputBar.texto}
+                onChange={(e) => setInputBar((prev) => ({ ...prev, texto: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleEnviarInputBar();
+                  }
+                }}
+                placeholder="Escribe un mensaje..."
+                rows={1}
+                className="flex-1 text-sm rounded-xl resize-none bg-muted/50 min-h-[36px] max-h-20 py-2 leading-tight"
+              />
+
+              {/* Botón enviar */}
+              <button
+                onClick={() => void handleEnviarInputBar()}
+                disabled={inputBar.enviando || !inputBar.texto.trim()}
+                className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 transition-colors disabled:opacity-40 ${
+                  inputBar.remitente === "vendedor"
+                    ? "bg-[#7C3AED] hover:bg-[#6D28D9] text-white"
+                    : "bg-gray-600 hover:bg-gray-700 dark:bg-gray-500 dark:hover:bg-gray-400 text-white"
+                }`}
+              >
+                {inputBar.enviando
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Send className="w-4 h-4" />}
+              </button>
+            </div>
+            {inputBar.error && (
+              <p className="text-xs text-destructive mt-1.5 pl-1">{inputBar.error}</p>
+            )}
           </div>
 
           {/* ── Barra de acciones ── */}
