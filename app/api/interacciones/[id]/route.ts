@@ -66,10 +66,13 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("[DELETE interaccion] SUPABASE_SERVICE_ROLE_KEY no configurada");
     return Response.json({ error: "SUPABASE_SERVICE_ROLE_KEY no configurada" }, { status: 500 });
   }
 
   const { id } = params;
+  console.log(`[DELETE interaccion] id recibido: "${id}"`);
+
   if (!id) {
     return Response.json({ error: "id requerido" }, { status: 400 });
   }
@@ -79,14 +82,16 @@ export async function DELETE(
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from("interacciones")
-    .delete()
+    .delete({ count: "exact" })
     .eq("id", id);
+
+  console.log(`[DELETE interaccion] resultado: filas eliminadas=${count ?? "??"} error=${error?.message ?? "ninguno"}`);
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, count });
 }

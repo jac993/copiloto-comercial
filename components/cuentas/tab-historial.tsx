@@ -702,27 +702,33 @@ function TarjetaHilo({
     setConfirmandoMsg({ id, esRoot: id === hilo.rootId });
   }
 
-  // Ejecuta el borrado tras confirmación
-  async function confirmarEliminarMensaje(soloEsteMensaje: boolean) {
-    if (!confirmandoMsg) return;
-    const { id, esRoot } = confirmandoMsg;
+  // Ejecuta el borrado tras confirmación.
+  // Recibe el id explícitamente para no depender del estado (puede ser null si Radix
+  // cierra el dialog y dispara onOpenChange antes de que el onClick se ejecute).
+  async function confirmarEliminarMensaje(msgId: string, esRootMsg: boolean, soloEsteMensaje: boolean) {
+    console.log(`[borrar-msg] id=${msgId} esRoot=${esRootMsg} solo=${soloEsteMensaje}`);
     setConfirmandoMsg(null);
 
-    if (esRoot && !soloEsteMensaje) {
+    if (esRootMsg && !soloEsteMensaje) {
       // Delegar al padre para borrar el hilo completo (ya confirmado aquí, sin segundo dialog)
       onEliminarHiloDirecto();
       return;
     }
 
-    setEliminandoMsgId(id);
+    setEliminandoMsgId(msgId);
     try {
-      const res = await fetch(`/api/interacciones/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const d = await res.json() as { error?: string };
-        throw new Error(d.error ?? "Error al eliminar");
+      console.log(`[borrar-msg] llamando DELETE /api/interacciones/${msgId}`);
+      const res = await fetch(`/api/interacciones/${msgId}`, { method: "DELETE" });
+      // Leer el cuerpo siempre — no asumir éxito solo por res.ok
+      const body = await res.json() as { ok?: boolean; error?: string };
+      console.log(`[borrar-msg] respuesta HTTP ${res.status}:`, body);
+      if (!res.ok || !body.ok) {
+        throw new Error(body.error ?? `Error HTTP ${res.status}`);
       }
-      onMensajeEliminado(id);
+      // Solo quitar la burbuja del estado si Supabase confirmó el borrado
+      onMensajeEliminado(msgId);
     } catch (e) {
+      console.error("[borrar-msg] error:", e);
       alert(e instanceof Error ? e.message : "Error al eliminar el mensaje");
     } finally {
       setEliminandoMsgId(null);
@@ -1157,13 +1163,20 @@ function TarjetaHilo({
                 {confirmandoMsg?.esRoot ? (
                   <>
                     <AlertDialogAction
-                      onClick={() => void confirmarEliminarMensaje(true)}
+                      onClick={() => {
+                        // Capturar id y esRoot en el click — no leer desde estado async
+                        const snap = confirmandoMsg;
+                        if (snap) void confirmarEliminarMensaje(snap.id, snap.esRoot, true);
+                      }}
                       className="bg-destructive/70 text-white hover:bg-destructive/90"
                     >
                       Solo este mensaje
                     </AlertDialogAction>
                     <AlertDialogAction
-                      onClick={() => void confirmarEliminarMensaje(false)}
+                      onClick={() => {
+                        const snap = confirmandoMsg;
+                        if (snap) void confirmarEliminarMensaje(snap.id, snap.esRoot, false);
+                      }}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
                       Todo el hilo
@@ -1171,7 +1184,10 @@ function TarjetaHilo({
                   </>
                 ) : (
                   <AlertDialogAction
-                    onClick={() => void confirmarEliminarMensaje(true)}
+                    onClick={() => {
+                      const snap = confirmandoMsg;
+                      if (snap) void confirmarEliminarMensaje(snap.id, snap.esRoot, true);
+                    }}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     Eliminar
