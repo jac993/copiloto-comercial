@@ -6,6 +6,8 @@
 // Rendering plano y cronológico: dirección de burbuja según `remitente`.
 // MEJORA 1: Barra de input fija entre scroll area y barra de acciones.
 // MEJORA 2: Nombre del contacto encima de cada burbuja del prospecto.
+// FIX 1: Optimistic update usa datos reales de la API (id real de Supabase).
+// FIX 2: Borrar mensajes individuales con confirmación.
 // =============================================================
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -279,9 +281,21 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
       .catch(() => {});
   }, [empresaId]);
 
+  // Elimina hilo completo con confirmación (botón papelera del header)
   async function eliminarHilo(ids: string[]) {
     setEliminandoIds(new Set(ids));
     setConfirmandoHilo(null);
+    try {
+      await Promise.all(ids.map((id) => fetch(`/api/interacciones/${id}`, { method: "DELETE" })));
+      setLista((prev) => prev.filter((i) => !ids.includes(i.id)));
+    } finally {
+      setEliminandoIds(new Set());
+    }
+  }
+
+  // Elimina hilo completo de forma directa (sin confirm adicional — ya confirmó en la burbuja raíz)
+  async function eliminarHiloDirecto(ids: string[]) {
+    setEliminandoIds(new Set(ids));
     try {
       await Promise.all(ids.map((id) => fetch(`/api/interacciones/${id}`, { method: "DELETE" })));
       setLista((prev) => prev.filter((i) => !ids.includes(i.id)));
@@ -342,32 +356,33 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
     const data = await res.json() as { ok: boolean; interaccion?: Interaccion | null; error?: string };
     if (!data.ok) throw new Error(data.error ?? "Error al registrar respuesta");
 
-    // Optimistic update: construir el objeto local con datos conocidos.
-    // Usar el ID real de la BD si está disponible; si no, generar uno temporal.
-    // remitente siempre 'prospecto' — no depender de lo que devuelva la API.
-    const nueva: Interaccion = {
-      id: data.interaccion?.id ?? crypto.randomUUID(),
-      empresa_id: padre.empresa_id,
-      contacto_id: padre.contacto_id,
-      parent_id: padre.id,
-      remitente: "prospecto",
-      tipo: padre.tipo,
-      fecha: new Date().toISOString(),
-      audio_url: null,
-      transcripcion: texto,
-      resumen_ia: null,
-      compromisos: null,
-      sentimiento,
-      tecnica_usada: null,
-      coaching_ia: null,
-      proximo_paso: null,
-      proximo_paso_fecha: null,
-      badge_estado: null,
-      decision_sugerida: null,
-      creado_en: new Date().toISOString(),
-      actualizado_en: new Date().toISOString(),
-    };
-    setLista((prev) => [...prev, nueva]);
+    if (data.interaccion) {
+      // Usar el objeto completo devuelto por la API — tiene el ID real de Supabase y el timestamp del servidor
+      setLista((prev) => [...prev, data.interaccion!]);
+    } else {
+      // Fallback: refetch completo desde el servidor para sincronizar estado
+      try {
+        const rf = await fetch(`/api/interacciones/empresa/${padre.empresa_id}`);
+        const rd = await rf.json() as { ok: boolean; interacciones?: Interaccion[] };
+        if (rd.interacciones) setLista(rd.interacciones);
+      } catch {
+        // Si el refetch también falla, agregar con UUID temporal para no bloquear la UI
+        const nueva: Interaccion = {
+          id: crypto.randomUUID(),
+          empresa_id: padre.empresa_id,
+          contacto_id: padre.contacto_id,
+          parent_id: padre.id,
+          remitente: "prospecto",
+          tipo: padre.tipo,
+          fecha: new Date().toISOString(),
+          audio_url: null, transcripcion: texto, resumen_ia: null, compromisos: null,
+          sentimiento, tecnica_usada: null, coaching_ia: null, proximo_paso: null,
+          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null,
+          creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString(),
+        };
+        setLista((prev) => [...prev, nueva]);
+      }
+    }
   }
 
   return (
@@ -426,9 +441,11 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
             now={now}
             empresaId={empresaId}
             onEliminar={() => setConfirmandoHilo({ ids: hilo.todosLosIds, count: hilo.todosLosIds.length })}
+            onEliminarHiloDirecto={() => void eliminarHiloDirecto(hilo.todosLosIds)}
             onAgregarRespuesta={agregarRespuesta}
             onAnalizar={analizarExistente}
             onMensajeAgregado={(nueva) => setLista((prev) => [...prev, nueva])}
+            onMensajeEliminado={(id) => setLista((prev) => prev.filter((i) => i.id !== id))}
           />
         ))}
       </div>
@@ -511,9 +528,11 @@ function TarjetaHilo({
   now,
   empresaId,
   onEliminar,
+  onEliminarHiloDirecto,
   onAgregarRespuesta,
   onAnalizar,
   onMensajeAgregado,
+  onMensajeEliminado,
 }: {
   hilo: Hilo;
   contactos: Contacto[];
@@ -522,9 +541,11 @@ function TarjetaHilo({
   now: number;
   empresaId: string;
   onEliminar: () => void;
+  onEliminarHiloDirecto: () => void;
   onAgregarRespuesta: (padre: Interaccion, texto: string, sent: SentimientoInteraccion) => Promise<void>;
   onAnalizar: (id: string) => Promise<void>;
   onMensajeAgregado: (i: Interaccion) => void;
+  onMensajeEliminado: (id: string) => void;
 }) {
   const [expandido, setExpandido] = useState(false);
   const [forms, setForms] = useState<Record<string, FormRespuesta>>({});
@@ -533,6 +554,10 @@ function TarjetaHilo({
   const [inputBar, setInputBar] = useState<InputBarState>({
     texto: "", remitente: "vendedor", enviando: false, error: null,
   });
+  // Estado para borrar mensaje individual
+  const [eliminandoMsgId, setEliminandoMsgId] = useState<string | null>(null);
+  const [confirmandoMsg, setConfirmandoMsg] = useState<{ id: string; esRoot: boolean } | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -568,12 +593,12 @@ function TarjetaHilo({
     try { coaching = JSON.parse(ultimoMsj.coaching_ia); } catch { /* */ }
   }
 
-  // Scroll al fondo cuando se expande o llegan mensajes nuevos
+  // Scroll al fondo con requestAnimationFrame para asegurar que el DOM ya actualizó
   useEffect(() => {
     if (expandido && scrollRef.current) {
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }, 50);
+      });
     }
   }, [expandido, hilo.todosMensajes.length]);
 
@@ -631,30 +656,36 @@ function TarjetaHilo({
       const data = await res.json() as { ok: boolean; interaccion?: Interaccion | null; error?: string };
       if (!data.ok) throw new Error(data.error ?? "Error al enviar");
 
-      // Optimistic update: burbuja aparece de inmediato sin esperar refetch.
-      const nueva: Interaccion = {
-        id: data.interaccion?.id ?? crypto.randomUUID(),
-        empresa_id: empresaId,
-        contacto_id: hilo.contactoId,
-        parent_id: hilo.rootId,
-        remitente: inputBar.remitente,
-        tipo: hilo.tipo,
-        fecha: new Date().toISOString(),
-        audio_url: null,
-        transcripcion: texto,
-        resumen_ia: null,
-        compromisos: null,
-        sentimiento: inputBar.remitente === "prospecto" ? "neutro" : null,
-        tecnica_usada: null,
-        coaching_ia: null,
-        proximo_paso: null,
-        proximo_paso_fecha: null,
-        badge_estado: null,
-        decision_sugerida: null,
-        creado_en: new Date().toISOString(),
-        actualizado_en: new Date().toISOString(),
-      };
-      onMensajeAgregado(nueva);
+      if (data.interaccion) {
+        // Usar datos reales de la API — ID real de Supabase, timestamp del servidor
+        onMensajeAgregado(data.interaccion);
+      } else {
+        // Fallback con UUID temporal — no debería ocurrir con la ruta /crear
+        const nueva: Interaccion = {
+          id: crypto.randomUUID(),
+          empresa_id: empresaId,
+          contacto_id: hilo.contactoId,
+          parent_id: hilo.rootId,
+          remitente: inputBar.remitente,
+          tipo: hilo.tipo,
+          fecha: new Date().toISOString(),
+          audio_url: null,
+          transcripcion: texto,
+          resumen_ia: null,
+          compromisos: null,
+          sentimiento: inputBar.remitente === "prospecto" ? "neutro" : null,
+          tecnica_usada: null,
+          coaching_ia: null,
+          proximo_paso: null,
+          proximo_paso_fecha: null,
+          badge_estado: null,
+          decision_sugerida: null,
+          creado_en: new Date().toISOString(),
+          actualizado_en: new Date().toISOString(),
+        };
+        onMensajeAgregado(nueva);
+      }
+
       setInputBar((prev) => ({ ...prev, texto: "", enviando: false }));
       textareaRef.current?.focus();
     } catch (e) {
@@ -663,6 +694,38 @@ function TarjetaHilo({
         enviando: false,
         error: e instanceof Error ? e.message : "Error al enviar",
       }));
+    }
+  }
+
+  // Inicia el flujo de borrado de un mensaje individual
+  function solicitarEliminarMensaje(id: string) {
+    setConfirmandoMsg({ id, esRoot: id === hilo.rootId });
+  }
+
+  // Ejecuta el borrado tras confirmación
+  async function confirmarEliminarMensaje(soloEsteMensaje: boolean) {
+    if (!confirmandoMsg) return;
+    const { id, esRoot } = confirmandoMsg;
+    setConfirmandoMsg(null);
+
+    if (esRoot && !soloEsteMensaje) {
+      // Delegar al padre para borrar el hilo completo (ya confirmado aquí, sin segundo dialog)
+      onEliminarHiloDirecto();
+      return;
+    }
+
+    setEliminandoMsgId(id);
+    try {
+      const res = await fetch(`/api/interacciones/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json() as { error?: string };
+        throw new Error(d.error ?? "Error al eliminar");
+      }
+      onMensajeEliminado(id);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Error al eliminar el mensaje");
+    } finally {
+      setEliminandoMsgId(null);
     }
   }
 
@@ -753,6 +816,7 @@ function TarjetaHilo({
                 ? calcCountdown(msg.fecha, now)
                 : null;
               const estaVencida = countdown?.estado === "vencida";
+              const estaBorrando = eliminandoMsgId === msg.id;
 
               if (esProsp) {
                 // ── Burbuja prospecto (izquierda) ──
@@ -765,11 +829,11 @@ function TarjetaHilo({
                     <p className="text-[10px] font-medium text-[#7C3AED] ml-8">
                       {contacto?.nombre ?? "Prospecto"}
                     </p>
-                    <div className="flex justify-start items-end gap-2">
+                    <div className="flex justify-start items-end gap-2 group">
                       <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mb-0.5">
                         <User className="w-3.5 h-3.5 text-muted-foreground" />
                       </div>
-                      <div className={`max-w-[84%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm ${
+                      <div className={`max-w-[78%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm ${
                         esPos
                           ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40"
                           : "bg-card border border-border"
@@ -777,6 +841,18 @@ function TarjetaHilo({
                         <p className="text-sm text-foreground leading-relaxed">{textoResp}</p>
                         <p className="text-[10px] text-muted-foreground text-right mt-1">{fechaCorta(msg.fecha)}</p>
                       </div>
+                      {/* Botón borrar burbuja prospecto */}
+                      <button
+                        onClick={() => solicitarEliminarMensaje(msg.id)}
+                        disabled={estaBorrando}
+                        title="Eliminar mensaje"
+                        className="self-center shrink-0 h-6 w-6 rounded-full flex items-center justify-center mb-0.5 opacity-30 sm:opacity-0 sm:group-hover:opacity-100 hover:opacity-100 hover:bg-destructive/10 transition-opacity disabled:opacity-20"
+                      >
+                        {estaBorrando
+                          ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                          : <Trash2 className="h-3 w-3 text-destructive/70" />
+                        }
+                      </button>
                     </div>
                   </div>
                 );
@@ -786,7 +862,19 @@ function TarjetaHilo({
               const texto = msg.resumen_ia ?? msg.transcripcion;
               return (
                 <div key={msg.id} className="space-y-2">
-                  <div className="flex justify-end">
+                  <div className="flex justify-end items-start gap-1.5 group">
+                    {/* Botón borrar burbuja vendedor (a la izquierda de la burbuja) */}
+                    <button
+                      onClick={() => solicitarEliminarMensaje(msg.id)}
+                      disabled={estaBorrando}
+                      title="Eliminar mensaje"
+                      className="self-center shrink-0 h-6 w-6 rounded-full flex items-center justify-center mt-0.5 opacity-30 sm:opacity-0 sm:group-hover:opacity-100 hover:opacity-100 hover:bg-destructive/10 transition-opacity disabled:opacity-20"
+                    >
+                      {estaBorrando
+                        ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                        : <Trash2 className="h-3 w-3 text-destructive/70" />
+                      }
+                    </button>
                     <div className="max-w-[84%] bg-[#7C3AED] text-white rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-sm">
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">
                         {texto ?? (msg.tipo === "llamada" ? "Llamada registrada" : "Interacción registrada")}
@@ -1047,6 +1135,52 @@ function TarjetaHilo({
               )}
             </div>
           )}
+
+          {/* ── Dialog confirmación borrar mensaje individual ── */}
+          <AlertDialog
+            open={confirmandoMsg !== null}
+            onOpenChange={(open) => { if (!open) setConfirmandoMsg(null); }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {confirmandoMsg?.esRoot ? "¿Qué quieres eliminar?" : "¿Eliminar este mensaje?"}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {confirmandoMsg?.esRoot
+                    ? "Este es el primer mensaje del hilo. Puedes eliminar solo este mensaje o borrar el hilo completo con todos sus mensajes."
+                    : "Esta acción no se puede deshacer."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className={confirmandoMsg?.esRoot ? "flex-col-reverse sm:flex-row gap-2" : ""}>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                {confirmandoMsg?.esRoot ? (
+                  <>
+                    <AlertDialogAction
+                      onClick={() => void confirmarEliminarMensaje(true)}
+                      className="bg-destructive/70 text-white hover:bg-destructive/90"
+                    >
+                      Solo este mensaje
+                    </AlertDialogAction>
+                    <AlertDialogAction
+                      onClick={() => void confirmarEliminarMensaje(false)}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Todo el hilo
+                    </AlertDialogAction>
+                  </>
+                ) : (
+                  <AlertDialogAction
+                    onClick={() => void confirmarEliminarMensaje(true)}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Eliminar
+                  </AlertDialogAction>
+                )}
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
         </div>
       )}
     </div>
