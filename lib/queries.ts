@@ -617,7 +617,12 @@ export async function getHistorialResumido(empresaId: string): Promise<string> {
       continue;
     }
 
-    const fecha = new Date(item.fecha).toLocaleDateString("es-CL");
+    const fmtFecha = (iso: string) => new Date(iso).toLocaleString("es-CL", {
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+
+    const fecha = fmtFecha(item.fecha);
     const resumen = item.resumen_ia ?? item.transcripcion ?? "Sin resumen";
 
     // Buscar resolución posterior para este canal
@@ -633,7 +638,7 @@ export async function getHistorialResumido(empresaId: string): Promise<string> {
           resolucionInfo = {
             transcripcion: jItem.transcripcion ?? "",
             sentimiento: jItem.sentimiento,
-            fecha: new Date(jItem.fecha).toLocaleDateString("es-CL"),
+            fecha: fmtFecha(jItem.fecha),
           };
           usados.add(j);
           break;
@@ -649,7 +654,7 @@ export async function getHistorialResumido(empresaId: string): Promise<string> {
       lines.push(
         `[${fecha}] ${item.tipo} — Vendedor: "${resumen}"` +
           (item.proximo_paso ? ` | Próximo paso: ${item.proximo_paso}` : "") +
-          `\n[${resolucionInfo.fecha}] Respuesta del prospecto: "${resolucionInfo.transcripcion}" → Resultado: ${sentLabel}`
+          `\n[${resolucionInfo.fecha}] Prospecto: "${resolucionInfo.transcripcion}" → ${sentLabel}`
       );
     } else {
       const sentimiento = item.sentimiento ? ` | Sentimiento: ${item.sentimiento}` : "";

@@ -2,12 +2,8 @@
 
 // =============================================================
 // Tab Historial — hilos tipo WhatsApp agrupados por contacto+canal.
-// Un hilo = todos los mensajes con el mismo contacto Y canal.
-// Rendering plano y cronológico: dirección de burbuja según `remitente`.
-// MEJORA 1: Barra de input fija entre scroll area y barra de acciones.
-// MEJORA 2: Nombre del contacto encima de cada burbuja del prospecto.
-// FIX 1: Optimistic update usa datos reales de la API (id real de Supabase).
-// FIX 2: Borrar mensajes individuales con confirmación.
+// CAMBIO 1: fechaCorta con AM/PM; fallback a creado_en.
+// CAMBIO 3: botón editar (lápiz) por burbuja + en cabecera del hilo.
 // =============================================================
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -15,7 +11,7 @@ import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Trash2, ChevronDown, Loader2, Plus, Zap,
   TrendingUp, Minus, Brain, AlertCircle, Clock,
-  CheckCircle2, XCircle, AlertTriangle, User, Send,
+  CheckCircle2, XCircle, AlertTriangle, User, Send, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,10 +55,21 @@ const TIPO_CONF: Record<string, { emoji: string; Icon: React.ElementType; label:
   sin_respuesta:{ emoji: "⏰", Icon: PhoneOff,      label: "Sin respuesta" },
 };
 
-function fechaCorta(iso: string) {
-  return new Date(iso).toLocaleString("es-CL", {
-    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+// Formato "19 jun, 04:36 p.m." — usa fecha, con fallback a creado_en
+function fechaCorta(iso: string | null | undefined, fallback?: string | null): string {
+  const src = iso || fallback;
+  if (!src) return "";
+  return new Date(src).toLocaleString("es-CL", {
+    day: "numeric", month: "short",
+    hour: "2-digit", minute: "2-digit", hour12: true,
   });
+}
+
+// Convierte ISO a valor de <input type="datetime-local"> en hora local
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 const TIPOS_COUNTDOWN: TipoInteraccion[] = ["whatsapp", "email", "linkedin"];
@@ -105,8 +112,6 @@ const COUNTDOWN_STYLE: Record<EstadoCountdown, string> = {
   vencida:  "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400",
 };
 
-// Una interacción es del prospecto si: remitente explícito = 'prospecto'
-// o coincide con los textos legacy de resolución (para retrocompatibilidad).
 function esProspectoMsg(i: Interaccion): boolean {
   return i.remitente === "prospecto" || TEXTOS_RESOLUCION.has(i.transcripcion ?? "");
 }
@@ -119,18 +124,16 @@ interface TabHistorialProps {
   contactos: Contacto[];
 }
 
-// Hilo = todos los mensajes del mismo contacto+canal, en orden cronológico
 interface Hilo {
   key: string;
   contactoId: string | null;
   tipo: TipoInteraccion;
-  todosMensajes: Interaccion[]; // asc por fecha (vendedor + prospecto mezclados)
-  rootId: string | null;        // ID del primer mensaje — parent_id para mensajes nuevos
+  todosMensajes: Interaccion[];
+  rootId: string | null;
   ultimaFecha: string;
   todosLosIds: string[];
 }
 
-// Estado del formulario inline de respuesta (botones ✅ / ❌)
 interface FormRespuesta {
   open: boolean;
   texto: string;
@@ -139,11 +142,19 @@ interface FormRespuesta {
   error: string | null;
 }
 
-// Estado de la barra de input fija del hilo
 interface InputBarState {
   texto: string;
   remitente: "vendedor" | "prospecto";
   enviando: boolean;
+  error: string | null;
+}
+
+// Estado del formulario inline de edición de una burbuja
+interface EditMsgState {
+  id: string;
+  texto: string;
+  fecha: string; // formato datetime-local "YYYY-MM-DDTHH:mm"
+  guardando: boolean;
   error: string | null;
 }
 
@@ -161,10 +172,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
   const [correos, setCorreos] = useState<CorreoDetectado[]>([]);
   const [now, setNow] = useState(() => Date.now());
 
-  // Agrupa lista plana en hilos por contacto+canal.
-  // Rendering plano y cronológico: la dirección de burbuja se decide por `remitente`.
   const hilos = useMemo((): Hilo[] => {
-    // 1. IDs legacy (TEXTOS_RESOLUCION sin parent_id) — retrocompatibilidad
     const legacyRespIds = new Set<string>();
     for (const i of lista) {
       if (i.parent_id == null && TEXTOS_RESOLUCION.has(i.transcripcion ?? "")) {
@@ -172,15 +180,11 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
       }
     }
 
-    // 2. Mensajes raíz (sin parent_id, no legacy) — forman los hilos
     const rootMsgs = lista.filter(
       (i) => i.parent_id == null && !legacyRespIds.has(i.id)
     );
-
-    // 3. Mensajes legacy sin parent_id
     const legacyMsgs = lista.filter((i) => legacyRespIds.has(i.id));
 
-    // 4. Mapa parentId → hijos (mensajes con parent_id: desde botones o input bar)
     const childrenByParent = new Map<string, Interaccion[]>();
     for (const i of lista) {
       if (i.parent_id) {
@@ -190,7 +194,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
       }
     }
 
-    // 5. Pre-calcular qué mensaje raíz "reclama" cada legacy
     const legacyToRootId = new Map<string, string>();
     for (const leg of legacyMsgs) {
       const legTime = new Date(leg.fecha).getTime();
@@ -204,7 +207,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
       if (best) legacyToRootId.set(leg.id, best.id);
     }
 
-    // 6. Agrupar raíces por (contacto_id + tipo)
     const hiloMap = new Map<string, Interaccion[]>();
     for (const r of rootMsgs) {
       const key = `${r.contacto_id ?? "__none__"}::${r.tipo}`;
@@ -213,7 +215,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
       hiloMap.set(key, arr);
     }
 
-    // 7. Construir objeto Hilo
     return Array.from(hiloMap.entries())
       .map(([key, roots]) => {
         const sorted = [...roots].sort(
@@ -225,7 +226,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
 
         for (const root of sorted) {
           if (!allIds.has(root.id)) { allMsgs.push(root); allIds.add(root.id); }
-          // BFS para incluir todos los descendientes sin importar la profundidad
           const queue = [root.id];
           while (queue.length > 0) {
             const parentId = queue.shift()!;
@@ -239,7 +239,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
           }
         }
 
-        // Agregar legacy que apuntan a alguna raíz de este hilo
         const rootIdSet = new Set(sorted.map((r) => r.id));
         for (const leg of legacyMsgs) {
           const rid = legacyToRootId.get(leg.id);
@@ -281,7 +280,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
       .catch(() => {});
   }, [empresaId]);
 
-  // Elimina hilo completo con confirmación (botón papelera del header)
   async function eliminarHilo(ids: string[]) {
     setEliminandoIds(new Set(ids));
     setConfirmandoHilo(null);
@@ -293,7 +291,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
     }
   }
 
-  // Elimina hilo completo de forma directa (sin confirm adicional — ya confirmó en la burbuja raíz)
   async function eliminarHiloDirecto(ids: string[]) {
     setEliminandoIds(new Set(ids));
     try {
@@ -333,7 +330,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
     }
   }
 
-  // Registrar respuesta del prospecto via botones ✅/❌ — siempre remitente='prospecto'
   async function agregarRespuesta(
     padre: Interaccion,
     texto: string,
@@ -357,16 +353,13 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
     if (!data.ok) throw new Error(data.error ?? "Error al registrar respuesta");
 
     if (data.interaccion) {
-      // Usar el objeto completo devuelto por la API — tiene el ID real de Supabase y el timestamp del servidor
       setLista((prev) => [...prev, data.interaccion!]);
     } else {
-      // Fallback: refetch completo desde el servidor para sincronizar estado
       try {
         const rf = await fetch(`/api/interacciones/empresa/${padre.empresa_id}`);
         const rd = await rf.json() as { ok: boolean; interacciones?: Interaccion[] };
         if (rd.interacciones) setLista(rd.interacciones);
       } catch {
-        // Si el refetch también falla, agregar con UUID temporal para no bloquear la UI
         const nueva: Interaccion = {
           id: crypto.randomUUID(),
           empresa_id: padre.empresa_id,
@@ -388,7 +381,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
   return (
     <div className="space-y-3 pb-28">
 
-      {/* Banner correos detectados */}
       {correos.length > 0 && (
         <div className="bg-[#FFFBEB] border border-amber-200 rounded-xl p-3 space-y-1">
           <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
@@ -405,7 +397,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         </div>
       )}
 
-      {/* Header */}
       <div className="flex items-center justify-between px-0.5">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Historial</p>
         {hilos.length >= 2 && (
@@ -420,7 +411,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         )}
       </div>
 
-      {/* Empty state */}
       {hilos.length === 0 && (
         <div className="text-center py-12 space-y-3">
           <Clock className="h-10 w-10 mx-auto text-muted-foreground opacity-30" />
@@ -429,7 +419,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         </div>
       )}
 
-      {/* Hilos */}
       <div className="space-y-3">
         {hilos.map((hilo) => (
           <TarjetaHilo
@@ -446,11 +435,13 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
             onAnalizar={analizarExistente}
             onMensajeAgregado={(nueva) => setLista((prev) => [...prev, nueva])}
             onMensajeEliminado={(id) => setLista((prev) => prev.filter((i) => i.id !== id))}
+            onInteraccionActualizada={(actualizada) =>
+              setLista((prev) => prev.map((i) => (i.id === actualizada.id ? actualizada : i)))
+            }
           />
         ))}
       </div>
 
-      {/* Confirm delete hilo */}
       <AlertDialog
         open={confirmandoHilo !== null}
         onOpenChange={(open) => { if (!open) setConfirmandoHilo(null); }}
@@ -475,7 +466,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Full analysis dialog */}
       <Dialog
         open={analisisTodo !== null || errorTodo !== null}
         onOpenChange={(open) => { if (!open) { setAnalisisTodo(null); setErrorTodo(null); } }}
@@ -494,7 +484,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         </DialogContent>
       </Dialog>
 
-      {/* Nueva interacción */}
       <NuevaInteraccionSheet
         abierto={sheetAbierto}
         onCerrar={() => setSheetAbierto(false)}
@@ -503,7 +492,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
         onCreada={(nueva) => setLista((prev) => [nueva, ...prev])}
       />
 
-      {/* FAB */}
       <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
         <Button
           size="lg"
@@ -521,18 +509,9 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
 // ── Tarjeta de hilo ───────────────────────────────────────────
 
 function TarjetaHilo({
-  hilo,
-  contactos,
-  eliminandoIds,
-  analizandoId,
-  now,
-  empresaId,
-  onEliminar,
-  onEliminarHiloDirecto,
-  onAgregarRespuesta,
-  onAnalizar,
-  onMensajeAgregado,
-  onMensajeEliminado,
+  hilo, contactos, eliminandoIds, analizandoId, now, empresaId,
+  onEliminar, onEliminarHiloDirecto, onAgregarRespuesta, onAnalizar,
+  onMensajeAgregado, onMensajeEliminado, onInteraccionActualizada,
 }: {
   hilo: Hilo;
   contactos: Contacto[];
@@ -546,6 +525,7 @@ function TarjetaHilo({
   onAnalizar: (id: string) => Promise<void>;
   onMensajeAgregado: (i: Interaccion) => void;
   onMensajeEliminado: (id: string) => void;
+  onInteraccionActualizada: (i: Interaccion) => void;
 }) {
   const [expandido, setExpandido] = useState(false);
   const [forms, setForms] = useState<Record<string, FormRespuesta>>({});
@@ -554,9 +534,14 @@ function TarjetaHilo({
   const [inputBar, setInputBar] = useState<InputBarState>({
     texto: "", remitente: "vendedor", enviando: false, error: null,
   });
-  // Estado para borrar mensaje individual
   const [eliminandoMsgId, setEliminandoMsgId] = useState<string | null>(null);
   const [confirmandoMsg, setConfirmandoMsg] = useState<{ id: string; esRoot: boolean } | null>(null);
+  // Edición de burbuja individual
+  const [editandoMsg, setEditandoMsg] = useState<EditMsgState | null>(null);
+  // Edición de fecha/hora desde la cabecera del hilo (edita el mensaje raíz)
+  const [editandoHiloFecha, setEditandoHiloFecha] = useState<string | null>(null);
+  const [guardandoHiloFecha, setGuardandoHiloFecha] = useState(false);
+  const [errorHiloFecha, setErrorHiloFecha] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -565,7 +550,6 @@ function TarjetaHilo({
   const contacto = contactos.find((c) => c.id === hilo.contactoId);
   const tieneAlgunEliminado = hilo.todosLosIds.some((id) => eliminandoIds.has(id));
 
-  // Último mensaje del vendedor (para coaching/analizar y badges)
   const ultimoMsj = [...hilo.todosMensajes].reverse().find((m) => !esProspectoMsg(m)) ?? null;
   const badgeConf = ultimoMsj?.badge_estado ? BADGE_CONF[ultimoMsj.badge_estado] : null;
   const sentimientoConf =
@@ -573,12 +557,10 @@ function TarjetaHilo({
       ? (SENTIMIENTO_BADGE[ultimoMsj.sentimiento] ?? null)
       : null;
 
-  // Índice del último mensaje del vendedor — para mostrar countdown y botones de respuesta
   const lastVendorIdx = hilo.todosMensajes.reduceRight(
     (found, msg, idx) => (found === -1 && !esProspectoMsg(msg) ? idx : found),
     -1
   );
-  // Solo mostrar botones de respuesta si el último mensaje del vendedor no tiene prospecto después
   const showResponseButtons =
     TIPOS_COUNTDOWN.includes(hilo.tipo) &&
     lastVendorIdx >= 0 &&
@@ -593,7 +575,6 @@ function TarjetaHilo({
     try { coaching = JSON.parse(ultimoMsj.coaching_ia); } catch { /* */ }
   }
 
-  // Scroll al fondo con requestAnimationFrame para asegurar que el DOM ya actualizó
   useEffect(() => {
     if (expandido && scrollRef.current) {
       requestAnimationFrame(() => {
@@ -657,10 +638,8 @@ function TarjetaHilo({
       if (!data.ok) throw new Error(data.error ?? "Error al enviar");
 
       if (data.interaccion) {
-        // Usar datos reales de la API — ID real de Supabase, timestamp del servidor
         onMensajeAgregado(data.interaccion);
       } else {
-        // Fallback con UUID temporal — no debería ocurrir con la ruta /crear
         const nueva: Interaccion = {
           id: crypto.randomUUID(),
           empresa_id: empresaId,
@@ -669,48 +648,30 @@ function TarjetaHilo({
           remitente: inputBar.remitente,
           tipo: hilo.tipo,
           fecha: new Date().toISOString(),
-          audio_url: null,
-          transcripcion: texto,
-          resumen_ia: null,
-          compromisos: null,
+          audio_url: null, transcripcion: texto, resumen_ia: null, compromisos: null,
           sentimiento: inputBar.remitente === "prospecto" ? "neutro" : null,
-          tecnica_usada: null,
-          coaching_ia: null,
-          proximo_paso: null,
-          proximo_paso_fecha: null,
-          badge_estado: null,
-          decision_sugerida: null,
-          creado_en: new Date().toISOString(),
-          actualizado_en: new Date().toISOString(),
+          tecnica_usada: null, coaching_ia: null, proximo_paso: null,
+          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null,
+          creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString(),
         };
         onMensajeAgregado(nueva);
       }
-
       setInputBar((prev) => ({ ...prev, texto: "", enviando: false }));
       textareaRef.current?.focus();
     } catch (e) {
-      setInputBar((prev) => ({
-        ...prev,
-        enviando: false,
-        error: e instanceof Error ? e.message : "Error al enviar",
-      }));
+      setInputBar((prev) => ({ ...prev, enviando: false, error: e instanceof Error ? e.message : "Error al enviar" }));
     }
   }
 
-  // Inicia el flujo de borrado de un mensaje individual
   function solicitarEliminarMensaje(id: string) {
     setConfirmandoMsg({ id, esRoot: id === hilo.rootId });
   }
 
-  // Ejecuta el borrado tras confirmación.
-  // Recibe el id explícitamente para no depender del estado (puede ser null si Radix
-  // cierra el dialog y dispara onOpenChange antes de que el onClick se ejecute).
   async function confirmarEliminarMensaje(msgId: string, esRootMsg: boolean, soloEsteMensaje: boolean) {
     console.log(`[borrar-msg] id=${msgId} esRoot=${esRootMsg} solo=${soloEsteMensaje}`);
     setConfirmandoMsg(null);
 
     if (esRootMsg && !soloEsteMensaje) {
-      // Delegar al padre para borrar el hilo completo (ya confirmado aquí, sin segundo dialog)
       onEliminarHiloDirecto();
       return;
     }
@@ -719,13 +680,9 @@ function TarjetaHilo({
     try {
       console.log(`[borrar-msg] llamando DELETE /api/interacciones/${msgId}`);
       const res = await fetch(`/api/interacciones/${msgId}`, { method: "DELETE" });
-      // Leer el cuerpo siempre — no asumir éxito solo por res.ok
       const body = await res.json() as { ok?: boolean; error?: string };
       console.log(`[borrar-msg] respuesta HTTP ${res.status}:`, body);
-      if (!res.ok || !body.ok) {
-        throw new Error(body.error ?? `Error HTTP ${res.status}`);
-      }
-      // Solo quitar la burbuja del estado si Supabase confirmó el borrado
+      if (!res.ok || !body.ok) throw new Error(body.error ?? `Error HTTP ${res.status}`);
       onMensajeEliminado(msgId);
     } catch (e) {
       console.error("[borrar-msg] error:", e);
@@ -735,9 +692,55 @@ function TarjetaHilo({
     }
   }
 
+  // ── Guardar edición de texto + fecha de una burbuja individual ──
+  async function guardarEdicionMensaje() {
+    if (!editandoMsg) return;
+    const { id, texto, fecha } = editandoMsg;
+    setEditandoMsg((prev) => prev ? { ...prev, guardando: true, error: null } : null);
+    try {
+      const res = await fetch(`/api/interacciones/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto: texto.trim(), fecha: new Date(fecha).toISOString() }),
+      });
+      const data = await res.json() as { ok: boolean; interaccion?: Interaccion; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al guardar");
+      if (data.interaccion) onInteraccionActualizada(data.interaccion);
+      setEditandoMsg(null);
+    } catch (e) {
+      setEditandoMsg((prev) => prev
+        ? { ...prev, guardando: false, error: e instanceof Error ? e.message : "Error al guardar" }
+        : null);
+    }
+  }
+
+  // ── Guardar fecha/hora del mensaje raíz desde la cabecera ──
+  async function guardarFechaHilo() {
+    if (!hilo.rootId || !editandoHiloFecha) return;
+    setGuardandoHiloFecha(true);
+    setErrorHiloFecha(null);
+    try {
+      const res = await fetch(`/api/interacciones/${hilo.rootId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fecha: new Date(editandoHiloFecha).toISOString() }),
+      });
+      const data = await res.json() as { ok: boolean; interaccion?: Interaccion; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al guardar");
+      if (data.interaccion) onInteraccionActualizada(data.interaccion);
+      setEditandoHiloFecha(null);
+    } catch (e) {
+      setErrorHiloFecha(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setGuardandoHiloFecha(false);
+    }
+  }
+
   const previewTexto =
     hilo.todosMensajes[hilo.todosMensajes.length - 1]?.resumen_ia ??
     hilo.todosMensajes[hilo.todosMensajes.length - 1]?.transcripcion;
+
+  const rootMsg = hilo.todosMensajes.find((m) => m.id === hilo.rootId);
 
   return (
     <div className={`rounded-2xl border border-border bg-card shadow-sm overflow-hidden ${tieneAlgunEliminado ? "opacity-40 pointer-events-none" : ""}`}>
@@ -765,7 +768,17 @@ function TarjetaHilo({
                 </span>
               )}
             </div>
-            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            {/* Botones cabecera: lápiz + basura */}
+            <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <button
+                title="Editar fecha y hora"
+                onClick={() => setEditandoHiloFecha(
+                  rootMsg ? toDatetimeLocal(rootMsg.fecha) : toDatetimeLocal(new Date().toISOString())
+                )}
+                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-muted transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-foreground" />
+              </button>
               <button
                 onClick={onEliminar}
                 className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 transition-colors"
@@ -823,6 +836,8 @@ function TarjetaHilo({
                 : null;
               const estaVencida = countdown?.estado === "vencida";
               const estaBorrando = eliminandoMsgId === msg.id;
+              const estaEditando = editandoMsg?.id === msg.id;
+              const msgFecha = fechaCorta(msg.fecha, msg.creado_en);
 
               if (esProsp) {
                 // ── Burbuja prospecto (izquierda) ──
@@ -831,7 +846,6 @@ function TarjetaHilo({
                 const esPos = resInfo ? resInfo.positivo : msg.sentimiento === "positivo";
                 return (
                   <div key={msg.id} className="space-y-0.5">
-                    {/* Nombre del contacto encima (estilo grupos de WhatsApp) */}
                     <p className="text-[10px] font-medium text-[#7C3AED] ml-8">
                       {contacto?.nombre ?? "Prospecto"}
                     </p>
@@ -845,9 +859,22 @@ function TarjetaHilo({
                           : "bg-card border border-border"
                       }`}>
                         <p className="text-sm text-foreground leading-relaxed">{textoResp}</p>
-                        <p className="text-[10px] text-muted-foreground text-right mt-1">{fechaCorta(msg.fecha)}</p>
+                        <p className="text-[10px] text-muted-foreground text-right mt-1">{msgFecha}</p>
                       </div>
-                      {/* Botón borrar burbuja prospecto */}
+                      {/* Lápiz editar */}
+                      <button
+                        onClick={() => setEditandoMsg({
+                          id: msg.id,
+                          texto: msg.transcripcion ?? msg.resumen_ia ?? "",
+                          fecha: toDatetimeLocal(msg.fecha || msg.creado_en),
+                          guardando: false, error: null,
+                        })}
+                        title="Editar mensaje"
+                        className="self-center shrink-0 h-6 w-6 rounded-full flex items-center justify-center mb-0.5 opacity-30 sm:opacity-0 sm:group-hover:opacity-100 hover:opacity-100 hover:bg-muted transition-opacity"
+                      >
+                        <Pencil className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                      {/* Basura */}
                       <button
                         onClick={() => solicitarEliminarMensaje(msg.id)}
                         disabled={estaBorrando}
@@ -860,6 +887,8 @@ function TarjetaHilo({
                         }
                       </button>
                     </div>
+                    {/* Formulario edición inline — prospecto */}
+                    {estaEditando && <FormEdicion editandoMsg={editandoMsg!} setEditandoMsg={setEditandoMsg} onGuardar={guardarEdicionMensaje} />}
                   </div>
                 );
               }
@@ -869,7 +898,20 @@ function TarjetaHilo({
               return (
                 <div key={msg.id} className="space-y-2">
                   <div className="flex justify-end items-start gap-1.5 group">
-                    {/* Botón borrar burbuja vendedor (a la izquierda de la burbuja) */}
+                    {/* Lápiz editar */}
+                    <button
+                      onClick={() => setEditandoMsg({
+                        id: msg.id,
+                        texto: msg.resumen_ia ?? msg.transcripcion ?? "",
+                        fecha: toDatetimeLocal(msg.fecha || msg.creado_en),
+                        guardando: false, error: null,
+                      })}
+                      title="Editar mensaje"
+                      className="self-center shrink-0 h-6 w-6 rounded-full flex items-center justify-center mt-0.5 opacity-30 sm:opacity-0 sm:group-hover:opacity-100 hover:opacity-100 hover:bg-muted transition-opacity"
+                    >
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                    {/* Basura */}
                     <button
                       onClick={() => solicitarEliminarMensaje(msg.id)}
                       disabled={estaBorrando}
@@ -885,11 +927,13 @@ function TarjetaHilo({
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">
                         {texto ?? (msg.tipo === "llamada" ? "Llamada registrada" : "Interacción registrada")}
                       </p>
-                      <p className="text-[10px] text-white/60 text-right mt-1">{fechaCorta(msg.fecha)} ✓✓</p>
+                      <p className="text-[10px] text-white/60 text-right mt-1">{msgFecha} ✓✓</p>
                     </div>
                   </div>
 
-                  {/* Badge countdown */}
+                  {/* Formulario edición inline — vendedor */}
+                  {estaEditando && <FormEdicion editandoMsg={editandoMsg!} setEditandoMsg={setEditandoMsg} onGuardar={guardarEdicionMensaje} />}
+
                   {countdown && (
                     <div className="flex justify-end">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${COUNTDOWN_STYLE[countdown.estado]}`}>
@@ -898,8 +942,7 @@ function TarjetaHilo({
                     </div>
                   )}
 
-                  {/* Botones de respuesta rápida (solo bajo el último mensaje sin respuesta) */}
-                  {isLastVendor && showResponseButtons && !form.open && (
+                  {isLastVendor && showResponseButtons && !form.open && !estaEditando && (
                     <div className="flex justify-end">
                       {estaVencida ? (
                         <div className="flex gap-1.5 flex-wrap justify-end">
@@ -945,7 +988,6 @@ function TarjetaHilo({
                     </div>
                   )}
 
-                  {/* Formulario inline de respuesta */}
                   {form.open && (
                     <div className="space-y-2">
                       <Textarea
@@ -1002,14 +1044,11 @@ function TarjetaHilo({
           {/* ── Barra de input fija ── */}
           <div className="border-t border-border bg-card px-3 py-2.5">
             <div className="flex items-end gap-2">
-              {/* Toggle Yo / Prospecto */}
               <div className="flex rounded-lg border border-border overflow-hidden shrink-0 text-[11px] font-semibold">
                 <button
                   onClick={() => setInputBar((prev) => ({ ...prev, remitente: "vendedor" }))}
                   className={`px-2.5 py-1.5 transition-colors ${
-                    inputBar.remitente === "vendedor"
-                      ? "bg-[#7C3AED] text-white"
-                      : "text-muted-foreground hover:bg-muted"
+                    inputBar.remitente === "vendedor" ? "bg-[#7C3AED] text-white" : "text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   Yo
@@ -1017,32 +1056,23 @@ function TarjetaHilo({
                 <button
                   onClick={() => setInputBar((prev) => ({ ...prev, remitente: "prospecto" }))}
                   className={`px-2 py-1.5 transition-colors ${
-                    inputBar.remitente === "prospecto"
-                      ? "bg-gray-600 dark:bg-gray-500 text-white"
-                      : "text-muted-foreground hover:bg-muted"
+                    inputBar.remitente === "prospecto" ? "bg-gray-600 dark:bg-gray-500 text-white" : "text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   Prospecto
                 </button>
               </div>
-
-              {/* Input */}
               <Textarea
                 ref={textareaRef}
                 value={inputBar.texto}
                 onChange={(e) => setInputBar((prev) => ({ ...prev, texto: e.target.value }))}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void handleEnviarInputBar();
-                  }
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleEnviarInputBar(); }
                 }}
                 placeholder="Escribe un mensaje..."
                 rows={1}
                 className="flex-1 text-sm rounded-xl resize-none bg-muted/50 min-h-[36px] max-h-20 py-2 leading-tight"
               />
-
-              {/* Botón enviar */}
               <button
                 onClick={() => void handleEnviarInputBar()}
                 disabled={inputBar.enviando || !inputBar.texto.trim()}
@@ -1052,14 +1082,10 @@ function TarjetaHilo({
                     : "bg-gray-600 hover:bg-gray-700 dark:bg-gray-500 dark:hover:bg-gray-400 text-white"
                 }`}
               >
-                {inputBar.enviando
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : <Send className="w-4 h-4" />}
+                {inputBar.enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </button>
             </div>
-            {inputBar.error && (
-              <p className="text-xs text-destructive mt-1.5 pl-1">{inputBar.error}</p>
-            )}
+            {inputBar.error && <p className="text-xs text-destructive mt-1.5 pl-1">{inputBar.error}</p>}
           </div>
 
           {/* ── Barra de acciones ── */}
@@ -1142,7 +1168,7 @@ function TarjetaHilo({
             </div>
           )}
 
-          {/* ── Dialog confirmación borrar mensaje individual ── */}
+          {/* ── Dialog confirmación borrar mensaje ── */}
           <AlertDialog
             open={confirmandoMsg !== null}
             onOpenChange={(open) => { if (!open) setConfirmandoMsg(null); }}
@@ -1154,7 +1180,7 @@ function TarjetaHilo({
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {confirmandoMsg?.esRoot
-                    ? "Este es el primer mensaje del hilo. Puedes eliminar solo este mensaje o borrar el hilo completo con todos sus mensajes."
+                    ? "Este es el primer mensaje del hilo. Puedes eliminar solo este mensaje o borrar el hilo completo."
                     : "Esta acción no se puede deshacer."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -1164,7 +1190,6 @@ function TarjetaHilo({
                   <>
                     <AlertDialogAction
                       onClick={() => {
-                        // Capturar id y esRoot en el click — no leer desde estado async
                         const snap = confirmandoMsg;
                         if (snap) void confirmarEliminarMensaje(snap.id, snap.esRoot, true);
                       }}
@@ -1197,8 +1222,103 @@ function TarjetaHilo({
             </AlertDialogContent>
           </AlertDialog>
 
+          {/* ── Dialog editar fecha/hora del hilo (mensaje raíz) ── */}
+          <Dialog
+            open={editandoHiloFecha !== null}
+            onOpenChange={(open) => { if (!open) { setEditandoHiloFecha(null); setErrorHiloFecha(null); } }}
+          >
+            <DialogContent className="max-w-sm rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-sm font-bold">Editar fecha y hora</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-1">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                    Fecha y hora del primer mensaje
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editandoHiloFecha ?? ""}
+                    onChange={(e) => setEditandoHiloFecha(e.target.value)}
+                    className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+                {errorHiloFecha && (
+                  <p className="text-xs text-destructive">{errorHiloFecha}</p>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => { setEditandoHiloFecha(null); setErrorHiloFecha(null); }}
+                    className="flex-1 h-10 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => void guardarFechaHilo()}
+                    disabled={guardandoHiloFecha}
+                    className="flex-1 h-10 rounded-xl bg-[#7C3AED] text-white text-sm font-semibold hover:bg-[#6D28D9] transition-colors disabled:opacity-50"
+                  >
+                    {guardandoHiloFecha ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Guardar"}
+                  </button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Formulario inline de edición de burbuja ───────────────────
+
+function FormEdicion({
+  editandoMsg,
+  setEditandoMsg,
+  onGuardar,
+}: {
+  editandoMsg: EditMsgState;
+  setEditandoMsg: React.Dispatch<React.SetStateAction<EditMsgState | null>>;
+  onGuardar: () => Promise<void>;
+}) {
+  return (
+    <div className="space-y-2 mt-1 pl-8">
+      <Textarea
+        autoFocus
+        value={editandoMsg.texto}
+        onChange={(e) => setEditandoMsg((prev) => prev ? { ...prev, texto: e.target.value } : null)}
+        rows={3}
+        className="text-sm rounded-xl resize-none bg-card"
+        placeholder="Texto del mensaje…"
+      />
+      <div>
+        <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+          Fecha y hora
+        </label>
+        <input
+          type="datetime-local"
+          value={editandoMsg.fecha}
+          onChange={(e) => setEditandoMsg((prev) => prev ? { ...prev, fecha: e.target.value } : null)}
+          className="w-full text-sm rounded-xl border border-border bg-background px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+      </div>
+      {editandoMsg.error && <p className="text-xs text-destructive">{editandoMsg.error}</p>}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setEditandoMsg(null)}
+          className="flex-1 h-9 rounded-xl border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={() => void onGuardar()}
+          disabled={editandoMsg.guardando}
+          className="flex-1 h-9 rounded-xl bg-[#7C3AED] text-white text-xs font-semibold hover:bg-[#6D28D9] transition-colors disabled:opacity-50"
+        >
+          {editandoMsg.guardando ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "Guardar"}
+        </button>
+      </div>
     </div>
   );
 }

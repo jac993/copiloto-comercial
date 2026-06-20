@@ -73,6 +73,11 @@ export async function POST(
     const TIPOS_COUNTDOWN = new Set(["whatsapp", "email", "linkedin"]);
 
     // Construir el hilo cronológico completo, agrupando respuestas del prospecto
+    const fmtFechaHora = (iso: string) => new Date(iso).toLocaleString("es-CL", {
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+
     const usados = new Set<string>();
     const entradas: string[] = [];
     let entradaIdx = 0;
@@ -88,9 +93,7 @@ export async function POST(
       }
 
       entradaIdx++;
-      const fecha = new Date(i.fecha).toLocaleDateString("es-CL", {
-        day: "numeric", month: "short", year: "numeric",
-      });
+      const fecha = fmtFechaHora(i.fecha);
       const tipo = TIPO_LABEL[i.tipo] ?? i.tipo;
       const resumen = i.resumen_ia ?? i.transcripcion?.trim() ?? "(sin contenido registrado)";
       const badge = i.badge_estado ? ` | Diagnóstico IA: ${i.badge_estado}` : "";
@@ -111,9 +114,7 @@ export async function POST(
       }
 
       if (resolucionInfo) {
-        const fechaResp = new Date(resolucionInfo.fecha).toLocaleDateString("es-CL", {
-          day: "numeric", month: "short", year: "numeric",
-        });
+        const fechaResp = fmtFechaHora(resolucionInfo.fecha);
         const sentLabel =
           resolucionInfo.sentimiento === "positivo" ? "positivo"
           : resolucionInfo.sentimiento === "negativo" ? "negativo"
@@ -140,8 +141,8 @@ ESTADO ACTUAL EN CRM: ${empresa.estado}
 SCORE DE PRIORIDAD: ${empresa.score_prioridad}/100
 NOTAS DEL VENDEDOR: ${empresa.notas_vendedor ?? "Ninguna"}
 TOTAL DE INTERACCIONES: ${interacciones.length}
-PRIMERA INTERACCIÓN: ${new Date(interacciones[0].fecha).toLocaleDateString("es-CL")}
-ÚLTIMA INTERACCIÓN: ${new Date(interacciones[interacciones.length - 1].fecha).toLocaleDateString("es-CL")}
+PRIMERA INTERACCIÓN: ${fmtFechaHora(interacciones[0].fecha)}
+ÚLTIMA INTERACCIÓN: ${fmtFechaHora(interacciones[interacciones.length - 1].fecha)}
 
 ===== HILO COMPLETO DE LA RELACIÓN COMERCIAL =====
 
