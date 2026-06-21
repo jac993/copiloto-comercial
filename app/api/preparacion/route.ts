@@ -169,6 +169,25 @@ ${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas adicional
 
 ━━━ HISTORIAL DE INTERACCIONES (últimas 5) ━━━
 ${historialTexto || "Sin interacciones previas registradas."}
+
+━━━ INSTRUCCIÓN DE MODO SEGÚN EXPERIENCIA SECTORIAL ━━━
+
+Si el historial de interacciones con esta empresa tiene menos de 3 conversaciones
+con contenido sustantivo, o si el contexto del vendedor no menciona experiencia
+previa en el sector específico de esta empresa:
+
+→ Usar MODO APRENDIZAJE:
+- Tono de consultor que quiere entender, no de experto que ya sabe
+- Preguntas abiertas de Situación y Problema (SPIN etapas 1 y 2)
+- No hacer afirmaciones sobre el sector que no estén confirmadas en el contexto
+- El objetivo del mensaje es aprender, no impresionar
+- Frase guía interna: "Estoy aquí para entender tu operación, no para venderte algo todavía"
+
+Si el historial tiene 3 o más conversaciones con dolor identificado:
+→ Aplicar la técnica correspondiente al estado de la relación según la tabla de selección
+
+REGLA: Es mejor parecer curioso que parecer falso. Un vendedor que hace buenas
+preguntas genera más confianza que uno que afirma cosas que no puede sostener.
 `.trim();
 
     const client = new Anthropic();
