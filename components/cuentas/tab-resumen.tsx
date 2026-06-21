@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe } from "lucide-react";
+import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Accordion,
   AccordionContent,
@@ -45,6 +46,8 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
   const [regenerando, setRegenerando] = useState(false);
   const [errorRegen, setErrorRegen] = useState<string | null>(null);
   const [contextoNuevo, setContextoNuevo] = useState("");
+  // Estado local para notas del vendedor (editable inline)
+  const [notasVendedorLocal, setNotasVendedorLocal] = useState(notasVendedor);
   const [reinvestigando, setReinvestigando] = useState(false);
   const [confirmarReinvestigar, setConfirmarReinvestigar] = useState(false);
 
@@ -96,13 +99,13 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
 
   return (
     <div className="space-y-4 pb-6">
-      {/* Lo que yo sé — lectura del contexto aportado al investigar */}
-      {notasVendedor && (
-        <ContextoVerificacion
-          notasVendedor={notasVendedor}
-          verificacion={ficha.verificacion_contexto ?? []}
-        />
-      )}
+      {/* Lo que yo sé — editable inline */}
+      <ContextoVerificacion
+        notasVendedor={notasVendedorLocal ?? ""}
+        verificacion={ficha.verificacion_contexto ?? []}
+        empresaId={empresaId}
+        onNotasUpdated={setNotasVendedorLocal}
+      />
 
       {/* Resumen ejecutivo — lo primero que ves */}
       <Card className="border-0 bg-primary/5 dark:bg-primary/10">
@@ -333,17 +336,61 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
 function ContextoVerificacion({
   notasVendedor,
   verificacion,
+  empresaId,
+  onNotasUpdated,
 }: {
   notasVendedor: string;
   verificacion: VerificacionContexto[];
+  empresaId: string;
+  onNotasUpdated: (notas: string) => void;
 }) {
+  const { toast } = useToast();
+  const [editando, setEditando] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
   const alertas = verificacion.filter(
     (v) => v.estado === "inconsistente" || v.estado === "no_verificable"
   );
 
+  const iniciarEdicion = () => {
+    setDraft(notasVendedor);
+    setEditando(true);
+  };
+
+  const cancelar = () => {
+    setEditando(false);
+    setDraft("");
+  };
+
+  const guardar = async () => {
+    setGuardando(true);
+    try {
+      const res = await fetch(`/api/empresas/${empresaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notas_vendedor: draft.trim() || null }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al guardar");
+      onNotasUpdated(draft.trim());
+      setEditando(false);
+      setDraft("");
+      toast({ title: "Guardado" });
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "No se pudo guardar",
+        description: e instanceof Error ? e.message : "Error desconocido",
+      });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   return (
     <div className="space-y-2">
-      {/* Lo que yo sé — read only */}
+      {/* Lo que yo sé — editable inline */}
       <Card className="border-amber-200 dark:border-amber-800/30 bg-amber-50/50 dark:bg-amber-900/5">
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-1.5 mb-1.5">
@@ -355,10 +402,59 @@ function ContextoVerificacion({
               explicacion="Agrega información que solo tú sabes y que no está en internet. La IA la incorpora al análisis para hacerlo más preciso y personalizado."
               ejemplo={"Ej: 'Hablé con alguien del mercado, me dijeron que tuvieron 3 rechazos este mes con su proveedor actual de etiquetas.'"}
             />
+            {!editando && (
+              <button
+                onClick={iniciarEdicion}
+                aria-label="Editar"
+                className="ml-auto p-1 rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+              >
+                <Pencil size={14} />
+              </button>
+            )}
           </div>
-          <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed whitespace-pre-line">
-            {notasVendedor}
-          </p>
+
+          {editando ? (
+            <div className="space-y-2 mt-1">
+              <Textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={4}
+                placeholder="Contexto que solo tú sabes: contactos, problemas recientes, oportunidades..."
+                className="text-sm resize-none border-amber-300 dark:border-amber-700 focus-visible:ring-[#7C3AED]"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={guardar}
+                  disabled={guardando}
+                  className="bg-[#7C3AED] hover:bg-[#6d28d9] text-white h-8 text-xs"
+                >
+                  {guardando ? "Guardando…" : "Guardar"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={cancelar}
+                  disabled={guardando}
+                  className="h-8 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p
+              onClick={iniciarEdicion}
+              className={`text-sm leading-relaxed whitespace-pre-line cursor-text ${
+                notasVendedor
+                  ? "text-amber-800 dark:text-amber-300"
+                  : "text-amber-400 dark:text-amber-600 italic"
+              }`}
+            >
+              {notasVendedor || "Sin contexto aún. Toca para agregar."}
+            </p>
+          )}
         </CardContent>
       </Card>
 
