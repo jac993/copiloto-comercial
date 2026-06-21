@@ -4,23 +4,27 @@
 // editar notas_vendedor y otros campos simples.
 // =============================================================
 
-import { updateEmpresa } from "@/lib/queries";
+import { guardarNotasVendedor } from "@/lib/queries";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
+  try {
+    const { id } = await params;
 
-  const body = (await request.json()) as { notas_vendedor?: string | null };
+    const body = (await request.json()) as { notas_vendedor?: string | null };
 
-  if (body.notas_vendedor === undefined) {
-    return Response.json({ error: "Sin campos para actualizar" }, { status: 400 });
+    if (body.notas_vendedor === undefined) {
+      return Response.json({ error: "Sin campos para actualizar" }, { status: 400 });
+    }
+
+    await guardarNotasVendedor(id, body.notas_vendedor ?? null);
+
+    return Response.json({ ok: true });
+  } catch (e) {
+    const mensaje = e instanceof Error ? e.message : "Error desconocido";
+    console.error("[PATCH /api/empresas/[id]]", mensaje);
+    return Response.json({ error: mensaje }, { status: 500 });
   }
-
-  const empresa = await updateEmpresa(id, {
-    notas_vendedor: body.notas_vendedor ?? null,
-  });
-
-  return Response.json({ ok: true, empresa });
 }

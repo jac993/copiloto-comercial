@@ -8,8 +8,23 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@supabase/supabase-js";
 import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
+
+// Lee notas_vendedor fresco desde Supabase para no depender del estado del cliente
+async function fetchNotasVendedor(empresaId: string): Promise<string | null> {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  );
+  const { data } = await supabase
+    .from("empresas")
+    .select("notas_vendedor")
+    .eq("id", empresaId)
+    .single();
+  return (data as { notas_vendedor: string | null } | null)?.notas_vendedor ?? null;
+}
 
 export const maxDuration = 30;
 
@@ -38,7 +53,6 @@ interface PrepararBody {
   tipo?: TipoBorrador;
   nombreEmpresa: string;
   industria?: string | null;
-  notasVendedor?: string | null;
   decisorNombre?: string | null;
   decisorCargo: string;
   decisorArea?: string | null;
@@ -66,12 +80,16 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as PrepararBody;
     const {
-      empresaId, canal, tipo: tipoRaw, nombreEmpresa, industria, notasVendedor,
+      empresaId, canal, tipo: tipoRaw, nombreEmpresa, industria,
       decisorNombre, decisorCargo, decisorArea,
       dolorEspecifico, tecnicaRecomendada,
       anguloEntrada, descripcion, porQueNecesitanEtiquetas,
       historial,
     } = body;
+
+    // Leer notas_vendedor siempre desde Supabase — nunca desde el cliente —
+    // para que los borradores usen el contexto más reciente guardado.
+    const notasVendedor = await fetchNotasVendedor(empresaId);
 
     const tipo: TipoBorrador = tipoRaw ?? "apertura";
 
