@@ -62,7 +62,7 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
       const data = (await res.json()) as { ok: boolean; angulo_entrada?: string; error?: string };
       if (!data.ok || !data.angulo_entrada) throw new Error(data.error ?? "Error desconocido");
       setAnguloActual(data.angulo_entrada);
-      toast({ title: "Ángulo de entrada actualizado ✓" });
+      toast({ title: "Estrategia de entrada actualizada ✓" });
     } catch (e) {
       toast({
         variant: "destructive",
@@ -135,7 +135,7 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
       {sugerirActualizarAngulo && (
         <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-[#EDE9FE] border border-violet-200 dark:bg-violet-950/30 dark:border-violet-800/40">
           <p className="text-xs text-[#5B21B6] dark:text-violet-300 leading-snug">
-            Contexto actualizado ✓ — ¿Actualizar el ángulo de entrada?
+            Contexto actualizado ✓ — ¿Actualizar la estrategia de entrada?
           </p>
           <div className="flex items-center gap-2 shrink-0">
             <Button
@@ -180,13 +180,18 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
         <EncontradoEnInternet raw={busquedaWebRaw} />
       )}
 
-      {/* Ángulo de entrada + técnica + botón regenerar */}
+      {/* Estrategia de entrada + técnica + botones */}
       <Card>
         <CardContent className="pt-5 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Ángulo de entrada
-            </p>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Estrategia de entrada
+              </p>
+              <p className="text-xs text-muted-foreground/60 mt-0.5">
+                Guía interna para el vendedor — no es un mensaje para enviar
+              </p>
+            </div>
             <span
               className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                 TECNICA_COLOR[ficha.tecnica_recomendada] ?? "bg-muted text-muted-foreground"
@@ -200,7 +205,7 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
             <div className="space-y-2.5 py-1">
               <div className="flex items-center gap-2 text-xs text-muted-foreground italic">
                 <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
-                Incorporando tu contexto...
+                Actualizando estrategia...
               </div>
               <div className="space-y-1.5 animate-pulse">
                 <div className="h-3.5 rounded-full bg-muted w-full" />
@@ -255,7 +260,7 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
               onClick={actualizarAngulo}
               disabled={actualizandoAngulo || regenerando}
               className="gap-1.5 text-xs bg-[#7C3AED] hover:bg-[#6d28d9] text-white"
-              title="Actualiza el ángulo usando el contexto guardado en 'Lo que yo sé'"
+              title="Actualiza la estrategia de entrada usando el contexto guardado"
             >
               <Zap className="h-3.5 w-3.5" />
               {actualizandoAngulo ? "Actualizando…" : "Actualizar ángulo"}

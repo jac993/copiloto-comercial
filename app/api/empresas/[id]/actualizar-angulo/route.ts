@@ -34,21 +34,33 @@ export async function POST(
     );
   }
 
-  const prompt = `Dado el perfil de esta empresa y el contexto actualizado del vendedor, genera un nuevo ángulo de entrada SPIN en 3-4 líneas. Basa el análisis SOLO en la información proporcionada, sin inventar datos externos.
+  const prompt = `Eres un estratega de ventas B2B consultivo. Basándote ÚNICAMENTE en la información proporcionada sobre esta empresa y el contexto del vendedor, genera una estrategia de entrada en formato de análisis, NO un mensaje para enviar.
 
+La estrategia debe tener esta estructura:
+1. DECISOR DE ENTRADA: quién contactar primero y por qué ese cargo específico
+2. MOMENTO: por qué ahora es buen momento (basado en señales reales del contexto)
+3. ARGUMENTO CENTRAL: el dolor o problema a plantear, formulado como pregunta, no como afirmación
+4. CANAL RECOMENDADO: qué canal usar primero y por qué
+5. RIESGO PRINCIPAL: qué obstáculo anticipar y cómo manejarlo
+
+Tono: estratégico, directo, como un coach de ventas hablándole al vendedor.
+NO generes un mensaje para enviar al prospecto.
+NO inventes datos, casos ni porcentajes que no estén en el contexto.
+Si no tienes información suficiente para algún punto, indícalo como "Por confirmar".
+Máximo 150 palabras en total.
+
+━━━ INFORMACIÓN DE LA EMPRESA ━━━
 EMPRESA: ${empresa.nombre}
 INDUSTRIA: ${empresa.industria ?? "no especificada"}
-DESCRIPCIÓN: ${ficha.descripcion ?? ficha.que_fabrican_o_venden ?? "no disponible"}
 QUÉ FABRICAN/VENDEN: ${ficha.que_fabrican_o_venden ?? "no especificado"}
 POR QUÉ NECESITAN ETIQUETAS: ${ficha.por_que_necesitan_etiquetas ?? "no especificado"}
 RESUMEN EJECUTIVO: ${ficha.resumen_ejecutivo ?? "no disponible"}
+SEÑALES DE OPORTUNIDAD: ${ficha.senales_oportunidad?.map((s) => s.descripcion).join("; ") ?? "ninguna detectada"}
 TÉCNICA DE VENTA RECOMENDADA: ${ficha.tecnica_recomendada ?? "no definida"}
-ÁNGULO ANTERIOR: ${ficha.angulo_entrada ?? "ninguno"}
+DECISORES IDENTIFICADOS: ${ficha.decisores?.map((d) => `${d.cargo}: ${d.dolor_especifico ?? d.por_que_es_clave ?? "sin dolor definido"}`).join(" | ") ?? "ninguno"}
 
-CONTEXTO DEL VENDEDOR (lo que solo él sabe — PRIORIZAR esto):
-${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin contexto adicional del vendedor."}
-
-Responde ÚNICAMENTE con el nuevo ángulo de entrada. Sin prefijos, sin comillas, sin explicaciones. Solo el texto del ángulo en 3-4 líneas.`;
+━━━ CONTEXTO DEL VENDEDOR (PRIORIZAR — lo que solo él sabe) ━━━
+${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin contexto adicional del vendedor."}`;
 
   const client = new Anthropic();
   const response = await client.messages.create({
