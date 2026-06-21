@@ -3,28 +3,16 @@
 // Genera UN borrador personalizado para un canal y decisor.
 // El tipo (apertura/seguimiento/continuacion/reactivacion) se
 // detecta en el cliente según historial real con ese contacto.
+// Obtiene TODO el contexto directo desde Supabase — nada viaja
+// desde el cliente excepto empresaId, canal, tipo y el decisor.
 // Se llama solo cuando el usuario pincha el canal — nunca en bg.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@supabase/supabase-js";
+import { getEmpresaCompleta, getHistorialResumido } from "@/lib/queries";
 import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
-
-// Lee notas_vendedor fresco desde Supabase para no depender del estado del cliente
-async function fetchNotasVendedor(empresaId: string): Promise<string | null> {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  );
-  const { data } = await supabase
-    .from("empresas")
-    .select("notas_vendedor")
-    .eq("id", empresaId)
-    .single();
-  return (data as { notas_vendedor: string | null } | null)?.notas_vendedor ?? null;
-}
 
 export const maxDuration = 30;
 
@@ -39,29 +27,14 @@ export type BorradorCanalResult =
   | { canal: "linkedin"; texto: string }
   | { canal: "correo"; asunto: string; cuerpo: string };
 
-interface HistorialItem {
-  fecha: string;
-  tipo: string;
-  remitente: string;
-  resumen: string;
-  proximoPaso?: string | null;
-}
-
+// Solo los datos dinámicos que el servidor no puede inferir viajan desde el cliente
 interface PrepararBody {
   empresaId: string;
   canal: CanalBorrador;
   tipo?: TipoBorrador;
-  nombreEmpresa: string;
-  industria?: string | null;
   decisorNombre?: string | null;
   decisorCargo: string;
   decisorArea?: string | null;
-  dolorEspecifico: string;
-  tecnicaRecomendada: string;
-  anguloEntrada: string;
-  descripcion: string;
-  porQueNecesitanEtiquetas: string;
-  historial: HistorialItem[];
 }
 
 // Instrucción explícita por tipo para que Claude no meta la pata
@@ -79,23 +52,11 @@ const INSTRUCCION_TIPO: Record<TipoBorrador, string> = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as PrepararBody;
-    const {
-      empresaId, canal, tipo: tipoRaw, nombreEmpresa, industria,
-      decisorNombre, decisorCargo, decisorArea,
-      dolorEspecifico, tecnicaRecomendada,
-      anguloEntrada, descripcion, porQueNecesitanEtiquetas,
-      historial,
-    } = body;
+    const { empresaId, canal, tipo: tipoRaw, decisorNombre, decisorCargo, decisorArea } = body;
 
-    // Leer notas_vendedor siempre desde Supabase — nunca desde el cliente —
-    // para que los borradores usen el contexto más reciente guardado.
-    const notasVendedor = await fetchNotasVendedor(empresaId);
-
-    const tipo: TipoBorrador = tipoRaw ?? "apertura";
-
-    if (!empresaId || !canal || !nombreEmpresa || !decisorCargo) {
+    if (!empresaId || !canal || !decisorCargo) {
       return NextResponse.json(
-        { error: "empresaId, canal, nombreEmpresa y decisorCargo son requeridos" },
+        { error: "empresaId, canal y decisorCargo son requeridos" },
         { status: 400 }
       );
     }
@@ -105,40 +66,109 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Canal inválido: ${canal}` }, { status: 400 });
     }
 
-    const historialTexto = historial.length > 0
-      ? historial.map((i) => {
-          const fecha = new Date(i.fecha).toLocaleString("es-CL", {
-            day: "numeric", month: "short", year: "numeric",
-            hour: "2-digit", minute: "2-digit", hour12: false,
-          });
-          const rem = i.remitente === "prospecto" ? "Prospecto" : "Vendedor";
-          return `- [${fecha}] ${i.tipo} — ${rem}: "${i.resumen}"${i.proximoPaso ? ` → Próximo: ${i.proximoPaso}` : ""}`;
-        }).join("\n")
-      : "Sin interacciones previas registradas.";
+    // Cargar contexto completo desde Supabase en paralelo
+    const [empresa, historialTexto] = await Promise.all([
+      getEmpresaCompleta(empresaId),
+      getHistorialResumido(empresaId),
+    ]);
+
+    if (!empresa) {
+      return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+    }
+
+    const tipo: TipoBorrador = tipoRaw ?? "apertura";
+    const ficha = empresa.ficha_ia;
+
+    // Construir resumen de decisores conocidos por IA
+    const decisoresTexto =
+      ficha?.decisores && ficha.decisores.length > 0
+        ? ficha.decisores
+            .map(
+              (d) =>
+                `  • ${d.cargo}: ${d.dolor_especifico ?? d.por_que_es_clave ?? "sin dolor definido"}`
+            )
+            .join("\n")
+        : "  Sin análisis de decisores disponible.";
+
+    // Construir resumen de contactos registrados
+    const contactosTexto =
+      empresa.contactos.length > 0
+        ? empresa.contactos
+            .map((c) => `  • ${c.nombre} (${c.cargo ?? "sin cargo"}, ${c.area ?? "sin área"})`)
+            .join("\n")
+        : "  Sin contactos registrados aún.";
+
+    // Objeciones conocidas
+    const objecionesTexto =
+      ficha?.objeciones_probables && ficha.objeciones_probables.length > 0
+        ? ficha.objeciones_probables
+            .map((o) => `  • "${o.objecion}" → ${o.como_responderla}`)
+            .join("\n")
+        : "  Sin análisis de objeciones.";
+
+    // Encontrar al decisor objetivo dentro de ficha para enriquecer su perfil
+    const decisorFicha = ficha?.decisores?.find(
+      (d) => d.cargo.toLowerCase() === decisorCargo.toLowerCase()
+    );
 
     const contexto = `
 TIPO DE BORRADOR: ${tipo.toUpperCase()}
 INSTRUCCIÓN CRÍTICA: ${INSTRUCCION_TIPO[tipo]}
 
-EMPRESA DESTINO:
-- Nombre: ${nombreEmpresa}
-- Industria: ${industria ?? "no especificada"}
-- Descripción: ${descripcion}
-- Por qué necesitan etiquetas: ${porQueNecesitanEtiquetas}
-- Ángulo de entrada: ${anguloEntrada}
+━━━ EMPRESA ━━━
+Nombre: ${empresa.nombre}
+Razón social: ${empresa.razon_social ?? empresa.nombre}
+Industria: ${empresa.industria ?? "no especificada"}
+Estado en pipeline: ${empresa.estado}
+Score de prioridad: ${empresa.score_prioridad ?? "N/A"}/100
+Razón de contacto actual: ${empresa.razon_de_contacto_actual ?? "sin definir"}
 
-DECISOR A CONTACTAR:
-- Nombre: ${decisorNombre ?? "(no identificado aún)"}
-- Cargo: ${decisorCargo}
-- Área: ${decisorArea ?? "no especificada"}
-- Dolor específico: ${dolorEspecifico}
-- Técnica recomendada: ${tecnicaRecomendada}
+━━━ ANÁLISIS IA DE LA EMPRESA ━━━
+Resumen ejecutivo:
+${ficha?.resumen_ejecutivo ?? "Sin ficha de IA disponible."}
 
-CONTEXTO DEL VENDEDOR (lo que solo él sabe):
-${notasVendedor?.trim() ? notasVendedor : "Sin notas adicionales."}
+Descripción:
+${ficha?.descripcion ?? "No disponible."}
 
-HISTORIAL CON ESTE CONTACTO (últimas 5 interacciones):
-${historialTexto}
+Qué fabrican/venden:
+${ficha?.que_fabrican_o_venden ?? "No especificado."}
+
+Por qué necesitan etiquetas:
+${ficha?.por_que_necesitan_etiquetas ?? "No especificado."}
+
+Ángulo de entrada recomendado:
+${ficha?.angulo_entrada ?? "Sin definir."}
+
+Técnica de venta recomendada: ${ficha?.tecnica_recomendada ?? "Sin definir"}
+Razón: ${ficha?.razon_tecnica ?? ""}
+
+Señales de oportunidad:
+${ficha?.senales_oportunidad?.join(", ") ?? "Sin señales detectadas."}
+
+Inteligencia comercial adicional:
+${ficha?.inteligencia_comercial ?? "Sin inteligencia comercial adicional."}
+
+━━━ DECISOR A CONTACTAR ━━━
+Nombre: ${decisorNombre ?? "(no identificado aún)"}
+Cargo: ${decisorCargo}
+Área: ${decisorArea ?? "no especificada"}
+${decisorFicha ? `Dolor específico: ${decisorFicha.dolor_especifico ?? decisorFicha.por_que_es_clave ?? "no definido"}` : ""}
+${decisorFicha?.query_linkedin ? `Query LinkedIn: ${decisorFicha.query_linkedin}` : ""}
+
+━━━ OTROS DECISORES CONOCIDOS ━━━
+${decisoresTexto}
+
+━━━ CONTACTOS REGISTRADOS ━━━
+${contactosTexto}
+
+━━━ OBJECIONES PROBABLES ━━━
+${objecionesTexto}
+
+━━━ CONTEXTO DEL VENDEDOR (lo que solo él sabe) ━━━
+${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas adicionales."}
+
+━━━ HISTORIAL DE INTERACCIONES (últimas 5) ━━━
+${historialTexto || "Sin interacciones previas registradas."}
 `.trim();
 
     const client = new Anthropic();

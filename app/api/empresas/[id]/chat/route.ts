@@ -128,7 +128,10 @@ ${
         .map((o) => `- "${o.objecion}" → ${o.como_responderla}`)
         .join("\n")
     : "Sin análisis de objeciones disponible."
-}`;
+}
+
+INTELIGENCIA COMERCIAL ADICIONAL:
+${ficha?.inteligencia_comercial ?? "Sin inteligencia comercial adicional."}`;
 
   // Reconstruir historial de chat guardado como mensajes Anthropic
   const mensajesHistorial: Anthropic.MessageParam[] = historialChat.flatMap((h) => [

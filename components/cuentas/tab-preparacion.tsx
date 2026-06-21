@@ -202,18 +202,9 @@ export function TabPreparacion({
           empresaId,
           canal,
           tipo: decisor.tipo,
-          nombreEmpresa,
-          industria,
-          notasVendedor,
           decisorNombre: decisor.nombre,
           decisorCargo: decisor.cargo,
           decisorArea: decisor.area,
-          dolorEspecifico: decisor.dolorEspecifico,
-          tecnicaRecomendada: decisor.tecnicaRecomendada,
-          anguloEntrada: ficha.angulo_entrada,
-          descripcion: ficha.descripcion,
-          porQueNecesitanEtiquetas: ficha.por_que_necesitan_etiquetas,
-          historial: decisor.historialContacto,
         }),
       });
       console.log("[preparacion] fetch respondió HTTP", res.status);
