@@ -334,12 +334,12 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
 
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Lo que yo sé
+                Lo que sé y cómo quiero entrar
               </label>
               <textarea
                 value={editNotas}
                 onChange={(e) => setEditNotas(e.target.value)}
-                placeholder="Contexto que solo tú sabes: contactos, problemas recientes, oportunidades..."
+                placeholder={`Ej: Sé que fabrican potes para el sector lácteo.\nEl jefe de planta se llama Rodrigo y tiene presión por cumplimiento normativo.\nQuiero entrar por Calidad usando el lanzamiento de su nuevo envase como excusa.`}
                 rows={4}
                 className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/60"
               />

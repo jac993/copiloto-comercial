@@ -237,24 +237,24 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                    Lo que ya sé{" "}
+                    Lo que sé y cómo quiero entrar{" "}
                     <span className="font-normal text-gray-400">(opcional)</span>
                   </label>
                   <HelpTooltip
                     titulo="¿Para qué sirve este campo?"
-                    explicacion="Agrega información que solo tú sabes y que no está en internet. La IA la incorpora al análisis para hacerlo más preciso y personalizado."
-                    ejemplo={"Ej: 'Hablé con alguien del mercado, me dijeron que tuvieron 3 rechazos este mes con su proveedor actual de etiquetas.'"}
+                    explicacion="Escribe lo que sabes de la empresa y tu estrategia de entrada. La IA usará esto para personalizar el ángulo de entrada y los borradores."
+                    ejemplo={"Ej: 'Sé que fabrican potes para el sector lácteo. El jefe de planta se llama Rodrigo y tiene presión por cumplimiento normativo. Quiero entrar por Calidad usando el lanzamiento de su nuevo envase como excusa.'"}
                   />
                 </div>
                 <textarea
                   value={contexto}
                   onChange={(e) => setContexto(e.target.value)}
-                  placeholder="Ej: fabrican envases para lácteos, tuvieron problemas con etiquetas en enero..."
+                  placeholder={`Ej: Sé que fabrican potes para el sector lácteo.\nEl jefe de planta se llama Rodrigo y tiene presión por cumplimiento normativo.\nQuiero entrar por Calidad usando el lanzamiento de su nuevo envase como excusa.`}
                   rows={3}
                   className="w-full min-h-[80px] px-3.5 py-3 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm resize-none placeholder:text-gray-400 focus:outline-none focus:border-[#7C3AED] transition-colors"
                 />
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  La IA contrastará tu información con lo que encuentre en internet.
+                  Escribe lo que sabes de la empresa y tu estrategia de entrada. La IA usará esto para personalizar el ángulo de entrada y los borradores.
                 </p>
               </div>
 

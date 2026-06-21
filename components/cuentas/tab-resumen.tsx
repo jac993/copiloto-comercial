@@ -461,12 +461,12 @@ function ContextoVerificacion({
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-1.5 mb-1.5">
             <p className="text-xs font-semibold text-amber-700 dark:text-amber-500 uppercase tracking-wide">
-              Lo que yo sé
+              Lo que sé y cómo quiero entrar
             </p>
             <HelpTooltip
               titulo="¿Para qué sirve este campo?"
-              explicacion="Agrega información que solo tú sabes y que no está en internet. La IA la incorpora al análisis para hacerlo más preciso y personalizado."
-              ejemplo={"Ej: 'Hablé con alguien del mercado, me dijeron que tuvieron 3 rechazos este mes con su proveedor actual de etiquetas.'"}
+              explicacion="Escribe lo que sabes de la empresa y tu estrategia de entrada. La IA usará esto para personalizar el ángulo de entrada y los borradores."
+              ejemplo={"Ej: 'Sé que fabrican potes para el sector lácteo. El jefe de planta se llama Rodrigo y tiene presión por cumplimiento normativo. Quiero entrar por Calidad usando el lanzamiento de su nuevo envase como excusa.'"}
             />
             {!editando && (
               <button
@@ -484,11 +484,14 @@ function ContextoVerificacion({
               <Textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                rows={4}
-                placeholder="Contexto que solo tú sabes: contactos, problemas recientes, oportunidades..."
+                rows={5}
+                placeholder={`Ej: Sé que fabrican potes para el sector lácteo.\nEl jefe de planta se llama Rodrigo y tiene presión por cumplimiento normativo.\nQuiero entrar por Calidad usando el lanzamiento de su nuevo envase como excusa.`}
                 className="text-sm resize-none border-amber-300 dark:border-amber-700 focus-visible:ring-[#7C3AED]"
                 autoFocus
               />
+              <p className="text-xs text-amber-600/70 dark:text-amber-500/60 leading-relaxed">
+                Escribe lo que sabes de la empresa y tu estrategia de entrada. La IA usará esto para personalizar el ángulo de entrada y los borradores.
+              </p>
               <div className="flex gap-2">
                 <Button
                   size="sm"
