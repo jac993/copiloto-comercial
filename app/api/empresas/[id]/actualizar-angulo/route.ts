@@ -8,18 +8,31 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getEmpresaCompleta, getHistorialResumido, updateEmpresa } from "@/lib/queries";
+import { createClient } from "@supabase/supabase-js";
+import { getEmpresaCompleta, getHistorialResumido } from "@/lib/queries";
 import { SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 import type { FichaIA } from "@/lib/types";
 
 export const maxDuration = 30;
 
+// Cliente con service role para escrituras críticas (mismo patrón que el resto de la app)
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Faltan variables NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, key);
+}
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: "Falta SUPABASE_SERVICE_ROLE_KEY" }, { status: 500 });
+  }
 
   // Carga empresa completa (incluye contactos) e historial en paralelo
   const [empresa, historialTexto] = await Promise.all([
@@ -44,10 +57,7 @@ export async function POST(
   const decisoresTexto =
     decisoresRegistrados.length > 0
       ? decisoresRegistrados
-          .map(
-            (c) =>
-              `  • ${c.nombre} — ${c.cargo ?? "sin cargo"} (${c.area ?? "sin área"})`
-          )
+          .map((c) => `  • ${c.nombre} — ${c.cargo ?? "sin cargo"} (${c.area ?? "sin área"})`)
           .join("\n")
       : "  Sin decisores registrados aún. Agregar en pestaña Decisores.";
 
@@ -55,10 +65,7 @@ export async function POST(
   const decisoresIATexto =
     ficha.decisores && ficha.decisores.length > 0
       ? ficha.decisores
-          .map(
-            (d) =>
-              `  • ${d.cargo}: ${d.dolor_especifico ?? d.por_que_es_clave ?? "sin dolor definido"}`
-          )
+          .map((d) => `  • ${d.cargo}: ${d.dolor_especifico ?? d.por_que_es_clave ?? "sin dolor definido"}`)
           .join("\n")
       : "  Sin análisis de decisores disponible.";
 
@@ -141,9 +148,29 @@ ${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas del vende
     return NextResponse.json({ error: "La IA no devolvió una estrategia válida" }, { status: 500 });
   }
 
-  // Guarda solo angulo_entrada dentro del JSONB ficha_ia
+  // Guarda angulo_entrada dentro del JSONB ficha_ia usando service role key
+  // (la anon key + .select().single() puede fallar silenciosamente con RLS)
   const fichaActualizada: FichaIA = { ...ficha, angulo_entrada: nuevaEstrategia };
-  await updateEmpresa(id, { ficha_ia: fichaActualizada });
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: filas, error: updateError } = await supabaseAdmin
+    .from("empresas")
+    .update({ ficha_ia: fichaActualizada as unknown as Record<string, unknown> })
+    .eq("id", id)
+    .select("id");
+
+  if (updateError) {
+    console.error("[actualizar-angulo] UPDATE falló:", updateError.message, "| empresa_id:", id);
+    return NextResponse.json({ error: `Error al guardar en Supabase: ${updateError.message}` }, { status: 500 });
+  }
+
+  const filasActualizadas = filas?.length ?? 0;
+  console.log(`[actualizar-angulo] UPDATE OK — empresa_id: ${id} — filas actualizadas: ${filasActualizadas}`);
+
+  if (filasActualizadas === 0) {
+    console.error("[actualizar-angulo] UPDATE ejecutó sin error pero afectó 0 filas | empresa_id:", id);
+    return NextResponse.json({ error: "No se encontró la empresa para actualizar" }, { status: 404 });
+  }
 
   return NextResponse.json({ ok: true, angulo_entrada: nuevaEstrategia });
 }
