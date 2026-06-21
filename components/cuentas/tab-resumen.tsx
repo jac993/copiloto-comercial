@@ -50,6 +50,29 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
   const [notasVendedorLocal, setNotasVendedorLocal] = useState(notasVendedor);
   const [reinvestigando, setReinvestigando] = useState(false);
   const [confirmarReinvestigar, setConfirmarReinvestigar] = useState(false);
+  // Estado para actualizar ángulo de entrada
+  const [actualizandoAngulo, setActualizandoAngulo] = useState(false);
+  const [sugerirActualizarAngulo, setSugerirActualizarAngulo] = useState(false);
+
+  const actualizarAngulo = async () => {
+    setActualizandoAngulo(true);
+    setSugerirActualizarAngulo(false);
+    try {
+      const res = await fetch(`/api/empresas/${empresaId}/actualizar-angulo`, { method: "POST" });
+      const data = (await res.json()) as { ok: boolean; angulo_entrada?: string; error?: string };
+      if (!data.ok || !data.angulo_entrada) throw new Error(data.error ?? "Error desconocido");
+      setAnguloActual(data.angulo_entrada);
+      toast({ title: "Ángulo de entrada actualizado ✓" });
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "No se pudo actualizar el ángulo",
+        description: e instanceof Error ? e.message : "Error desconocido",
+      });
+    } finally {
+      setActualizandoAngulo(false);
+    }
+  };
 
   const reinvestigar = async () => {
     setReinvestigando(true);
@@ -105,7 +128,35 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
         verificacion={ficha.verificacion_contexto ?? []}
         empresaId={empresaId}
         onNotasUpdated={setNotasVendedorLocal}
+        onContextoGuardado={() => setSugerirActualizarAngulo(true)}
       />
+
+      {/* Sugerencia de actualizar ángulo tras guardar contexto */}
+      {sugerirActualizarAngulo && (
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-[#EDE9FE] border border-violet-200 dark:bg-violet-950/30 dark:border-violet-800/40">
+          <p className="text-xs text-[#5B21B6] dark:text-violet-300 leading-snug">
+            Contexto actualizado ✓ — ¿Actualizar el ángulo de entrada?
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              onClick={actualizarAngulo}
+              disabled={actualizandoAngulo}
+              className="h-7 px-2.5 text-xs bg-[#7C3AED] hover:bg-[#6d28d9] text-white gap-1"
+            >
+              <Zap className="h-3 w-3" />
+              {actualizandoAngulo ? "Actualizando…" : "⚡ Actualizar"}
+            </Button>
+            <button
+              onClick={() => setSugerirActualizarAngulo(false)}
+              className="text-violet-400 hover:text-violet-600 dark:hover:text-violet-300 text-xs leading-none"
+              aria-label="Descartar sugerencia"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Resumen ejecutivo — lo primero que ves */}
       <Card className="border-0 bg-primary/5 dark:bg-primary/10">
@@ -188,16 +239,28 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
             />
           </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full gap-1.5 text-xs"
-            onClick={regenerar}
-            disabled={regenerando || !contextoNuevo.trim()}
-          >
-            <Zap className="h-3.5 w-3.5 text-amber-500" />
-            ⚡ Regenerar con mi contexto
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-1.5 text-xs"
+              onClick={regenerar}
+              disabled={regenerando || !contextoNuevo.trim()}
+            >
+              <Zap className="h-3.5 w-3.5 text-amber-500" />
+              Regenerar con mi contexto
+            </Button>
+            <Button
+              size="sm"
+              onClick={actualizarAngulo}
+              disabled={actualizandoAngulo || regenerando}
+              className="gap-1.5 text-xs bg-[#7C3AED] hover:bg-[#6d28d9] text-white"
+              title="Actualiza el ángulo usando el contexto guardado en 'Lo que yo sé'"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              {actualizandoAngulo ? "Actualizando…" : "Actualizar ángulo"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -338,11 +401,13 @@ function ContextoVerificacion({
   verificacion,
   empresaId,
   onNotasUpdated,
+  onContextoGuardado,
 }: {
   notasVendedor: string;
   verificacion: VerificacionContexto[];
   empresaId: string;
   onNotasUpdated: (notas: string) => void;
+  onContextoGuardado?: () => void;
 }) {
   const { toast } = useToast();
   const [editando, setEditando] = useState(false);
@@ -377,6 +442,7 @@ function ContextoVerificacion({
       setEditando(false);
       setDraft("");
       toast({ title: "Guardado" });
+      onContextoGuardado?.();
     } catch (e) {
       toast({
         variant: "destructive",
