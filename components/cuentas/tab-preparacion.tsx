@@ -118,8 +118,6 @@ export function TabPreparacion({
   ultimaInteraccion,
   notasVendedor,
   empresaId,
-  nombreEmpresa,
-  industria,
   interacciones,
   contactos,
 }: TabPreparacionProps) {
