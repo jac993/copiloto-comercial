@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe, Pencil } from "lucide-react";
+import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +15,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import type { FichaIA, VerificacionContexto, InteligenciaComercial, BusquedaWebRaw } from "@/lib/types";
+
+// ─── Mapas de color ───────────────────────────────────────────
 
 const TECNICA_COLOR: Record<string, string> = {
   SPIN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -29,48 +31,88 @@ const URGENCIA_COLOR: Record<string, string> = {
   baja: "text-muted-foreground",
 };
 
+// ─── Props ────────────────────────────────────────────────────
+
 interface TabResumenProps {
   ficha: FichaIA;
   empresaId: string;
   notasVendedor: string | null;
   busquedaWebRaw?: BusquedaWebRaw | null;
+  // Datos generales de la empresa (del objeto Empresa, no de ficha_ia)
+  nombre: string;
+  industria: string | null;
+  region: string | null;
+  rut: string | null;
 }
 
-export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: TabResumenProps) {
+// ─── Componente principal ─────────────────────────────────────
+
+export function TabResumen({
+  ficha,
+  empresaId,
+  notasVendedor,
+  busquedaWebRaw,
+  nombre,
+  industria,
+  region,
+  rut,
+}: TabResumenProps) {
   const router = useRouter();
   const { toast } = useToast();
 
-  // Estado local para campos regenerables (se actualizan sin recargar la página)
-  const [anguloActual, setAnguloActual] = useState(ficha.angulo_entrada);
-  const [razonActual, setRazonActual] = useState(ficha.razon_tecnica);
-  const [regenerando, setRegenerando] = useState(false);
-  const [errorRegen, setErrorRegen] = useState<string | null>(null);
-  const [contextoNuevo, setContextoNuevo] = useState("");
-  // Estado local para notas del vendedor (editable inline)
-  const [notasVendedorLocal, setNotasVendedorLocal] = useState(notasVendedor);
+  // Estrategia de entrada (actualizable sin recargar)
+  const [estrategiaActual, setEstrategiaActual] = useState(ficha.angulo_entrada);
+  const [actualizandoEstrategia, setActualizandoEstrategia] = useState(false);
+
+  // Campo "Lo que sé y cómo quiero entrar" integrado en la sección Estrategia
+  const [notasLocal, setNotasLocal] = useState(notasVendedor ?? "");
+  const [guardandoNotas, setGuardandoNotas] = useState(false);
+
+  // Reinvestigar empresa
   const [reinvestigando, setReinvestigando] = useState(false);
   const [confirmarReinvestigar, setConfirmarReinvestigar] = useState(false);
-  // Estado para actualizar ángulo de entrada
-  const [actualizandoAngulo, setActualizandoAngulo] = useState(false);
-  const [sugerirActualizarAngulo, setSugerirActualizarAngulo] = useState(false);
 
-  const actualizarAngulo = async () => {
-    setActualizandoAngulo(true);
-    setSugerirActualizarAngulo(false);
+  // Guarda notas y luego dispara actualización de estrategia automáticamente
+  const guardarYActualizar = async () => {
+    setGuardandoNotas(true);
+    try {
+      const res = await fetch(`/api/empresas/${empresaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notas_vendedor: notasLocal.trim() || null }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al guardar");
+      toast({ title: "Contexto guardado — actualizando estrategia..." });
+      // Dispara actualización automática tras guardar
+      await actualizarEstrategia();
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "No se pudo guardar",
+        description: e instanceof Error ? e.message : "Error desconocido",
+      });
+    } finally {
+      setGuardandoNotas(false);
+    }
+  };
+
+  const actualizarEstrategia = async () => {
+    setActualizandoEstrategia(true);
     try {
       const res = await fetch(`/api/empresas/${empresaId}/actualizar-angulo`, { method: "POST" });
       const data = (await res.json()) as { ok: boolean; angulo_entrada?: string; error?: string };
       if (!data.ok || !data.angulo_entrada) throw new Error(data.error ?? "Error desconocido");
-      setAnguloActual(data.angulo_entrada);
+      setEstrategiaActual(data.angulo_entrada);
       toast({ title: "Estrategia de entrada actualizada ✓" });
     } catch (e) {
       toast({
         variant: "destructive",
-        title: "No se pudo actualizar el ángulo",
+        title: "No se pudo actualizar la estrategia",
         description: e instanceof Error ? e.message : "Error desconocido",
       });
     } finally {
-      setActualizandoAngulo(false);
+      setActualizandoEstrategia(false);
     }
   };
 
@@ -90,75 +132,18 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
     }
   };
 
-  const regenerar = async () => {
-    if (!contextoNuevo.trim()) return;
-    setRegenerando(true);
-    setErrorRegen(null);
-    try {
-      const res = await fetch("/api/investigar/regenerar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresaId, contexto_nuevo: contextoNuevo.trim() }),
-      });
-      const data = (await res.json()) as { ok: boolean; ficha_ia?: FichaIA; error?: string };
-      if (!res.ok || !data.ok) {
-        setErrorRegen(data.error ?? "Error desconocido");
-        return;
-      }
-      if (data.ficha_ia) {
-        setAnguloActual(data.ficha_ia.angulo_entrada);
-        setRazonActual(data.ficha_ia.razon_tecnica);
-        setContextoNuevo("");
-        toast({ title: "Análisis actualizado con tu contexto" });
-        // Refresca preguntas_spin en tab Preparación (server component re-render)
-        router.refresh();
-      }
-    } catch {
-      setErrorRegen("No se pudo conectar con el servidor");
-    } finally {
-      setRegenerando(false);
-    }
-  };
-
   return (
     <div className="space-y-4 pb-6">
-      {/* Lo que yo sé — editable inline */}
-      <ContextoVerificacion
-        notasVendedor={notasVendedorLocal ?? ""}
-        verificacion={ficha.verificacion_contexto ?? []}
-        empresaId={empresaId}
-        onNotasUpdated={setNotasVendedorLocal}
-        onContextoGuardado={() => setSugerirActualizarAngulo(true)}
+
+      {/* 1. Datos generales */}
+      <DatosGenerales
+        nombre={nombre}
+        industria={industria ?? ficha.industria ?? null}
+        region={region ?? ficha.region ?? null}
+        rut={rut}
       />
 
-      {/* Sugerencia de actualizar ángulo tras guardar contexto */}
-      {sugerirActualizarAngulo && (
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-[#EDE9FE] border border-violet-200 dark:bg-violet-950/30 dark:border-violet-800/40">
-          <p className="text-xs text-[#5B21B6] dark:text-violet-300 leading-snug">
-            Contexto actualizado ✓ — ¿Actualizar la estrategia de entrada?
-          </p>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              size="sm"
-              onClick={actualizarAngulo}
-              disabled={actualizandoAngulo}
-              className="h-7 px-2.5 text-xs bg-[#7C3AED] hover:bg-[#6d28d9] text-white gap-1"
-            >
-              <Zap className="h-3 w-3" />
-              {actualizandoAngulo ? "Actualizando…" : "⚡ Actualizar"}
-            </Button>
-            <button
-              onClick={() => setSugerirActualizarAngulo(false)}
-              className="text-violet-400 hover:text-violet-600 dark:hover:text-violet-300 text-xs leading-none"
-              aria-label="Descartar sugerencia"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Resumen ejecutivo — lo primero que ves */}
+      {/* 2. Resumen ejecutivo */}
       <Card className="border-0 bg-primary/5 dark:bg-primary/10">
         <CardContent className="pt-5">
           <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
@@ -170,30 +155,31 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
         </CardContent>
       </Card>
 
-      {/* Inteligencia comercial (Perplexity en ficha) */}
+      {/* Inteligencia comercial */}
       {ficha.inteligencia_comercial && (
         <InteligenciaComercialCard intel={ficha.inteligencia_comercial} />
       )}
 
-      {/* Encontrado en internet — texto crudo de Perplexity, colapsable */}
+      {/* Encontrado en internet */}
       {busquedaWebRaw && (busquedaWebRaw.contactosTexto || busquedaWebRaw.inteligenciaTexto) && (
         <EncontradoEnInternet raw={busquedaWebRaw} />
       )}
 
-      {/* Estrategia de entrada + técnica + botones */}
+      {/* 3. Estrategia de entrada */}
       <Card>
-        <CardContent className="pt-5 space-y-3">
-          <div className="flex items-center justify-between">
+        <CardContent className="pt-5 space-y-4">
+          {/* Encabezado */}
+          <div className="flex items-start justify-between gap-2">
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Estrategia de entrada
               </p>
               <p className="text-xs text-muted-foreground/60 mt-0.5">
-                Guía interna para el vendedor — no es un mensaje para enviar
+                Guía interna — no es un mensaje para enviar
               </p>
             </div>
             <span
-              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
                 TECNICA_COLOR[ficha.tecnica_recomendada] ?? "bg-muted text-muted-foreground"
               }`}
             >
@@ -201,75 +187,74 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
             </span>
           </div>
 
-          {regenerando ? (
+          {/* Texto de la estrategia */}
+          {actualizandoEstrategia ? (
             <div className="space-y-2.5 py-1">
               <div className="flex items-center gap-2 text-xs text-muted-foreground italic">
-                <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                 Actualizando estrategia...
               </div>
               <div className="space-y-1.5 animate-pulse">
                 <div className="h-3.5 rounded-full bg-muted w-full" />
                 <div className="h-3.5 rounded-full bg-muted w-5/6" />
                 <div className="h-3.5 rounded-full bg-muted w-4/6" />
+                <div className="h-3.5 rounded-full bg-muted w-full" />
+                <div className="h-3.5 rounded-full bg-muted w-3/4" />
               </div>
             </div>
           ) : (
-            <>
-              <p className="text-sm leading-relaxed">{anguloActual}</p>
-              <p className="text-xs text-muted-foreground italic">{razonActual}</p>
-            </>
+            <EstrategiaTexto texto={estrategiaActual} />
           )}
 
-          {errorRegen && (
-            <p className="text-xs text-destructive">{errorRegen}</p>
-          )}
-
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
+          {/* Separador */}
+          <div className="border-t border-border pt-3 space-y-2">
+            <div className="flex items-center gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                Agrega contexto nuevo
+                Lo que sé y cómo quiero entrar
               </label>
               <HelpTooltip
-                titulo="¿Cuándo regenerar?"
-                explicacion="Úsalo cuando tengas información nueva sobre la empresa que cambia el ángulo de entrada. No lo uses sin escribir contexto nuevo — el botón no hace nada si está vacío."
-                ejemplo={"Ej: después de hablar con alguien del mercado que te dio datos internos de la empresa."}
+                titulo="¿Para qué sirve este campo?"
+                explicacion="Escribe lo que sabes de la empresa y tu estrategia de entrada. Al guardar, la IA actualiza automáticamente la estrategia de los 5 puntos con tu contexto."
+                ejemplo={"Ej: 'Hablé con Andrés González en septiembre, me dijo que avisaría cuando tuvieran requerimiento...'"}
               />
             </div>
-            <textarea
-              value={contextoNuevo}
-              onChange={(e) => setContextoNuevo(e.target.value)}
-              placeholder="Ej: hablé con su jefe de calidad, me dijo que tuvieron 3 rechazos este mes, están evaluando cambiar de proveedor..."
+            <Textarea
+              value={notasLocal}
+              onChange={(e) => setNotasLocal(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/60"
+              placeholder="Ej: hablé con Andrés González en septiembre, me dijo que avisaría cuando tuvieran requerimiento..."
+              className="text-sm resize-none focus-visible:ring-[#7C3AED]"
+              disabled={guardandoNotas || actualizandoEstrategia}
             />
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 gap-1.5 text-xs"
-              onClick={regenerar}
-              disabled={regenerando || !contextoNuevo.trim()}
-            >
-              <Zap className="h-3.5 w-3.5 text-amber-500" />
-              Regenerar con mi contexto
-            </Button>
-            <Button
-              size="sm"
-              onClick={actualizarAngulo}
-              disabled={actualizandoAngulo || regenerando}
-              className="gap-1.5 text-xs bg-[#7C3AED] hover:bg-[#6d28d9] text-white"
-              title="Actualiza la estrategia de entrada usando el contexto guardado"
-            >
-              <Zap className="h-3.5 w-3.5" />
-              {actualizandoAngulo ? "Actualizando…" : "Actualizar ángulo"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={guardarYActualizar}
+                disabled={guardandoNotas || actualizandoEstrategia}
+                className="bg-[#7C3AED] hover:bg-[#6d28d9] text-white h-8 text-xs gap-1.5"
+              >
+                {guardandoNotas ? (
+                  <><Loader2 className="h-3 w-3 animate-spin" />Guardando...</>
+                ) : (
+                  "Guardar y actualizar"
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={actualizarEstrategia}
+                disabled={actualizandoEstrategia || guardandoNotas}
+                className="h-8 text-xs gap-1.5"
+              >
+                <Zap className="h-3.5 w-3.5 text-amber-500" />
+                {actualizandoEstrategia ? "Actualizando..." : "⚡ Actualizar estrategia"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Señales de oportunidad */}
+      {/* 4. Señales de oportunidad */}
       {ficha.senales_oportunidad.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
@@ -296,7 +281,7 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
         </div>
       )}
 
-      {/* Productos que podemos vender */}
+      {/* 5. Qué les podemos vender */}
       {ficha.productos_etiquetas.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
@@ -313,15 +298,11 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium">{prod.tipo}</p>
-                      <span
-                        className={`text-xs font-semibold shrink-0 ${URGENCIA_COLOR[prod.urgencia]}`}
-                      >
+                      <span className={`text-xs font-semibold shrink-0 ${URGENCIA_COLOR[prod.urgencia]}`}>
                         {prod.urgencia}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {prod.aplicacion}
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{prod.aplicacion}</p>
                   </div>
                 </div>
               ))}
@@ -330,7 +311,7 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
         </div>
       )}
 
-      {/* Objeciones probables — acordeón */}
+      {/* 6. Objeciones */}
       {ficha.objeciones_probables.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
@@ -347,12 +328,8 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
                     </AccordionTrigger>
                     <AccordionContent>
                       <div className="bg-primary/5 rounded-xl p-3">
-                        <p className="text-xs font-semibold text-primary mb-1">
-                          Cómo responder:
-                        </p>
-                        <p className="text-xs text-foreground leading-relaxed">
-                          {obj.como_responderla}
-                        </p>
+                        <p className="text-xs font-semibold text-primary mb-1">Cómo responder:</p>
+                        <p className="text-xs text-foreground leading-relaxed">{obj.como_responderla}</p>
                       </div>
                     </AccordionContent>
                   </AccordionItem>
@@ -362,6 +339,7 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
           </Card>
         </div>
       )}
+
       {/* Botón Reinvestigar empresa */}
       <div className="pt-2">
         {!confirmarReinvestigar ? (
@@ -400,185 +378,82 @@ export function TabResumen({ ficha, empresaId, notasVendedor, busquedaWebRaw }: 
   );
 }
 
-// ── Componente: contexto del vendedor + verificación de la IA ──
-function ContextoVerificacion({
-  notasVendedor,
-  verificacion,
-  empresaId,
-  onNotasUpdated,
-  onContextoGuardado,
-}: {
-  notasVendedor: string;
-  verificacion: VerificacionContexto[];
-  empresaId: string;
-  onNotasUpdated: (notas: string) => void;
-  onContextoGuardado?: () => void;
-}) {
-  const { toast } = useToast();
-  const [editando, setEditando] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [guardando, setGuardando] = useState(false);
+// ── Renderiza el texto de estrategia con los 5 puntos ─────────
+// Detecta líneas "N. TÍTULO: texto" y las formatea con label en negrita
+function EstrategiaTexto({ texto }: { texto: string }) {
+  if (!texto) {
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        Sin estrategia generada. Usa el botón &ldquo;⚡ Actualizar estrategia&rdquo; para generar una.
+      </p>
+    );
+  }
 
-  const alertas = verificacion.filter(
-    (v) => v.estado === "inconsistente" || v.estado === "no_verificable"
-  );
-
-  const iniciarEdicion = () => {
-    setDraft(notasVendedor);
-    setEditando(true);
-  };
-
-  const cancelar = () => {
-    setEditando(false);
-    setDraft("");
-  };
-
-  const guardar = async () => {
-    setGuardando(true);
-    try {
-      const res = await fetch(`/api/empresas/${empresaId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notas_vendedor: draft.trim() || null }),
-      });
-      const data = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al guardar");
-      onNotasUpdated(draft.trim());
-      setEditando(false);
-      setDraft("");
-      toast({ title: "Guardado" });
-      onContextoGuardado?.();
-    } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "No se pudo guardar",
-        description: e instanceof Error ? e.message : "Error desconocido",
-      });
-    } finally {
-      setGuardando(false);
-    }
-  };
+  const lineas = texto.split("\n").filter((l) => l.trim());
+  const PATRON = /^(\d+\.\s+[A-ZÁÉÍÓÚÑ\s]+):\s*(.+)$/;
 
   return (
     <div className="space-y-2">
-      {/* Lo que yo sé — editable inline */}
-      <Card className="border-amber-200 dark:border-amber-800/30 bg-amber-50/50 dark:bg-amber-900/5">
-        <CardContent className="pt-4 pb-4">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <p className="text-xs font-semibold text-amber-700 dark:text-amber-500 uppercase tracking-wide">
-              Lo que sé y cómo quiero entrar
-            </p>
-            <HelpTooltip
-              titulo="¿Para qué sirve este campo?"
-              explicacion="Escribe lo que sabes de la empresa y tu estrategia de entrada. La IA usará esto para personalizar el ángulo de entrada y los borradores."
-              ejemplo={"Ej: 'Sé que fabrican potes para el sector lácteo. El jefe de planta se llama Rodrigo y tiene presión por cumplimiento normativo. Quiero entrar por Calidad usando el lanzamiento de su nuevo envase como excusa.'"}
-            />
-            {!editando && (
-              <button
-                onClick={iniciarEdicion}
-                aria-label="Editar"
-                className="ml-auto p-1 rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
-              >
-                <Pencil size={14} />
-              </button>
-            )}
-          </div>
-
-          {editando ? (
-            <div className="space-y-2 mt-1">
-              <Textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                rows={5}
-                placeholder={`Ej: Sé que fabrican potes para el sector lácteo.\nEl jefe de planta se llama Rodrigo y tiene presión por cumplimiento normativo.\nQuiero entrar por Calidad usando el lanzamiento de su nuevo envase como excusa.`}
-                className="text-sm resize-none border-amber-300 dark:border-amber-700 focus-visible:ring-[#7C3AED]"
-                autoFocus
-              />
-              <p className="text-xs text-amber-600/70 dark:text-amber-500/60 leading-relaxed">
-                Escribe lo que sabes de la empresa y tu estrategia de entrada. La IA usará esto para personalizar el ángulo de entrada y los borradores.
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={guardar}
-                  disabled={guardando}
-                  className="bg-[#7C3AED] hover:bg-[#6d28d9] text-white h-8 text-xs"
-                >
-                  {guardando ? "Guardando…" : "Guardar"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={cancelar}
-                  disabled={guardando}
-                  className="h-8 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-                >
-                  Cancelar
-                </Button>
-              </div>
+      {lineas.map((linea, i) => {
+        const match = linea.match(PATRON);
+        if (match) {
+          return (
+            <div key={i} className="flex gap-2 text-sm leading-relaxed">
+              <span className="font-semibold text-primary shrink-0 whitespace-nowrap">
+                {match[1]}:
+              </span>
+              <span>{match[2]}</span>
             </div>
-          ) : (
-            <p
-              onClick={iniciarEdicion}
-              className={`text-sm leading-relaxed whitespace-pre-line cursor-text ${
-                notasVendedor
-                  ? "text-amber-800 dark:text-amber-300"
-                  : "text-amber-400 dark:text-amber-600 italic"
-              }`}
-            >
-              {notasVendedor || "Sin contexto aún. Toca para agregar."}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Verificación — solo inconsistentes y no verificables */}
-      {alertas.length > 0 && (
-        <div className="space-y-1.5">
-          {alertas.map((item, i) => {
-            const esInconsistente = item.estado === "inconsistente";
-            return (
-              <div
-                key={i}
-                className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs leading-relaxed ${
-                  esInconsistente
-                    ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/30"
-                    : "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/30"
-                }`}
-              >
-                <span className="shrink-0 mt-0.5">
-                  {esInconsistente ? "⚠️" : "❓"}
-                </span>
-                <div>
-                  <span
-                    className={`font-semibold ${
-                      esInconsistente
-                        ? "text-red-700 dark:text-red-400"
-                        : "text-amber-700 dark:text-amber-400"
-                    }`}
-                  >
-                    {esInconsistente ? "Inconsistencia: " : "No verificable: "}
-                  </span>
-                  <span
-                    className={
-                      esInconsistente
-                        ? "text-red-700/80 dark:text-red-400/80"
-                        : "text-amber-700/80 dark:text-amber-400/80"
-                    }
-                  >
-                    &ldquo;{item.dato_vendedor}&rdquo; — {item.observacion}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+          );
+        }
+        return (
+          <p key={i} className="text-sm leading-relaxed text-muted-foreground">
+            {linea}
+          </p>
+        );
+      })}
     </div>
   );
 }
 
-// ── Encontrado en internet — texto crudo de Perplexity ───────
+// ── Datos generales ───────────────────────────────────────────
+function DatosGenerales({
+  nombre,
+  industria,
+  region,
+  rut,
+}: {
+  nombre: string;
+  industria: string | null;
+  region: string | null;
+  rut: string | null;
+}) {
+  const items = [
+    { label: "Empresa", valor: nombre },
+    { label: "Rubro", valor: industria },
+    { label: "Ciudad / Región", valor: region },
+    { label: "RUT", valor: rut },
+  ].filter((i): i is { label: string; valor: string } => !!i.valor);
+
+  if (items.length === 0) return null;
+
+  return (
+    <Card>
+      <CardContent className="pt-4 pb-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+          {items.map(({ label, valor }) => (
+            <div key={label}>
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="text-sm font-medium truncate">{valor}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Encontrado en internet ────────────────────────────────────
 function EncontradoEnInternet({ raw }: { raw: BusquedaWebRaw }) {
   const tieneDatos = !!(raw.contactosTexto || raw.inteligenciaTexto);
   return (
@@ -629,7 +504,7 @@ function EncontradoEnInternet({ raw }: { raw: BusquedaWebRaw }) {
               <div className="flex flex-wrap gap-2">
                 {raw.fuentes.slice(0, 6).map((url, i) => {
                   let host = url;
-                  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+                  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* mantener url original */ }
                   return (
                     <a
                       key={i}
@@ -682,30 +557,25 @@ function InteligenciaComercialCard({ intel }: { intel: InteligenciaComercial }) 
       </p>
       <Card className="overflow-hidden">
         <CardContent className="pt-4 pb-4 space-y-3">
-          {/* Propuesta de valor específica — destacada */}
           {propuesta && !propuesta.toLowerCase().startsWith("sin información") && (
             <div className="bg-[#EDE9FE] border border-violet-200 rounded-xl p-3">
               <p className="text-xs font-semibold text-[#5B21B6] mb-1">Cómo posicionar tu oferta</p>
               <p className="text-xs text-[#4C1D95] leading-relaxed">{propuesta}</p>
             </div>
           )}
-
-          {/* Resto de campos */}
           {filas.map(({ label, valor }) => (
             <div key={label} className="border-b border-border last:border-0 pb-2.5 last:pb-0">
               <p className="text-xs font-semibold text-muted-foreground mb-0.5">{label}</p>
               <p className="text-xs leading-relaxed">{valor}</p>
             </div>
           ))}
-
-          {/* Fuentes */}
           {fuentes.length > 0 && (
             <div className="pt-1">
               <p className="text-xs text-muted-foreground mb-1">Fuentes:</p>
               <div className="flex flex-wrap gap-1.5">
                 {fuentes.slice(0, 5).map((url, i) => {
                   let host = url;
-                  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+                  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* mantener url original */ }
                   return (
                     <a
                       key={i}
@@ -727,3 +597,7 @@ function InteligenciaComercialCard({ intel }: { intel: InteligenciaComercial }) 
     </div>
   );
 }
+
+// ── Tipo solo para verificación de contexto (sin uso en UI) ───
+// Se mantiene importado para no romper tipos si otros módulos lo usan.
+export type { VerificacionContexto };

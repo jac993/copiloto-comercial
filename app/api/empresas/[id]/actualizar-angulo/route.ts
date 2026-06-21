@@ -36,12 +36,12 @@ export async function POST(
 
   const prompt = `Eres un estratega de ventas B2B consultivo. Basándote ÚNICAMENTE en la información proporcionada sobre esta empresa y el contexto del vendedor, genera una estrategia de entrada en formato de análisis, NO un mensaje para enviar.
 
-La estrategia debe tener esta estructura:
+La estrategia debe tener exactamente esta estructura (usa estos títulos, sin modificarlos):
 1. DECISOR DE ENTRADA: quién contactar primero y por qué ese cargo específico
 2. MOMENTO: por qué ahora es buen momento (basado en señales reales del contexto)
-3. ARGUMENTO CENTRAL: el dolor o problema a plantear, formulado como pregunta, no como afirmación
-4. CANAL RECOMENDADO: qué canal usar primero y por qué
-5. RIESGO PRINCIPAL: qué obstáculo anticipar y cómo manejarlo
+3. ARGUMENTO: el dolor o problema a plantear, formulado como pregunta, no como afirmación
+4. CANAL: qué canal usar primero y por qué
+5. RIESGO: qué obstáculo anticipar y cómo manejarlo
 
 Tono: estratégico, directo, como un coach de ventas hablándole al vendedor.
 NO generes un mensaje para enviar al prospecto.

@@ -213,6 +213,10 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             empresaId={empresa.id}
             notasVendedor={empresa.notas_vendedor}
             busquedaWebRaw={empresa.busqueda_web_raw}
+            nombre={empresa.nombre}
+            industria={empresa.industria}
+            region={empresa.region}
+            rut={empresa.rut}
           />
         )}
         {tabActivo === "resumen" && !ficha && <SinFicha />}
