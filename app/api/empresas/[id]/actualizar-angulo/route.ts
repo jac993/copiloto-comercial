@@ -1,14 +1,14 @@
 // =============================================================
 // POST /api/empresas/[id]/actualizar-angulo
-// Regenera SOLO el ángulo de entrada usando el contexto actual
-// del vendedor (notas_vendedor) y la ficha existente, sin
-// reinvestigar la empresa ni llamar a scraping.
+// Regenera SOLO la estrategia de entrada usando el contexto
+// completo: ficha_ia, contactos/decisores registrados, historial
+// de interacciones y notas_vendedor. Sin reinvestigar.
 // Se activa por botón explícito — nunca en background.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getEmpresaById, updateEmpresa } from "@/lib/queries";
+import { getEmpresaCompleta, getHistorialResumido, updateEmpresa } from "@/lib/queries";
 import { SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 import type { FichaIA } from "@/lib/types";
@@ -21,7 +21,12 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  const empresa = await getEmpresaById(id);
+  // Carga empresa completa (incluye contactos) e historial en paralelo
+  const [empresa, historialTexto] = await Promise.all([
+    getEmpresaCompleta(id),
+    getHistorialResumido(id),
+  ]);
+
   if (!empresa) {
     return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
   }
@@ -34,38 +39,89 @@ export async function POST(
     );
   }
 
-  const prompt = `Eres un estratega de ventas B2B consultivo. Basándote ÚNICAMENTE en la información proporcionada sobre esta empresa y el contexto del vendedor, genera una estrategia de entrada en formato de análisis, NO un mensaje para enviar.
+  // Decisores registrados en la app (contactos marcados como decisor)
+  const decisoresRegistrados = empresa.contactos.filter((c) => c.es_decisor);
+  const decisoresTexto =
+    decisoresRegistrados.length > 0
+      ? decisoresRegistrados
+          .map(
+            (c) =>
+              `  • ${c.nombre} — ${c.cargo ?? "sin cargo"} (${c.area ?? "sin área"})`
+          )
+          .join("\n")
+      : "  Sin decisores registrados aún. Agregar en pestaña Decisores.";
 
-La estrategia debe tener exactamente esta estructura (usa estos títulos, sin modificarlos):
-1. DECISOR DE ENTRADA: quién contactar primero y por qué ese cargo específico
-2. MOMENTO: por qué ahora es buen momento (basado en señales reales del contexto)
-3. ARGUMENTO: el dolor o problema a plantear, formulado como pregunta, no como afirmación
-4. CANAL: qué canal usar primero y por qué
-5. RIESGO: qué obstáculo anticipar y cómo manejarlo
+  // Decisores sugeridos por la IA (de ficha_ia.decisores)
+  const decisoresIATexto =
+    ficha.decisores && ficha.decisores.length > 0
+      ? ficha.decisores
+          .map(
+            (d) =>
+              `  • ${d.cargo}: ${d.dolor_especifico ?? d.por_que_es_clave ?? "sin dolor definido"}`
+          )
+          .join("\n")
+      : "  Sin análisis de decisores disponible.";
 
-Tono: estratégico, directo, como un coach de ventas hablándole al vendedor.
-NO generes un mensaje para enviar al prospecto.
-NO inventes datos, casos ni porcentajes que no estén en el contexto.
-Si no tienes información suficiente para algún punto, indícalo como "Por confirmar".
-Máximo 150 palabras en total.
+  const prompt = `Eres un coach de ventas B2B consultivo. Tu trabajo es ayudar al vendedor a pensar cómo aproximarse a esta empresa, NO generar mensajes para enviar.
 
-━━━ INFORMACIÓN DE LA EMPRESA ━━━
-EMPRESA: ${empresa.nombre}
-INDUSTRIA: ${empresa.industria ?? "no especificada"}
-QUÉ FABRICAN/VENDEN: ${ficha.que_fabrican_o_venden ?? "no especificado"}
-POR QUÉ NECESITAN ETIQUETAS: ${ficha.por_que_necesitan_etiquetas ?? "no especificado"}
-RESUMEN EJECUTIVO: ${ficha.resumen_ejecutivo ?? "no disponible"}
-SEÑALES DE OPORTUNIDAD: ${ficha.senales_oportunidad?.map((s) => s.descripcion).join("; ") ?? "ninguna detectada"}
-TÉCNICA DE VENTA RECOMENDADA: ${ficha.tecnica_recomendada ?? "no definida"}
-DECISORES IDENTIFICADOS: ${ficha.decisores?.map((d) => `${d.cargo}: ${d.dolor_especifico ?? d.por_que_es_clave ?? "sin dolor definido"}`).join(" | ") ?? "ninguno"}
+REGLAS ABSOLUTAS:
+- NUNCA inventes nombres de personas que no estén en el contexto
+- NUNCA inventes cargos, teléfonos, emails ni contactos
+- Si no tienes un dato, escribe "Por confirmar" en ese punto
+- Usa SOLO la información proporcionada en el contexto
 
-━━━ CONTEXTO DEL VENDEDOR (PRIORIZAR — lo que solo él sabe) ━━━
-${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin contexto adicional del vendedor."}`;
+Genera una estrategia de entrada con esta estructura exacta:
+
+1. DECISOR DE ENTRADA
+¿A quién contactar primero? Usa SOLO los decisores registrados en la app. Si no hay decisores registrados, indica "Por confirmar — agregar decisores en la pestaña Decisores". Explica por qué ese cargo tiene el dolor más relevante para nuestra solución.
+
+2. MOMENTO
+¿Por qué ahora es buen momento para contactar? Basa esto en señales reales del contexto (historial, señales detectadas, contexto del vendedor). Si no hay señales claras, indica qué señal habría que buscar.
+
+3. ARGUMENTO CENTRAL
+¿Qué problema o pregunta usar como gancho?
+- Selecciona la técnica más adecuada según el estado de la relación:
+  * Sin historial → SPIN (pregunta de Situación o Problema)
+  * Con historial sin respuesta → Challenger (insight del sector)
+  * Con historial positivo → Consultivo (continuar desde donde quedó)
+  * Deal pausado → Predictable Revenue (reactivación con valor nuevo)
+- Formula el argumento como PREGUNTA, no como afirmación
+- No inventes datos para sustentar el argumento
+
+4. CANAL RECOMENDADO
+¿Por qué canal entrar primero? Justifica según el cargo del decisor y el historial disponible. Si ya hubo contacto por un canal, recomendar otro.
+
+5. RIESGO PRINCIPAL
+¿Qué obstáculo anticipar? Basa esto en el historial real o en patrones típicos del sector. Si no hay información suficiente, indica qué habría que confirmar antes de contactar.
+
+Tono: directo, estratégico, como un coach hablándole al vendedor en privado.
+Máximo 200 palabras en total.
+
+━━━ FICHA DE LA EMPRESA ━━━
+Empresa: ${empresa.nombre}
+Industria: ${empresa.industria ?? "no especificada"}
+Qué fabrican/venden: ${ficha.que_fabrican_o_venden ?? "no especificado"}
+Por qué necesitan etiquetas: ${ficha.por_que_necesitan_etiquetas ?? "no especificado"}
+Resumen ejecutivo: ${ficha.resumen_ejecutivo ?? "no disponible"}
+Señales de oportunidad: ${ficha.senales_oportunidad?.map((s) => s.descripcion).join("; ") ?? "ninguna detectada"}
+Técnica recomendada por el sistema: ${ficha.tecnica_recomendada ?? "no definida"}
+
+━━━ DECISORES REGISTRADOS EN LA APP ━━━
+${decisoresTexto}
+
+━━━ DECISORES SUGERIDOS POR LA IA (sin confirmar) ━━━
+${decisoresIATexto}
+
+━━━ HISTORIAL DE INTERACCIONES (últimas 5) ━━━
+${historialTexto || "Sin interacciones registradas con esta empresa."}
+
+━━━ LO QUE SABE EL VENDEDOR ━━━
+${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas del vendedor."}`;
 
   const client = new Anthropic();
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 300,
+    max_tokens: 500,
     system: SYSTEM_PROMPT_VALE,
     messages: [{ role: "user", content: prompt }],
   });
@@ -78,16 +134,16 @@ ${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin contexto adicio
     empresa_id: id,
   });
 
-  const nuevoAngulo =
+  const nuevaEstrategia =
     response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
 
-  if (!nuevoAngulo) {
-    return NextResponse.json({ error: "La IA no devolvió un ángulo válido" }, { status: 500 });
+  if (!nuevaEstrategia) {
+    return NextResponse.json({ error: "La IA no devolvió una estrategia válida" }, { status: 500 });
   }
 
-  // Actualiza solo angulo_entrada dentro del JSONB ficha_ia
-  const fichaActualizada: FichaIA = { ...ficha, angulo_entrada: nuevoAngulo };
+  // Guarda solo angulo_entrada dentro del JSONB ficha_ia
+  const fichaActualizada: FichaIA = { ...ficha, angulo_entrada: nuevaEstrategia };
   await updateEmpresa(id, { ficha_ia: fichaActualizada });
 
-  return NextResponse.json({ ok: true, angulo_entrada: nuevoAngulo });
+  return NextResponse.json({ ok: true, angulo_entrada: nuevaEstrategia });
 }
