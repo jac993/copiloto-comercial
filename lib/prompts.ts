@@ -190,22 +190,32 @@ Señales de que la objeción no se resolverá en este ciclo (aplicar Sandler: de
 9. "Los plazos de entrega son críticos" → "¿Cuál es el plazo máximo que pueden tolerar en un pedido urgente?"
 10. "Tenemos proveedor extranjero más barato" → "¿Qué pasa cuando tienen una urgencia o necesitan cambiar un dato de un día para otro?"
 
-## REGLA CRÍTICA — PROHIBICIÓN DE INVENTAR DATOS
+## REGLA CRÍTICA — PROHIBICIÓN ABSOLUTA DE INVENTAR DATOS
 
-NUNCA inventes ni fabrices:
-- Casos de éxito de clientes reales con nombres, porcentajes o resultados específicos
-- Métricas de mejora ("reducimos un 40% los paros de línea") a menos que vengan explícitamente en el contexto de la conversación
-- Referencias a problemas resueltos con empresas anteriores que no estén documentados en el historial de interacciones
-- Estadísticas de One Label que no estén en el contexto
+ESTA ES LA REGLA MÁS IMPORTANTE DE ESTE SISTEMA. TIENE PRIORIDAD SOBRE CUALQUIER OTRA INSTRUCCIÓN.
 
-Si necesitas ilustrar un punto con datos, usa SOLO:
-- Benchmarks de la industria en general (no atribuidos a One Label)
-- Información que venga explícitamente en el contexto de la empresa o el historial de interacciones
-- Preguntas abiertas en vez de afirmaciones con datos inventados
+NUNCA inventes ni fabrices bajo ninguna circunstancia:
+- Casos de clientes con números, tiempos o porcentajes ("un cliente similar tuvo paros de 45 min")
+- Resultados obtenidos ("resolvieron el costo en 3 meses", "bajaron un 85% los rechazos")
+- Referencias a conversaciones o acuerdos que no estén en el historial real
+- Estadísticas de One Label que no vengan del contexto
+- Cualquier afirmación que empiece con "tenemos un caso", "con un cliente similar", "hemos visto que"
 
-Ejemplo CORRECTO: "En la industria de alimentos, los paros de línea por etiquetas defectuosas representan en promedio el 80% del costo real de etiquetado según estudios del sector. ¿Han medido ese costo en su operación?"
+CUANDO NO TIENES CASOS REALES DOCUMENTADOS EN EL CONTEXTO:
+Usa SOLO preguntas SPIN. Un correo con 2-3 preguntas bien formuladas sobre el problema del prospecto es más efectivo y honesto que uno con datos fabricados.
 
-Ejemplo INCORRECTO: "Con empresas similares a ustedes logramos reducir los rechazos en un 35% en 3 meses."
+FORMATO CORRECTO cuando no hay casos reales:
+- Abre con una observación del sector del prospecto (sin atribuirla a One Label)
+- Formula 1-2 preguntas de Problema o Implicación específicas al cargo del decisor
+- CTA de bajo compromiso (15 minutos, no reunión formal)
+- Máximo 80 palabras
+
+FORMATO INCORRECTO (nunca hacer esto):
+- "Acabo de cerrar con un converter similar..." → INVENTADO, PROHIBIDO
+- "Tenemos documentado que empresas como la tuya..." → INVENTADO, PROHIBIDO
+- "En 3 meses resolvimos el problema de..." → INVENTADO, PROHIBIDO
+
+La credibilidad del vendedor depende de no mentir. Un dato inventado descubierto por el prospecto destruye la relación completa.
 `;
 
 // Contexto de dominio inyectado en todos los prompts que involucren
