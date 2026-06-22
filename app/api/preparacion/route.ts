@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector, getFeedbackEjemplos } from "@/lib/queries";
-import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
+import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE, SYSTEM_PROMPT_BORRADORES_TEXTO } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 
 export const maxDuration = 60;
@@ -158,149 +158,163 @@ export async function POST(req: NextRequest) {
     const tipo: TipoBorrador = tipoRaw ?? "apertura";
     const ficha = empresa.ficha_ia;
 
-    // Construir resumen de decisores conocidos por IA
-    const decisoresTexto =
+    // Decisor en la ficha IA (para dolor específico)
+    const decisorFicha = ficha?.decisores?.find(
+      (d) => d.cargo.toLowerCase() === decisorCargo.toLowerCase()
+    );
+
+    // ── Instrucción de output por canal de texto ──────────────
+    const INSTRUCCION_OUTPUT: Record<"whatsapp" | "correo" | "linkedin", string> = {
+      whatsapp: `CANAL: WhatsApp
+- Máximo 4 líneas (≈80 palabras). Tono directo y cercano.
+- Sin asteriscos ni emojis. Texto plano únicamente.
+- NO empezar con "Hola soy X de empresa Y".
+- Terminar con UNA pregunta de situación o problema (SPIN), nunca con despedida formal.
+
+Genera exactamente este JSON sin texto adicional:
+{"texto": "el mensaje completo"}`,
+
+      correo: `CANAL: Correo electrónico
+- "asunto": máximo 8 palabras, sin signos de exclamación, que nombre el dolor del decisor.
+- "cuerpo": exactamente 3 párrafos. P1: hook concreto sobre su negocio (no sobre One Label). P2: problema probable según su cargo/industria + cómo se resuelve (sin inventar casos). P3: un solo CTA (15 min de llamada o respuesta a una pregunta). Máximo 120 palabras en el cuerpo.
+- Si hay nombre del decisor, usar "Hola [Nombre],". Si no, omitir saludo personalizado.
+
+Genera exactamente este JSON sin texto adicional:
+{"asunto": "el asunto", "cuerpo": "el cuerpo completo del correo"}`,
+
+      linkedin: `CANAL: LinkedIn
+- Máximo 3 líneas (≈60 palabras). Tono profesional. CERO lenguaje de ventas.
+- Prohibido: "ventas", "propuesta", "cotización", "proveedor", "oferta", "producto".
+- Abrir con algo que demuestre que se investigó SU empresa específicamente.
+- Terminar con una pregunta de diagnóstico que invite a responder.
+
+Genera exactamente este JSON sin texto adicional:
+{"texto": "el mensaje completo"}`,
+    };
+
+    // ── Construir contextos ────────────────────────────────────
+
+    // Llamada: usa el sistema heredado de VALE (pitch de 5 secciones)
+    const decisoresTextoLlamada =
       ficha?.decisores && ficha.decisores.length > 0
         ? ficha.decisores
-            .map(
-              (d) =>
-                `  • ${d.cargo}: ${d.dolor_especifico ?? d.por_que_es_clave ?? "sin dolor definido"}`
-            )
+            .map((d) => `  • ${d.cargo}: ${d.dolor_especifico ?? d.por_que_es_clave ?? "sin dolor definido"}`)
             .join("\n")
         : "  Sin análisis de decisores disponible.";
 
-    // Construir resumen de contactos registrados
-    const contactosTexto =
+    const contactosTextoLlamada =
       empresa.contactos.length > 0
         ? empresa.contactos
             .map((c) => `  • ${c.nombre} (${c.cargo ?? "sin cargo"}, ${c.area ?? "sin área"})`)
             .join("\n")
         : "  Sin contactos registrados aún.";
 
-    // Objeciones conocidas
-    const objecionesTexto =
+    const objecionesTextoLlamada =
       ficha?.objeciones_probables && ficha.objeciones_probables.length > 0
         ? ficha.objeciones_probables
             .map((o) => `  • "${o.objecion}" → ${o.como_responderla}`)
             .join("\n")
         : "  Sin análisis de objeciones.";
 
-    // Encontrar al decisor objetivo dentro de ficha para enriquecer su perfil
-    const decisorFicha = ficha?.decisores?.find(
-      (d) => d.cargo.toLowerCase() === decisorCargo.toLowerCase()
-    );
-
-    const contexto = `
+    const contextoLlamada = `
 TIPO DE BORRADOR: ${tipo.toUpperCase()}
 INSTRUCCIÓN CRÍTICA: ${INSTRUCCION_TIPO[tipo]}
 
 ━━━ EMPRESA ━━━
 Nombre: ${empresa.nombre}
-Razón social: ${empresa.razon_social ?? empresa.nombre}
 Industria: ${empresa.industria ?? "no especificada"}
-Estado en pipeline: ${empresa.estado}
-Score de prioridad: ${empresa.score_prioridad ?? "N/A"}/100
-Razón de contacto actual: ${empresa.razon_de_contacto_actual ?? "sin definir"}
-
-━━━ ANÁLISIS IA DE LA EMPRESA ━━━
-Resumen ejecutivo:
-${ficha?.resumen_ejecutivo ?? "Sin ficha de IA disponible."}
-
-Descripción:
-${ficha?.descripcion ?? "No disponible."}
-
-Qué fabrican/venden:
-${ficha?.que_fabrican_o_venden ?? "No especificado."}
-
-Por qué necesitan etiquetas:
-${ficha?.por_que_necesitan_etiquetas ?? "No especificado."}
-
-Ángulo de entrada recomendado:
-${ficha?.angulo_entrada ?? "Sin definir."}
-
-Técnica de venta recomendada: ${ficha?.tecnica_recomendada ?? "Sin definir"}
-Razón: ${ficha?.razon_tecnica ?? ""}
-
-Señales de oportunidad:
-${ficha?.senales_oportunidad?.join(", ") ?? "Sin señales detectadas."}
-
-Inteligencia comercial adicional:
-${ficha?.inteligencia_comercial ?? "Sin inteligencia comercial adicional."}
+Ángulo de entrada: ${ficha?.angulo_entrada ?? "Sin definir."}
+Por qué necesitan etiquetas: ${ficha?.por_que_necesitan_etiquetas ?? "No especificado."}
 
 ━━━ DECISOR A CONTACTAR ━━━
 Nombre: ${decisorNombre ?? "(no identificado aún)"}
 Cargo: ${decisorCargo}
 Área: ${decisorArea ?? "no especificada"}
-${decisorFicha ? `Dolor específico: ${decisorFicha.dolor_especifico ?? decisorFicha.por_que_es_clave ?? "no definido"}` : ""}
-${decisorFicha?.query_linkedin ? `Query LinkedIn: ${decisorFicha.query_linkedin}` : ""}
+${decisorFicha?.dolor_especifico ? `Dolor específico: ${decisorFicha.dolor_especifico}` : ""}
 
-━━━ OTROS DECISORES CONOCIDOS ━━━
-${decisoresTexto}
+━━━ OTROS DECISORES ━━━
+${decisoresTextoLlamada}
 
 ━━━ CONTACTOS REGISTRADOS ━━━
-${contactosTexto}
+${contactosTextoLlamada}
 
 ━━━ OBJECIONES PROBABLES ━━━
-${objecionesTexto}
+${objecionesTextoLlamada}
 
-━━━ CONTEXTO DEL VENDEDOR (lo que solo él sabe) ━━━
-${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas adicionales."}
+━━━ CONTEXTO DEL VENDEDOR ━━━
+${empresa.notas_vendedor?.trim() || "Sin notas adicionales."}
 
 ━━━ HISTORIAL DE INTERACCIONES (últimas 5) ━━━
 ${historialTexto || "Sin interacciones previas registradas."}
 
-━━━ INSTRUCCIÓN DE MODO SEGÚN EXPERIENCIA SECTORIAL ━━━
-
-Si el historial de interacciones con esta empresa tiene menos de 3 conversaciones
-con contenido sustantivo, o si el contexto del vendedor no menciona experiencia
-previa en el sector específico de esta empresa:
-
-→ Usar MODO APRENDIZAJE:
-- Tono de consultor que quiere entender, no de experto que ya sabe
-- Preguntas abiertas de Situación y Problema (SPIN etapas 1 y 2)
-- No hacer afirmaciones sobre el sector que no estén confirmadas en el contexto
-- El objetivo del mensaje es aprender, no impresionar
-- Frase guía interna: "Estoy aquí para entender tu operación, no para venderte algo todavía"
-
-Si el historial tiene 3 o más conversaciones con dolor identificado:
-→ Aplicar la técnica correspondiente al estado de la relación según la tabla de selección
-
-REGLA: Es mejor parecer curioso que parecer falso. Un vendedor que hace buenas
-preguntas genera más confianza que uno que afirma cosas que no puede sostener.
-
-━━━ CASOS REALES DE ONE LABEL (usar SOLO estos como referencia, nunca inventar otros) ━━━
+━━━ CASOS REALES DE ONE LABEL ━━━
 ${casosRelevantes.length > 0
   ? casosRelevantes.map((c) =>
-      `- Sector: ${c.sector}${c.tamano_empresa ? ` (${c.tamano_empresa})` : ""} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Solución: ${c.solucion} | Resultado: ${c.resultado}${c.tecnica_venta ? ` | Técnica: ${c.tecnica_venta}` : ""}`
+      `- Sector: ${c.sector} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Resultado: ${c.resultado}`
     ).join("\n")
-  : "Sin casos documentados aún — no inventar referencias de ventas anteriores"}
-
-━━━ EJEMPLOS DE MENSAJES APROBADOS POR EL VENDEDOR (aprende el estilo, no copies) ━━━
-${feedbackEjemplos.length > 0
-  ? feedbackEjemplos.map((fb, i) => {
-      const texto = fb.version_vendedor?.trim() || fb.borrador_ia;
-      return `Ejemplo ${i + 1} (canal ${fb.canal}${fb.tipo_borrador ? `, tipo ${fb.tipo_borrador}` : ""}):\n${texto}`;
-    }).join("\n---\n")
-  : "Sin ejemplos aprobados aún para este canal — usar las técnicas de venta definidas."}
-
-INSTRUCCIÓN: Si hay ejemplos, úsalos para calibrar el tono, longitud y estilo de comunicación
-que prefiere el vendedor. Adáptalos a este prospecto específico sin copiarlos textualmente.
-
-━━━ MANEJO DE FECHAS ━━━
-Cuando menciones eventos del historial o señales de la empresa, siempre indica
-el año específico si está disponible en el contexto.
-Nunca uses "hace poco", "recientemente" o "último tiempo" sin especificar el año.
-Ejemplo correcto: "el envase monomaterial que lanzaron en 2024"
-Ejemplo incorrecto: "el envase monomaterial que lanzaron hace poco"
+  : "Sin casos documentados aún — no inventar referencias."}
 `.trim();
+
+    // Texto (whatsapp/correo/linkedin): prompt anti-alucinación estricto
+    const ejemplosFeedbackTexto = feedbackEjemplos.length > 0
+      ? `EJEMPLOS DE MENSAJES APROBADOS POR EL VENDEDOR (aprende el tono y estilo, no copies):\n${
+          feedbackEjemplos.map((fb, i) => {
+            const texto = fb.version_vendedor?.trim() || fb.borrador_ia;
+            return `Ejemplo ${i + 1}:\n${texto}`;
+          }).join("\n---\n")
+        }\n`
+      : "";
+
+    const casosTexto = casosRelevantes.length > 0
+      ? `CASOS REALES DE ONE LABEL (referencia de sector — no inventar otros):\n${
+          casosRelevantes.map((c) =>
+            `- Sector: ${c.sector} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Resultado: ${c.resultado}`
+          ).join("\n")
+        }\n`
+      : "";
+
+    const instruccionTipoTexto = tipo !== "apertura"
+      ? `INSTRUCCIÓN ADICIONAL PARA ESTE TIPO:\n${INSTRUCCION_TIPO[tipo]}\n`
+      : "";
+
+    const canalKey = canal as "whatsapp" | "correo" | "linkedin";
+    const contextoTexto = `
+TIPO DE CONTACTO: ${tipo.toUpperCase()}
+${instruccionTipoTexto}
+CONTEXTO DE LA EMPRESA:
+- Nombre: ${empresa.nombre}
+- Rubro: ${empresa.industria ?? "no especificado"}
+- Por qué necesitan etiquetas: ${ficha?.por_que_necesitan_etiquetas ?? "no especificado"}
+- Ángulo de entrada (estrategia): ${ficha?.angulo_entrada ?? "sin definir"}
+
+DECISOR PRINCIPAL:
+- Nombre: ${decisorNombre ?? "No identificado aún"}
+- Cargo: ${decisorCargo}
+- Área: ${decisorArea ?? "no especificada"}
+${decisorFicha?.dolor_especifico ? `- Dolor específico: ${decisorFicha.dolor_especifico}` : ""}
+
+HISTORIAL DE INTERACCIONES:
+${historialTexto || "Sin interacciones previas registradas."}
+
+CONTEXTO ADICIONAL DEL VENDEDOR:
+${empresa.notas_vendedor?.trim() || "Sin notas adicionales."}
+
+${casosTexto}${ejemplosFeedbackTexto}${INSTRUCCION_OUTPUT[canalKey]}
+`.trim();
+
+    const systemPrompt = canal === "llamada"
+      ? `${SYSTEM_PROMPT_VALE}\n\n${buildPromptBorradorCanal("llamada")}`
+      : SYSTEM_PROMPT_BORRADORES_TEXTO;
+
+    const userMessage = canal === "llamada" ? contextoLlamada : contextoTexto;
 
     const client = new Anthropic();
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: canal === "llamada" ? 800 : 400,
-      system: `${SYSTEM_PROMPT_VALE}\n\n${buildPromptBorradorCanal(canal)}`,
+      system: systemPrompt,
       messages: [
-        { role: "user", content: contexto },
+        { role: "user", content: userMessage },
       ],
     });
 
