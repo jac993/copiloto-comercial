@@ -41,13 +41,14 @@ export async function POST(
   }
 
   // Decisores registrados en la app (contactos marcados como decisor)
+  // Formato exacto que el sistema referencia en la regla de nombres del system prompt
   const decisoresRegistrados = empresa.contactos.filter((c) => c.es_decisor);
   const decisoresTexto =
     decisoresRegistrados.length > 0
       ? decisoresRegistrados
-          .map((c) => `  • ${c.nombre} — ${c.cargo ?? "sin cargo"} (${c.area ?? "sin área"})`)
+          .map((c) => `- ${c.nombre} — ${c.cargo ?? "sin cargo"}`)
           .join("\n")
-      : "  Sin decisores registrados aún. Agregar en pestaña Decisores.";
+      : "Sin decisores registrados";
 
   // Decisores sugeridos por la IA (de ficha_ia.decisores)
   const decisoresIATexto =
@@ -57,13 +58,14 @@ export async function POST(
           .join("\n")
       : "  Sin análisis de decisores disponible.";
 
-  const prompt = `REGLA ABSOLUTA DE NOMBRES:
-NUNCA inventes nombres de personas.
-En el punto 1 (DECISOR DE ENTRADA) usa ÚNICAMENTE los nombres que aparecen en la lista de decisores registrados que se te proporciona en el contexto.
-Si no hay decisores registrados, escribe exactamente: "Por confirmar — agregar decisores en la pestaña Decisores"
-Si hay decisores registrados, usa solo esos nombres, sin agregar otros.
+  const reglaDeNombres = `REGLA NÚMERO 1 — ABSOLUTA E IRROMPIBLE:
+Los únicos nombres de personas que puedes mencionar son los que aparecen explícitamente en la lista "DECISORES REGISTRADOS" del contexto.
+Si aparece cualquier nombre que NO esté en esa lista, lo estás inventando.
+Inventar nombres destruye la credibilidad del vendedor.
+Antes de escribir cualquier nombre, verifica que está en la lista de decisores.
+Si no está en la lista: NO LO ESCRIBAS.`;
 
-Eres un coach de ventas B2B consultivo. Tu trabajo es ayudar al vendedor a pensar cómo aproximarse a esta empresa, NO generar mensajes para enviar.
+  const prompt = `Eres un coach de ventas B2B consultivo. Tu trabajo es ayudar al vendedor a pensar cómo aproximarse a esta empresa, NO generar mensajes para enviar.
 
 REGLAS ABSOLUTAS:
 - NUNCA inventes nombres de personas que no estén en el contexto
@@ -125,7 +127,7 @@ Resumen ejecutivo: ${ficha.resumen_ejecutivo ?? "no disponible"}
 Señales de oportunidad: ${ficha.senales_oportunidad?.map((s) => s.descripcion).join("; ") ?? "ninguna detectada"}
 Técnica recomendada por el sistema: ${ficha.tecnica_recomendada ?? "no definida"}
 
-━━━ DECISORES REGISTRADOS EN LA APP ━━━
+DECISORES REGISTRADOS (ÚNICOS NOMBRES PERMITIDOS):
 ${decisoresTexto}
 
 ━━━ DECISORES SUGERIDOS POR LA IA (sin confirmar) ━━━
@@ -140,8 +142,8 @@ ${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas del vende
   const client = new Anthropic();
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 1000,
-    system: SYSTEM_PROMPT_VALE,
+    max_tokens: 1500,
+    system: `${reglaDeNombres}\n\n${SYSTEM_PROMPT_VALE}`,
     messages: [{ role: "user", content: prompt }],
   });
 
