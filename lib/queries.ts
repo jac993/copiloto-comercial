@@ -475,6 +475,16 @@ export async function guardarNotasVendedor(id: string, notas: string | null): Pr
   if (error) throw new Error(`guardarNotasVendedor: ${error.message}`);
 }
 
+// Guarda la calificación MEDDIC completa de una empresa
+export async function guardarMeddic(id: string, meddic: Record<string, unknown>): Promise<void> {
+  const { error } = await getSupabase()
+    .from("empresas")
+    .update({ meddic } as unknown as Record<string, unknown>)
+    .eq("id", id);
+
+  if (error) throw new Error(`guardarMeddic: ${error.message}`);
+}
+
 // Guarda el objeto completo de borradores (merge full JSONB column)
 export async function guardarBorradores(id: string, borradores: Record<string, unknown>): Promise<void> {
   const { error } = await getSupabase()

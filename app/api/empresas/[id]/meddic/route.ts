@@ -2,11 +2,11 @@
 // PATCH /api/empresas/[id]/meddic
 // Guarda los 6 componentes MEDDIC + score + valor estimado + probabilidad.
 // El score se calcula aquí: rojo=0, amarillo=1, verde=2. Máximo 12 puntos.
-// Las columnas ya existen en Supabase.
+// Usa getSupabase() vía guardarMeddic en queries.ts — mismo patrón que guardarBorradores.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { unstable_noStore as noStore } from "next/cache";
+import { guardarMeddic } from "@/lib/queries";
 import type { MeddicComponente, MeddicData, MeddicSemaforo } from "@/lib/types";
 
 const SEMAFOROS_VALIDOS = new Set<MeddicSemaforo>(["rojo", "amarillo", "verde"]);
@@ -31,21 +31,15 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  noStore();
   const { id } = await params;
-
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return NextResponse.json({ error: "Configuración Supabase faltante" }, { status: 500 });
-  }
-
   const body = (await req.json()) as Record<string, unknown>;
 
-  const metricas              = parsearComponente(body.metricas);
-  const comprador_economico   = parsearComponente(body.comprador_economico);
-  const criterios_decision    = parsearComponente(body.criterios_decision);
-  const proceso_decision      = parsearComponente(body.proceso_decision);
-  const dolor_identificado    = parsearComponente(body.dolor_identificado);
-  const campeon               = parsearComponente(body.campeon);
+  const metricas             = parsearComponente(body.metricas);
+  const comprador_economico  = parsearComponente(body.comprador_economico);
+  const criterios_decision   = parsearComponente(body.criterios_decision);
+  const proceso_decision     = parsearComponente(body.proceso_decision);
+  const dolor_identificado   = parsearComponente(body.dolor_identificado);
+  const campeon              = parsearComponente(body.campeon);
 
   if (!metricas || !comprador_economico || !criterios_decision ||
       !proceso_decision || !dolor_identificado || !campeon) {
@@ -84,24 +78,12 @@ export async function PATCH(
     probabilidad,
   };
 
-  // Usar fetch directo a Supabase REST con service role para evitar cacheo de Next.js
-  const url = `${process.env.SUPABASE_URL}/rest/v1/empresas?id=eq.${id}`;
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify({ meddic }),
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error("[meddic] error Supabase:", errorText);
-    return NextResponse.json({ error: `Error al guardar MEDDIC: ${errorText}` }, { status: 500 });
+  try {
+    await guardarMeddic(id, meddic as unknown as Record<string, unknown>);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[meddic] error al guardar:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, score, meddic });
