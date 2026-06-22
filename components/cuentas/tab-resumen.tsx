@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment, type ReactNode } from "react";
+import { useState, Fragment, useCallback, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
@@ -16,7 +16,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { FichaIA, VerificacionContexto, InteligenciaComercial, BusquedaWebRaw } from "@/lib/types";
+import type { FichaIA, VerificacionContexto, InteligenciaComercial, BusquedaWebRaw, MeddicData, MeddicComponente, MeddicSemaforo } from "@/lib/types";
 
 // ─── Mapas de color ───────────────────────────────────────────
 
@@ -40,6 +40,7 @@ interface TabResumenProps {
   empresaId: string;
   notasVendedor: string | null;
   busquedaWebRaw?: BusquedaWebRaw | null;
+  meddic?: MeddicData | null;
   // Datos generales de la empresa (del objeto Empresa, no de ficha_ia)
   nombre: string;
   industria: string | null;
@@ -54,6 +55,7 @@ export function TabResumen({
   empresaId,
   notasVendedor,
   busquedaWebRaw,
+  meddic: meddicProp,
   nombre,
   industria,
   region,
@@ -73,6 +75,69 @@ export function TabResumen({
   // Reinvestigar empresa
   const [reinvestigando, setReinvestigando] = useState(false);
   const [confirmarReinvestigar, setConfirmarReinvestigar] = useState(false);
+
+  // MEDDIC — estado local inicializado desde la prop (Supabase)
+  const MEDDIC_INICIAL: MeddicData = meddicProp ?? {
+    metricas:             { texto: null, semaforo: "rojo" },
+    comprador_economico:  { texto: null, semaforo: "rojo" },
+    criterios_decision:   { texto: null, semaforo: "rojo" },
+    proceso_decision:     { texto: null, semaforo: "rojo" },
+    dolor_identificado:   { texto: null, semaforo: "rojo" },
+    campeon:              { texto: null, semaforo: "rojo" },
+    score: 0,
+    valor_estimado: null,
+    probabilidad: null,
+  };
+  const [meddic, setMeddic] = useState<MeddicData>(MEDDIC_INICIAL);
+  const [guardandoMeddic, setGuardandoMeddic] = useState(false);
+
+  const guardarMeddic = useCallback(async (data: MeddicData) => {
+    setGuardandoMeddic(true);
+    try {
+      const res = await fetch(`/api/empresas/${empresaId}/meddic`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const json = (await res.json()) as { ok?: boolean; score?: number; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Error al guardar MEDDIC");
+      // Actualizar score calculado por el servidor
+      setMeddic((prev) => ({ ...prev, score: json.score ?? prev.score }));
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "No se pudo guardar MEDDIC",
+        description: e instanceof Error ? e.message : "Error desconocido",
+      });
+    } finally {
+      setGuardandoMeddic(false);
+    }
+  }, [empresaId, toast]);
+
+  const actualizarComponenteMeddic = useCallback((
+    campo: keyof Pick<MeddicData, "metricas" | "comprador_economico" | "criterios_decision" | "proceso_decision" | "dolor_identificado" | "campeon">,
+    valor: Partial<MeddicComponente>
+  ) => {
+    setMeddic((prev) => {
+      const siguiente: MeddicData = {
+        ...prev,
+        [campo]: { ...prev[campo], ...valor },
+      };
+      // Recalcular score localmente
+      const keys: (keyof Pick<MeddicData, "metricas" | "comprador_economico" | "criterios_decision" | "proceso_decision" | "dolor_identificado" | "campeon">)[] =
+        ["metricas", "comprador_economico", "criterios_decision", "proceso_decision", "dolor_identificado", "campeon"];
+      siguiente.score = keys.reduce((acc, k) => {
+        const s = siguiente[k].semaforo;
+        return acc + (s === "verde" ? 2 : s === "amarillo" ? 1 : 0);
+      }, 0);
+      // Auto-sugerir probabilidad según score si el vendedor no la ha tocado
+      if (prev.probabilidad === null || prev.probabilidad === sugerirProbabilidad(prev.score)) {
+        siguiente.probabilidad = sugerirProbabilidad(siguiente.score);
+      }
+      void guardarMeddic(siguiente);
+      return siguiente;
+    });
+  }, [guardarMeddic]);
 
   // Guarda notas y luego dispara actualización de estrategia automáticamente
   const guardarYActualizar = async () => {
@@ -156,6 +221,18 @@ export function TabResumen({
           </p>
         </CardContent>
       </Card>
+
+      {/* 3. Calificación MEDDIC */}
+      <MeddicCard
+        meddic={meddic}
+        guardando={guardandoMeddic}
+        onComponenteChange={actualizarComponenteMeddic}
+        onValorChange={(campo, valor) => {
+          const siguiente = { ...meddic, [campo]: valor };
+          setMeddic(siguiente);
+          void guardarMeddic(siguiente);
+        }}
+      />
 
       {/* Inteligencia comercial */}
       {ficha.inteligencia_comercial && (
@@ -765,6 +842,251 @@ function InteligenciaComercialCard({ intel }: { intel: InteligenciaComercial }) 
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── MEDDIC ────────────────────────────────────────────────────
+
+// Probabilidad sugerida automáticamente según score
+function sugerirProbabilidad(score: number): number {
+  if (score <= 4)  return 10;
+  if (score <= 7)  return 30;
+  if (score <= 10) return 60;
+  return 80;
+}
+
+const MEDDIC_ITEMS: {
+  campo: keyof Pick<MeddicData, "metricas" | "comprador_economico" | "criterios_decision" | "proceso_decision" | "dolor_identificado" | "campeon">;
+  letra: string;
+  titulo: string;
+  descripcion: string;
+}[] = [
+  { campo: "metricas",             letra: "M", titulo: "Métricas",             descripcion: "¿Qué KPI mide el éxito del cliente? (ej: reducir rechazos de lotes en un X%)" },
+  { campo: "comprador_economico",  letra: "E", titulo: "Comprador Económico",  descripcion: "¿Quién aprueba el presupuesto? ¿Ya lo contactaste?" },
+  { campo: "criterios_decision",   letra: "D", titulo: "Criterios de Decisión","descripcion": "¿Qué evalúan para elegir proveedor? (precio, calidad, plazo, homologación)" },
+  { campo: "proceso_decision",     letra: "D", titulo: "Proceso de Decisión",  descripcion: "¿Quiénes participan y cuáles son los pasos hasta la OC?" },
+  { campo: "dolor_identificado",   letra: "I", titulo: "Dolor Identificado",   descripcion: "¿Qué problema concreto tienen hoy que nosotros podemos resolver?" },
+  { campo: "campeon",              letra: "C", titulo: "Campeón",              descripcion: "¿Hay alguien interno que quiera que ganemos? ¿Tiene influencia?" },
+];
+
+const SEMAFORO_CONFIG: Record<MeddicSemaforo, { emoji: string; label: string; next: MeddicSemaforo }> = {
+  rojo:     { emoji: "🔴", label: "Sin info",   next: "amarillo" },
+  amarillo: { emoji: "🟡", label: "Parcial",    next: "verde" },
+  verde:    { emoji: "🟢", label: "Calificado", next: "rojo" },
+};
+
+const SCORE_ETIQUETA: { min: number; max: number; label: string; color: string }[] = [
+  { min: 0,  max: 4,  label: "Débil 🔴",                  color: "bg-red-500" },
+  { min: 5,  max: 7,  label: "Regular 🟡",                color: "bg-amber-500" },
+  { min: 8,  max: 10, label: "Fuerte 🟢",                 color: "bg-green-500" },
+  { min: 11, max: 12, label: "⭐ Listo para propuesta formal", color: "bg-[#7C3AED]" },
+];
+
+function scoreEtiqueta(score: number) {
+  return SCORE_ETIQUETA.find((e) => score >= e.min && score <= e.max) ?? SCORE_ETIQUETA[0];
+}
+
+function formatCLP(valor: number): string {
+  return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(valor);
+}
+
+function parseCLP(raw: string): number | null {
+  const num = parseInt(raw.replace(/\D/g, ""), 10);
+  return isNaN(num) ? null : num;
+}
+
+interface MeddicCardProps {
+  meddic: MeddicData;
+  guardando: boolean;
+  onComponenteChange: (
+    campo: keyof Pick<MeddicData, "metricas" | "comprador_economico" | "criterios_decision" | "proceso_decision" | "dolor_identificado" | "campeon">,
+    valor: Partial<MeddicComponente>
+  ) => void;
+  onValorChange: (campo: "valor_estimado" | "probabilidad", valor: number | null) => void;
+}
+
+function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: MeddicCardProps) {
+  const etiqueta = scoreEtiqueta(meddic.score);
+  const [valorRaw, setValorRaw] = useState<string>(
+    meddic.valor_estimado != null ? String(meddic.valor_estimado) : ""
+  );
+  const [editandoTexto, setEditandoTexto] = useState<string | null>(null);
+  const [textoLocal, setTextoLocal] = useState<string>("");
+
+  return (
+    <div>
+      <div className="flex items-center justify-between px-1 mb-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Calificación MEDDIC
+        </p>
+        {guardando && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
+      </div>
+
+      <Card>
+        <CardContent className="pt-4 pb-4 space-y-4">
+
+          {/* Barra de progreso */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground">{etiqueta.label}</span>
+              <span className="text-xs text-muted-foreground">{meddic.score} / 12</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${etiqueta.color}`}
+                style={{ width: `${(meddic.score / 12) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* 6 componentes MEDDIC */}
+          <div className="space-y-2">
+            {MEDDIC_ITEMS.map((item) => {
+              const comp = meddic[item.campo];
+              const conf = SEMAFORO_CONFIG[comp.semaforo];
+              const estaEditando = editandoTexto === item.campo;
+
+              return (
+                <div
+                  key={item.campo}
+                  className="rounded-xl border border-border p-3 space-y-2"
+                >
+                  <div className="flex items-start gap-2">
+                    {/* Semáforo clickeable */}
+                    <button
+                      type="button"
+                      onClick={() => onComponenteChange(item.campo, { semaforo: conf.next })}
+                      className="shrink-0 flex flex-col items-center gap-0.5 min-w-[44px] py-0.5 rounded-lg hover:bg-muted/60 transition-colors"
+                      title={`Cambiar estado — ahora: ${conf.label}`}
+                    >
+                      <span className="text-xl leading-none">{conf.emoji}</span>
+                      <span className="text-[10px] text-muted-foreground leading-none">{conf.label}</span>
+                    </button>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-[#7C3AED]">{item.letra}</span>
+                        <p className="text-xs font-semibold text-foreground">{item.titulo}</p>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground/70 leading-snug mt-0.5">
+                        {item.descripcion}
+                      </p>
+
+                      {/* Texto editable */}
+                      {estaEditando ? (
+                        <div className="mt-2 space-y-1.5">
+                          <Textarea
+                            value={textoLocal}
+                            onChange={(e) => setTextoLocal(e.target.value)}
+                            rows={2}
+                            autoFocus
+                            className="text-xs resize-none focus-visible:ring-[#7C3AED]"
+                            placeholder={`Notas sobre ${item.titulo.toLowerCase()}...`}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onComponenteChange(item.campo, { texto: textoLocal.trim() || null });
+                                setEditandoTexto(null);
+                              }}
+                              className="text-xs font-semibold text-[#7C3AED] hover:underline"
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditandoTexto(null)}
+                              className="text-xs text-muted-foreground hover:underline"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTextoLocal(comp.texto ?? "");
+                            setEditandoTexto(item.campo);
+                          }}
+                          className="mt-1.5 w-full text-left text-xs italic text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {comp.texto
+                            ? comp.texto
+                            : <span className="opacity-60">Toca para agregar notas...</span>}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Valor estimado + probabilidad */}
+          <div className="pt-1 border-t border-border space-y-4">
+
+            {/* Valor estimado en CLP */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Valor estimado del negocio (CLP)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={valorRaw ? new Intl.NumberFormat("es-CL").format(parseInt(valorRaw, 10) || 0) : ""}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, "");
+                    setValorRaw(raw);
+                  }}
+                  onBlur={() => {
+                    const val = parseCLP(valorRaw);
+                    onValorChange("valor_estimado", val);
+                  }}
+                  placeholder="0"
+                  className="w-full h-10 pl-7 pr-4 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/60"
+                />
+              </div>
+              {meddic.valor_estimado != null && (
+                <p className="text-xs text-muted-foreground">{formatCLP(meddic.valor_estimado)}</p>
+              )}
+            </div>
+
+            {/* Probabilidad de cierre */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Probabilidad de cierre
+                </label>
+                <span className={`text-sm font-bold ${
+                  (meddic.probabilidad ?? 0) >= 60 ? "text-green-600 dark:text-green-400" :
+                  (meddic.probabilidad ?? 0) >= 30 ? "text-amber-600 dark:text-amber-400" :
+                  "text-muted-foreground"
+                }`}>
+                  {meddic.probabilidad ?? sugerirProbabilidad(meddic.score)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={meddic.probabilidad ?? sugerirProbabilidad(meddic.score)}
+                onChange={(e) => onValorChange("probabilidad", parseInt(e.target.value, 10))}
+                className="w-full h-2 rounded-full appearance-none bg-muted cursor-pointer accent-[#7C3AED]"
+              />
+              <p className="text-[10px] text-muted-foreground/60">
+                Sugerido por MEDDIC: {sugerirProbabilidad(meddic.score)}% · Puedes ajustarlo
+              </p>
+            </div>
+          </div>
+
+        </CardContent>
+      </Card>
     </div>
   );
 }

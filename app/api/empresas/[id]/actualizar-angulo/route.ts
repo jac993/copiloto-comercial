@@ -140,7 +140,23 @@ ${decisoresIATexto}
 ${historialTexto || "Sin interacciones registradas con esta empresa."}
 
 ━━━ LO QUE SABE EL VENDEDOR ━━━
-${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas del vendedor."}`;
+${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas del vendedor."}
+
+━━━ CALIFICACIÓN MEDDIC (score ${empresa.meddic?.score ?? 0}/12) ━━━
+${empresa.meddic ? [
+  `• Métricas (${empresa.meddic.metricas.semaforo}): ${empresa.meddic.metricas.texto ?? "Sin info"}`,
+  `• Comprador Económico (${empresa.meddic.comprador_economico.semaforo}): ${empresa.meddic.comprador_economico.texto ?? "Sin info"}`,
+  `• Criterios de Decisión (${empresa.meddic.criterios_decision.semaforo}): ${empresa.meddic.criterios_decision.texto ?? "Sin info"}`,
+  `• Proceso de Decisión (${empresa.meddic.proceso_decision.semaforo}): ${empresa.meddic.proceso_decision.texto ?? "Sin info"}`,
+  `• Dolor Identificado (${empresa.meddic.dolor_identificado.semaforo}): ${empresa.meddic.dolor_identificado.texto ?? "Sin info"}`,
+  `• Campeón (${empresa.meddic.campeon.semaforo}): ${empresa.meddic.campeon.texto ?? "Sin info"}`,
+].join("\n") : "Sin calificación MEDDIC registrada. Usa los datos disponibles."}
+${empresa.meddic?.score != null && empresa.meddic.score >= 8
+  ? "→ Calificación fuerte: la estrategia puede enfocarse en acelerar el cierre."
+  : empresa.meddic?.score != null && empresa.meddic.score >= 5
+  ? "→ Calificación parcial: la estrategia debe enfocarse en completar los gaps MEDDIC."
+  : "→ Calificación débil o sin datos: la estrategia debe enfocarse en descubrir información básica."
+}`;
 
   const client = new Anthropic();
   const response = await client.messages.create({

@@ -717,6 +717,7 @@ export async function guardarEmpresaDesdeFicha(
     ficha_ia: ficha,
     notas_vendedor: contextoVendedor ?? null,
     borradores: null,
+    meddic: null,
     razon_perdido: null,
     fecha_reactivacion: null,
     busqueda_web_raw: busquedaWebRaw ?? null,

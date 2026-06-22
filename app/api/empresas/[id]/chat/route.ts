@@ -131,7 +131,19 @@ ${
 }
 
 INTELIGENCIA COMERCIAL ADICIONAL:
-${ficha?.inteligencia_comercial ?? "Sin inteligencia comercial adicional."}`;
+${ficha?.inteligencia_comercial ?? "Sin inteligencia comercial adicional."}
+
+CALIFICACIÓN MEDDIC (score ${empresa.meddic?.score ?? 0}/12):
+${empresa.meddic ? [
+  `• Métricas (${empresa.meddic.metricas.semaforo}): ${empresa.meddic.metricas.texto ?? "Sin info"}`,
+  `• Comprador Económico (${empresa.meddic.comprador_economico.semaforo}): ${empresa.meddic.comprador_economico.texto ?? "Sin info"}`,
+  `• Criterios de Decisión (${empresa.meddic.criterios_decision.semaforo}): ${empresa.meddic.criterios_decision.texto ?? "Sin info"}`,
+  `• Proceso de Decisión (${empresa.meddic.proceso_decision.semaforo}): ${empresa.meddic.proceso_decision.texto ?? "Sin info"}`,
+  `• Dolor Identificado (${empresa.meddic.dolor_identificado.semaforo}): ${empresa.meddic.dolor_identificado.texto ?? "Sin info"}`,
+  `• Campeón (${empresa.meddic.campeon.semaforo}): ${empresa.meddic.campeon.texto ?? "Sin info"}`,
+  empresa.meddic.valor_estimado != null ? `• Valor estimado: $${empresa.meddic.valor_estimado.toLocaleString("es-CL")} CLP` : "",
+  empresa.meddic.probabilidad != null ? `• Probabilidad estimada: ${empresa.meddic.probabilidad}%` : "",
+].filter(Boolean).join("\n") : "Sin calificación MEDDIC registrada."}`;
 
   // Reconstruir historial de chat guardado como mensajes Anthropic
   const mensajesHistorial: Anthropic.MessageParam[] = historialChat.flatMap((h) => [

@@ -238,6 +238,33 @@ export interface AnalisisWeb {
 
 // ─── TABLA: empresas ─────────────────────────────────────────
 
+// ─── MEDDIC ──────────────────────────────────────────────────
+
+export type MeddicSemaforo = "rojo" | "amarillo" | "verde";
+
+export interface MeddicComponente {
+  texto: string | null;
+  semaforo: MeddicSemaforo;
+}
+
+// Calificación MEDDIC completa por empresa
+// Columnas ya existentes en Supabase: meddic_metricas, meddic_comprador_economico,
+// meddic_criterios_decision, meddic_proceso_decision, meddic_dolor_identificado,
+// meddic_campeon, meddic_score, meddic_valor_estimado, meddic_probabilidad
+export interface MeddicData {
+  metricas: MeddicComponente;
+  comprador_economico: MeddicComponente;
+  criterios_decision: MeddicComponente;
+  proceso_decision: MeddicComponente;
+  dolor_identificado: MeddicComponente;
+  campeon: MeddicComponente;
+  score: number;               // 0-12 (rojo=0, amarillo=1, verde=2 por cada uno)
+  valor_estimado: number | null; // CLP
+  probabilidad: number | null;   // 0-100
+}
+
+// ─── BORRADORES ───────────────────────────────────────────────
+
 // Borradores de mensajes guardados por empresa → decisor → canal
 // La clave del Record es contactoId (UUID) para contactos reales, o "ia-{cargo}" para sugeridos por IA
 export interface BorradorCanal {
@@ -271,6 +298,7 @@ export interface Empresa {
   ficha_ia: FichaIA | null;
   notas_vendedor: string | null;
   borradores: BorradoresGuardados | null;
+  meddic: MeddicData | null;
   razon_perdido: string | null;
   fecha_reactivacion: string | null;
   busqueda_web_raw: BusquedaWebRaw | null;

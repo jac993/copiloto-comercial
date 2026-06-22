@@ -213,6 +213,7 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             empresaId={empresa.id}
             notasVendedor={empresa.notas_vendedor}
             busquedaWebRaw={empresa.busqueda_web_raw}
+            meddic={empresa.meddic ?? null}
             nombre={empresa.nombre}
             industria={empresa.industria}
             region={empresa.region}

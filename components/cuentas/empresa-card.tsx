@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Building2, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
-import type { Empresa, EstadoEmpresa } from "@/lib/types";
+import type { Empresa, EstadoEmpresa, MeddicData } from "@/lib/types";
 
 // Colores semánticos por estado — reflejan la etapa del pipeline
 const ESTADO_CONFIG: Record<
@@ -149,6 +149,9 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
                 </div>
               </div>
 
+              {/* Badge MEDDIC */}
+              {empresa.meddic && <MeddicBadge meddic={empresa.meddic} />}
+
               {/* Próximo paso + último contacto */}
               <div className="mt-2.5 flex items-center justify-between gap-2">
                 {empresa.razon_de_contacto_actual ? (
@@ -172,5 +175,22 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
         </CardContent>
       </Card>
     </Link>
+  );
+}
+
+// Badge compacto con score MEDDIC y semáforo de color
+function MeddicBadge({ meddic }: { meddic: MeddicData }) {
+  const score = meddic.score;
+  let colorClass: string;
+  let emoji: string;
+  if (score >= 11)      { colorClass = "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"; emoji = "⭐"; }
+  else if (score >= 8)  { colorClass = "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";    emoji = "🟢"; }
+  else if (score >= 5)  { colorClass = "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";    emoji = "🟡"; }
+  else                  { colorClass = "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400";            emoji = "🔴"; }
+
+  return (
+    <span className={`mt-2 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${colorClass}`}>
+      {emoji} MEDDIC {score}/12
+    </span>
   );
 }
