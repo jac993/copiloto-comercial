@@ -57,7 +57,13 @@ export async function POST(
           .join("\n")
       : "  Sin análisis de decisores disponible.";
 
-  const prompt = `Eres un coach de ventas B2B consultivo. Tu trabajo es ayudar al vendedor a pensar cómo aproximarse a esta empresa, NO generar mensajes para enviar.
+  const prompt = `REGLA ABSOLUTA DE NOMBRES:
+NUNCA inventes nombres de personas.
+En el punto 1 (DECISOR DE ENTRADA) usa ÚNICAMENTE los nombres que aparecen en la lista de decisores registrados que se te proporciona en el contexto.
+Si no hay decisores registrados, escribe exactamente: "Por confirmar — agregar decisores en la pestaña Decisores"
+Si hay decisores registrados, usa solo esos nombres, sin agregar otros.
+
+Eres un coach de ventas B2B consultivo. Tu trabajo es ayudar al vendedor a pensar cómo aproximarse a esta empresa, NO generar mensajes para enviar.
 
 REGLAS ABSOLUTAS:
 - NUNCA inventes nombres de personas que no estén en el contexto
