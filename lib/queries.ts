@@ -49,6 +49,9 @@ import type {
   EvaluacionSemanalInsert,
   RendimientoEjecutivo,
   RendimientoEjecutivoUpdate,
+  Caso,
+  CasoInsert,
+  CasoUpdate,
 } from "@/lib/types";
 
 // ─── EMPRESAS ────────────────────────────────────────────────
@@ -965,4 +968,66 @@ export async function getPrioridadesCache(fecha: string): Promise<{
     resumen_dia: data.notas_dia ?? null,
     generadas_en: data.prioridades_generadas_en ?? null,
   };
+}
+
+// ─── CASOS REALES ────────────────────────────────────────────
+
+export async function getCasos(): Promise<Caso[]> {
+  const { data, error } = await getSupabase()
+    .from("casos")
+    .select("*")
+    .order("creado_en", { ascending: false });
+
+  if (error) throw new Error(`getCasos: ${error.message}`);
+  return (data ?? []) as Caso[];
+}
+
+export async function getCasosActivosPorSector(sector: string | null): Promise<Caso[]> {
+  if (!sector) return [];
+  // Busca casos cuyo sector coincida de forma aproximada (ilike)
+  const { data, error } = await getSupabase()
+    .from("casos")
+    .select("*")
+    .eq("activo", true)
+    .ilike("sector", `%${sector.split(" ")[0]}%`) // palabra clave del sector
+    .order("creado_en", { ascending: false })
+    .limit(3);
+
+  if (error) {
+    console.error(`getCasosActivosPorSector: ${error.message}`);
+    return [];
+  }
+  return (data ?? []) as Caso[];
+}
+
+export async function insertCaso(caso: CasoInsert): Promise<Caso> {
+  const { data, error } = await getSupabase()
+    .from("casos")
+    .insert(caso as unknown as Record<string, unknown>)
+    .select()
+    .single();
+
+  if (error) throw new Error(`insertCaso: ${error.message}`);
+  return data as Caso;
+}
+
+export async function updateCaso(id: string, cambios: CasoUpdate): Promise<Caso> {
+  const { data, error } = await getSupabase()
+    .from("casos")
+    .update(cambios as unknown as Record<string, unknown>)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw new Error(`updateCaso: ${error.message}`);
+  return data as Caso;
+}
+
+export async function deleteCaso(id: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from("casos")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw new Error(`deleteCaso: ${error.message}`);
 }

@@ -565,6 +565,35 @@ export interface Integracion {
   actualizado_en: string;
 }
 
+// ─── TABLA: casos ────────────────────────────────────────────
+// Base de casos reales de One Label que la IA usa como referencia
+
+export type TecnicaCaso = "SPIN" | "Challenger" | "Sandler" | "Consultiva" | "Otra";
+export type TamanoCaso = "grande" | "mediana" | "pequeña";
+export type CanalCaso = "llamada" | "email" | "LinkedIn" | "referido" | "visita";
+
+export interface Caso {
+  id: string;
+  sector: string;
+  tamano_empresa: TamanoCaso | null;
+  cargo_decisor: string | null;
+  problema: string;
+  proveedor_anterior: string | null;
+  solucion: string;
+  tipo_etiqueta: string | null;
+  resultado: string;
+  objecion_vencida: string | null;
+  canal_entrada: CanalCaso | null;
+  tecnica_venta: TecnicaCaso | null;
+  tiempo_cierre: string | null;
+  activo: boolean;
+  creado_en: string;
+  actualizado_en: string;
+}
+
+export type CasoInsert = Omit<Caso, "id" | "creado_en" | "actualizado_en">;
+export type CasoUpdate = Partial<CasoInsert>;
+
 // ─── TABLA: correos_detectados ────────────────────────────────
 
 export interface CorreoDetectado {

@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getEmpresaCompleta, getHistorialResumido } from "@/lib/queries";
+import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector } from "@/lib/queries";
 import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 
@@ -123,6 +123,11 @@ export async function POST(req: NextRequest) {
       getEmpresaCompleta(empresaId),
       getHistorialResumido(empresaId),
     ]);
+
+    // Casos reales relevantes por sector — se cargan después de tener la empresa
+    const casosRelevantes = empresa
+      ? await getCasosActivosPorSector(empresa.industria ?? null)
+      : [];
 
     if (!empresa) {
       return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
@@ -240,6 +245,13 @@ Si el historial tiene 3 o más conversaciones con dolor identificado:
 
 REGLA: Es mejor parecer curioso que parecer falso. Un vendedor que hace buenas
 preguntas genera más confianza que uno que afirma cosas que no puede sostener.
+
+━━━ CASOS REALES DE ONE LABEL (usar SOLO estos como referencia, nunca inventar otros) ━━━
+${casosRelevantes.length > 0
+  ? casosRelevantes.map((c) =>
+      `- Sector: ${c.sector}${c.tamano_empresa ? ` (${c.tamano_empresa})` : ""} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Solución: ${c.solucion} | Resultado: ${c.resultado}${c.tecnica_venta ? ` | Técnica: ${c.tecnica_venta}` : ""}`
+    ).join("\n")
+  : "Sin casos documentados aún — no inventar referencias de ventas anteriores"}
 
 ━━━ MANEJO DE FECHAS ━━━
 Cuando menciones eventos del historial o señales de la empresa, siempre indica

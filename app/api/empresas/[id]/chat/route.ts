@@ -13,6 +13,7 @@ import {
   getChatHistorial,
   insertChatMensaje,
   limpiarChatEmpresa,
+  getCasosActivosPorSector,
 } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
 import { SYSTEM_PROMPT_VALE } from "@/lib/prompts";
@@ -66,6 +67,9 @@ export async function POST(
   if (!empresa) {
     return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
   }
+
+  // Casos reales relevantes al sector de la empresa
+  const casosRelevantes = await getCasosActivosPorSector(empresa.industria ?? null);
 
   const ficha = empresa.ficha_ia;
 
@@ -132,6 +136,13 @@ ${
 
 INTELIGENCIA COMERCIAL ADICIONAL:
 ${ficha?.inteligencia_comercial ?? "Sin inteligencia comercial adicional."}
+
+CASOS REALES DE ONE LABEL (usar SOLO estos como referencia, nunca inventar otros):
+${casosRelevantes.length > 0
+  ? casosRelevantes.map((c) =>
+      `- Sector: ${c.sector}${c.tamano_empresa ? ` (${c.tamano_empresa})` : ""} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Resultado: ${c.resultado}`
+    ).join("\n")
+  : "Sin casos documentados aún — no inventar referencias de ventas anteriores"}
 
 CALIFICACIÓN MEDDIC (score ${empresa.meddic?.score ?? 0}/12):
 ${empresa.meddic ? [

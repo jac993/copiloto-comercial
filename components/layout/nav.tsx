@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Building2, BarChart2, Settings, DollarSign, Bell } from "lucide-react";
+import { Sun, Building2, BarChart2, Settings, DollarSign, Bell, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
@@ -36,6 +36,12 @@ const navItems = [
     label: "Cuentas",
     icon: Building2,
     description: "Empresas, decisores e interacciones",
+  },
+  {
+    href: "/casos",
+    label: "Casos",
+    icon: Trophy,
+    description: "Base de casos reales de One Label",
   },
   {
     href: "/rendimiento",
