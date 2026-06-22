@@ -188,6 +188,13 @@ Si el historial tiene 3 o más conversaciones con dolor identificado:
 
 REGLA: Es mejor parecer curioso que parecer falso. Un vendedor que hace buenas
 preguntas genera más confianza que uno que afirma cosas que no puede sostener.
+
+━━━ MANEJO DE FECHAS ━━━
+Cuando menciones eventos del historial o señales de la empresa, siempre indica
+el año específico si está disponible en el contexto.
+Nunca uses "hace poco", "recientemente" o "último tiempo" sin especificar el año.
+Ejemplo correcto: "el envase monomaterial que lanzaron en 2024"
+Ejemplo incorrecto: "el envase monomaterial que lanzaron hace poco"
 `.trim();
 
     const client = new Anthropic();

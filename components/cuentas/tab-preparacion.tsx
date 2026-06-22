@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   Copy, CheckCheck, HelpCircle, Clock, MessageSquare,
-  Zap, Loader2, Mail, ExternalLink, AlertCircle, User,
+  Zap, Loader2, Mail, ExternalLink, AlertCircle, User, RefreshCw,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { FichaIA, Interaccion, Compromiso, Contacto } from "@/lib/types";
+import type { FichaIA, Interaccion, Compromiso, Contacto, BorradoresGuardados, BorradorCanal } from "@/lib/types";
 import type { CanalBorrador, BorradorCanalResult, TipoBorrador } from "@/app/api/preparacion/route";
 
 // ─── Tipos internos ───────────────────────────────────────────
@@ -53,6 +53,19 @@ const TEXTOS_RESOLUCION_NEGATIVA = new Set([
   "Sin respuesta tras 48h",
   "Vio el mensaje pero no respondió",
 ]);
+
+// Meses en español para mostrar la fecha de generación
+const MESES_ES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+
+function formatFecha(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate()} ${MESES_ES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// Clave estable para guardar en Supabase (no depende del índice)
+function claveDecisor(d: DecisorDisplay): string {
+  return d.contactoId ?? `ia-${d.cargo}`;
+}
 
 function detectarTipo(ints: Interaccion[]): TipoBorrador {
   if (ints.length === 0) return "apertura";
@@ -99,6 +112,7 @@ interface TabPreparacionProps {
   industria?: string | null;
   interacciones: Interaccion[];
   contactos: Contacto[];
+  borradores?: BorradoresGuardados | null;
 }
 
 // ─── Config de canales ────────────────────────────────────────
@@ -120,6 +134,7 @@ export function TabPreparacion({
   empresaId,
   interacciones,
   contactos,
+  borradores,
 }: TabPreparacionProps) {
   // Compromisos pendientes del vendedor de la última interacción
   const compromisosPendientes =
@@ -177,17 +192,67 @@ export function TabPreparacion({
     }));
   }, [contactos, ficha, interacciones]);
 
-  // Estado por decisor: cache, cargando, errores, canal abierto
+  // Cache inicializado desde borradores guardados en Supabase
   const [cache, setCache] = useState<
     Record<string, Partial<Record<CanalBorrador, BorradorCanalResult>>>
-  >({});
+  >(() => {
+    if (!borradores) return {};
+    const inicial: Record<string, Partial<Record<CanalBorrador, BorradorCanalResult>>> = {};
+    for (const d of decisores) {
+      const saved = borradores[claveDecisor(d)];
+      if (!saved) continue;
+      const cached: Partial<Record<CanalBorrador, BorradorCanalResult>> = {};
+      if (saved.whatsapp?.texto) cached.whatsapp = { canal: "whatsapp", texto: saved.whatsapp.texto };
+      if (saved.correo?.asunto && saved.correo?.cuerpo) {
+        cached.correo = { canal: "correo", asunto: saved.correo.asunto, cuerpo: saved.correo.cuerpo };
+      }
+      if (saved.linkedin?.texto) cached.linkedin = { canal: "linkedin", texto: saved.linkedin.texto };
+      if (Object.keys(cached).length > 0) inicial[d.id] = cached;
+    }
+    return inicial;
+  });
+
+  // Fechas de generación para mostrar "Generado el [fecha]"
+  const [fechas, setFechas] = useState<
+    Record<string, Partial<Record<CanalBorrador, string>>>
+  >(() => {
+    if (!borradores) return {};
+    const inicial: Record<string, Partial<Record<CanalBorrador, string>>> = {};
+    for (const d of decisores) {
+      const saved = borradores[claveDecisor(d)];
+      if (!saved) continue;
+      const df: Partial<Record<CanalBorrador, string>> = {};
+      if (saved.whatsapp?.generado_at) df.whatsapp = saved.whatsapp.generado_at;
+      if (saved.correo?.generado_at) df.correo = saved.correo.generado_at;
+      if (saved.linkedin?.generado_at) df.linkedin = saved.linkedin.generado_at;
+      if (Object.keys(df).length > 0) inicial[d.id] = df;
+    }
+    return inicial;
+  });
+
+  // Ref para mantener los borradores actuales sin stale closures al acumular saves
+  const borradoresRef = useRef<BorradoresGuardados>(borradores ?? {});
+
   const [cargando, setCargando] = useState<Record<string, CanalBorrador | null>>({});
   const [errores, setErrores] = useState<
     Record<string, Partial<Record<CanalBorrador, string>>>
   >({});
   const [abiertos, setAbiertos] = useState<Record<string, CanalBorrador | undefined>>({});
 
-  // Llama a la API y guarda el resultado en cache
+  // Persiste un borrador en Supabase (fire and forget)
+  const guardarEnSupabase = (clave: string, canal: CanalBorrador, canalData: BorradorCanal) => {
+    borradoresRef.current = {
+      ...borradoresRef.current,
+      [clave]: { ...(borradoresRef.current[clave] ?? {}), [canal]: canalData },
+    };
+    void fetch(`/api/empresas/${empresaId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ borradores: borradoresRef.current }),
+    }).catch((e) => console.error("[preparacion] error guardando borrador:", e));
+  };
+
+  // Llama a la API y guarda el resultado en cache + Supabase
   const cargarBorrador = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
     console.log("[preparacion] cargarBorrador — decisor:", decisor.id, "canal:", canal, "tipo:", decisor.tipo);
     setCargando((prev) => ({ ...prev, [decisor.id]: canal }));
@@ -221,6 +286,20 @@ export function TabPreparacion({
         ...prev,
         [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: borrador },
       }));
+
+      const now = new Date().toISOString();
+      setFechas((prev) => ({
+        ...prev,
+        [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: now },
+      }));
+
+      // Construir el objeto para Supabase según el canal
+      const canalData: BorradorCanal =
+        borrador.canal === "correo"
+          ? { asunto: borrador.asunto, cuerpo: borrador.cuerpo, generado_at: now }
+          : { texto: borrador.texto, generado_at: now };
+
+      guardarEnSupabase(claveDecisor(decisor), canal, canalData);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error desconocido";
       setErrores((prev) => ({
@@ -248,20 +327,35 @@ export function TabPreparacion({
     // Ya cacheado → solo mostrar
     if (cache[decisor.id]?.[canal]) return;
 
-    // Otro canal ya cargando → esperar (cargando[d] es string solo cuando carga activamente)
-    // IMPORTANTE: usar != null (loose) para tratar undefined igual que null
+    // Otro canal ya cargando → esperar
     if (cargando[decisor.id] != null) return;
 
     await cargarBorrador(decisor, canal);
   };
 
-  // Reintentar sin pasar por el toggle
+  // Reintentar tras error
   const handleReintentar = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
     if (cargando[decisor.id] != null) return;
     setErrores((prev) => ({
       ...prev,
       [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: undefined },
     }));
+    await cargarBorrador(decisor, canal);
+  };
+
+  // Regenerar: borra cache del canal y genera uno nuevo
+  const handleRegenerar = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
+    if (cargando[decisor.id] != null) return;
+    setCache((prev) => {
+      const nuevo = { ...(prev[decisor.id] ?? {}) };
+      delete nuevo[canal];
+      return { ...prev, [decisor.id]: nuevo };
+    });
+    setFechas((prev) => {
+      const nuevo = { ...(prev[decisor.id] ?? {}) };
+      delete nuevo[canal];
+      return { ...prev, [decisor.id]: nuevo };
+    });
     await cargarBorrador(decisor, canal);
   };
 
@@ -382,6 +476,7 @@ export function TabPreparacion({
               const canalAbierto = abiertos[d.id];
               const borradorActivo = canalAbierto ? cache[d.id]?.[canalAbierto] : undefined;
               const errorActivo = canalAbierto ? errores[d.id]?.[canalAbierto] : undefined;
+              const fechaActiva = canalAbierto ? fechas[d.id]?.[canalAbierto] : undefined;
 
               return (
                 <Card key={d.id}>
@@ -460,7 +555,26 @@ export function TabPreparacion({
                             </div>
                           </div>
                         ) : borradorActivo ? (
-                          <BorradorContent borrador={borradorActivo} decisor={d} />
+                          <div>
+                            <BorradorContent borrador={borradorActivo} decisor={d} />
+                            {/* Fecha + botón Generar nuevo */}
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              {fechaActiva && (
+                                <p className="text-[10px] text-muted-foreground">
+                                  Generado el {formatFecha(fechaActiva)}
+                                </p>
+                              )}
+                              <button
+                                onClick={() => handleRegenerar(d, canalAbierto)}
+                                disabled={cargandoCanal !== null}
+                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#7C3AED] transition-colors ml-auto"
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                                <Zap className="h-2.5 w-2.5 text-amber-500" />
+                                Generar nuevo
+                              </button>
+                            </div>
+                          </div>
                         ) : null}
                       </div>
                     )}

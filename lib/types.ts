@@ -238,6 +238,21 @@ export interface AnalisisWeb {
 
 // ─── TABLA: empresas ─────────────────────────────────────────
 
+// Borradores de mensajes guardados por empresa → decisor → canal
+// La clave del Record es contactoId (UUID) para contactos reales, o "ia-{cargo}" para sugeridos por IA
+export interface BorradorCanal {
+  texto?: string;       // para whatsapp y linkedin
+  asunto?: string;      // para correo
+  cuerpo?: string;      // para correo
+  generado_at: string;  // ISO date de cuando se generó
+}
+export type BorradoresContacto = {
+  whatsapp?: BorradorCanal;
+  correo?: BorradorCanal;
+  linkedin?: BorradorCanal;
+};
+export type BorradoresGuardados = Record<string, BorradoresContacto>;
+
 export interface Empresa {
   id: string;
   nombre: string;
@@ -255,6 +270,7 @@ export interface Empresa {
   score_prioridad: number;
   ficha_ia: FichaIA | null;
   notas_vendedor: string | null;
+  borradores: BorradoresGuardados | null;
   razon_perdido: string | null;
   fecha_reactivacion: string | null;
   busqueda_web_raw: BusquedaWebRaw | null;

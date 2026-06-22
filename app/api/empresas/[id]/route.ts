@@ -1,10 +1,10 @@
 // =============================================================
 // PATCH /api/empresas/[id] — Actualiza campos editables de una
 // empresa directamente (sin reinvestigar). Usado por la UI para
-// editar notas_vendedor y otros campos simples.
+// editar notas_vendedor y guardar borradores de mensajes.
 // =============================================================
 
-import { guardarNotasVendedor } from "@/lib/queries";
+import { guardarNotasVendedor, guardarBorradores } from "@/lib/queries";
 
 export async function PATCH(
   request: Request,
@@ -13,13 +13,22 @@ export async function PATCH(
   try {
     const { id } = await params;
 
-    const body = (await request.json()) as { notas_vendedor?: string | null };
+    const body = (await request.json()) as {
+      notas_vendedor?: string | null;
+      borradores?: Record<string, unknown>;
+    };
 
-    if (body.notas_vendedor === undefined) {
+    if (body.notas_vendedor === undefined && body.borradores === undefined) {
       return Response.json({ error: "Sin campos para actualizar" }, { status: 400 });
     }
 
-    await guardarNotasVendedor(id, body.notas_vendedor ?? null);
+    if (body.notas_vendedor !== undefined) {
+      await guardarNotasVendedor(id, body.notas_vendedor ?? null);
+    }
+
+    if (body.borradores !== undefined) {
+      await guardarBorradores(id, body.borradores);
+    }
 
     return Response.json({ ok: true });
   } catch (e) {

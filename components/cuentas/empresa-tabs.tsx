@@ -248,6 +248,7 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             industria={empresa.industria}
             interacciones={interacciones}
             contactos={empresa.contactos as Contacto[]}
+            borradores={empresa.borradores ?? null}
           />
         )}
         {tabActivo === "preparacion" && !ficha && <SinFicha />}

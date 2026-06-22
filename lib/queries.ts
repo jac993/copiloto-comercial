@@ -475,6 +475,16 @@ export async function guardarNotasVendedor(id: string, notas: string | null): Pr
   if (error) throw new Error(`guardarNotasVendedor: ${error.message}`);
 }
 
+// Guarda el objeto completo de borradores (merge full JSONB column)
+export async function guardarBorradores(id: string, borradores: Record<string, unknown>): Promise<void> {
+  const { error } = await getSupabase()
+    .from("empresas")
+    .update({ borradores } as unknown as Record<string, unknown>)
+    .eq("id", id);
+
+  if (error) throw new Error(`guardarBorradores: ${error.message}`);
+}
+
 // Actualiza solo angulo_entrada, razon_tecnica y preguntas_spin en ficha_ia
 // sin tocar el resto de la ficha. Llamado por POST /api/investigar/regenerar.
 export async function actualizarCamposRegenerados(
@@ -706,6 +716,7 @@ export async function guardarEmpresaDesdeFicha(
     score_prioridad: score,
     ficha_ia: ficha,
     notas_vendedor: contextoVendedor ?? null,
+    borradores: null,
     razon_perdido: null,
     fecha_reactivacion: null,
     busqueda_web_raw: busquedaWebRaw ?? null,
