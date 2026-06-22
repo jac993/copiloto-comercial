@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Fragment, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
-import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe, Loader2 } from "lucide-react";
+import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe, Loader2, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
@@ -380,9 +380,155 @@ export function TabResumen({
   );
 }
 
-// ── Renderiza el texto de estrategia con los 5 puntos ─────────
-// Detecta líneas "N. TÍTULO: texto" y las formatea con label en negrita
+// ─── Tooltips de metodología ──────────────────────────────────
+
+const METODOLOGIAS: Record<string, string> = {
+  "SPIN": "Técnica de preguntas — Situación, Problema, Implicación, Necesidad",
+  "Challenger": "Enseñar algo nuevo al prospecto para romper el status quo",
+  "Sandler": "Calificar agresivamente antes de invertir tiempo en propuesta",
+  "MEDDIC": "Sistema de diagnóstico para saber si una oportunidad es real",
+  "Predictable Revenue": "Secuencia de contactos multicanal para prospección fría",
+};
+
+// Términos más largos primero para evitar matches parciales
+const PATRON_METODOLOGIA = /(Predictable Revenue|Challenger|MEDDIC|Sandler|SPIN)/g;
+
+function TerminoConTooltip({ termino }: { termino: string }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <span className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        onMouseEnter={() => setAbierto(true)}
+        onMouseLeave={() => setAbierto(false)}
+        className="border-b border-dotted border-[#7C3AED] text-[#7C3AED] font-semibold cursor-help bg-transparent p-0 text-[length:inherit] leading-[inherit]"
+      >
+        {termino}
+      </button>
+      {abierto && (
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 rounded-xl bg-popover text-popover-foreground text-xs px-3 py-2.5 shadow-md border border-border pointer-events-none">
+          <strong className="block text-[#7C3AED] font-semibold mb-1">{termino}</strong>
+          {METODOLOGIAS[termino]}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function resaltarTerminos(texto: string): ReactNode[] {
+  return texto.split(PATRON_METODOLOGIA).map((parte, i) =>
+    METODOLOGIAS[parte] ? <TerminoConTooltip key={i} termino={parte} /> : parte
+  );
+}
+
+// Divide el markdown en secciones delimitadas por encabezados ##
+function parsearSecciones(texto: string): { titulo: string; contenido: string }[] {
+  const secciones: { titulo: string; contenido: string }[] = [];
+  let tituloActual = "";
+  const lineasActuales: string[] = [];
+
+  for (const linea of texto.split("\n")) {
+    if (linea.startsWith("## ")) {
+      if (tituloActual) {
+        secciones.push({ titulo: tituloActual, contenido: lineasActuales.join("\n").trim() });
+        lineasActuales.length = 0;
+      }
+      tituloActual = linea.replace(/^##\s+/, "");
+    } else {
+      lineasActuales.push(linea);
+    }
+  }
+  if (tituloActual) {
+    secciones.push({ titulo: tituloActual, contenido: lineasActuales.join("\n").trim() });
+  }
+  return secciones;
+}
+
+const PROSE_CLS =
+  "prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-table:text-sm prose-table:border prose-td:border prose-td:px-2 prose-td:py-1 prose-th:border prose-th:px-2 prose-th:py-1 prose-p:my-1.5 prose-li:my-0.5 prose-a:text-[#7C3AED]";
+
+// Sección individual del acordeón con contenido Markdown + tooltips
+function SeccionAcordeon({
+  titulo,
+  contenido,
+  abierto,
+  onToggle,
+}: {
+  titulo: string;
+  contenido: string;
+  abierto: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="border-b border-border last:border-b-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between py-3 px-4 bg-gray-50 dark:bg-muted/30 text-left hover:bg-gray-100 dark:hover:bg-muted/50 transition-colors"
+      >
+        <span className="font-semibold text-[#1F2937] dark:text-foreground text-sm">
+          {titulo}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 text-[#7C3AED] shrink-0 transition-transform duration-200 ${
+            abierto ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {/* Animación grid para collapse/expand sin calcular altura en JS */}
+      <div
+        className={`grid transition-all duration-200 ${
+          abierto ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="px-4 py-3 [&_table]:overflow-x-auto [&_table]:block [&_table]:rounded-lg [&_table]:border [&_table]:border-border">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              className={PROSE_CLS}
+              components={{
+                p({ children }) {
+                  const nodes = Array.isArray(children) ? children : [children];
+                  return (
+                    <p>
+                      {nodes.map((child, i) =>
+                        typeof child === "string" ? (
+                          <Fragment key={i}>{resaltarTerminos(child)}</Fragment>
+                        ) : (
+                          <Fragment key={i}>{child}</Fragment>
+                        )
+                      )}
+                    </p>
+                  );
+                },
+              }}
+            >
+              {contenido}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Estrategia de entrada como acordeón por secciones ##
 function EstrategiaTexto({ texto }: { texto: string }) {
+  const secciones = parsearSecciones(texto ?? "");
+  // Primer acordeón (DECISOR DE ENTRADA) abierto por defecto
+  const [abiertos, setAbiertos] = useState<Set<number>>(() => new Set([0]));
+
+  const toggle = (i: number) => {
+    setAbiertos((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
   if (!texto) {
     return (
       <p className="text-sm text-muted-foreground italic">
@@ -391,15 +537,28 @@ function EstrategiaTexto({ texto }: { texto: string }) {
     );
   }
 
+  // Fallback para texto sin secciones ## (formato legado)
+  if (secciones.length === 0) {
+    return (
+      <div className="[&_table]:overflow-x-auto [&_table]:block [&_table]:rounded-lg [&_table]:border [&_table]:border-border">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} className={PROSE_CLS}>
+          {texto}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+
   return (
-    // [&_table]:overflow-x-auto → tablas con scroll horizontal en mobile sin override de componentes
-    <div className="[&_table]:overflow-x-auto [&_table]:block [&_table]:rounded-lg [&_table]:border [&_table]:border-border">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-headings:font-semibold prose-strong:text-foreground prose-table:text-sm prose-table:border prose-td:border prose-td:px-2 prose-td:py-1 prose-th:border prose-th:px-2 prose-th:py-1 prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1 prose-li:my-0.5 prose-a:text-[#7C3AED]"
-      >
-        {texto}
-      </ReactMarkdown>
+    <div className="rounded-xl border border-border overflow-hidden">
+      {secciones.map((sec, i) => (
+        <SeccionAcordeon
+          key={i}
+          titulo={sec.titulo}
+          contenido={sec.contenido}
+          abierto={abiertos.has(i)}
+          onToggle={() => toggle(i)}
+        />
+      ))}
     </div>
   );
 }
