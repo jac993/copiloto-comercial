@@ -623,36 +623,37 @@ function BorradorContent({
   decisor: DecisorDisplay;
   empresaId: string;
 }) {
-  // Texto plano que se guarda como borrador_ia en el feedback
-  const borradorIa =
-    borrador.canal === "correo"
-      ? `Asunto: ${borrador.asunto}\n\n${borrador.cuerpo}`
-      : borrador.canal === "llamada"
-      ? [
-          `APERTURA:\n${borrador.apertura}`,
-          `GANCHO:\n${borrador.gancho}`,
-          `SI RESPONDE CON INTERÉS:\n${borrador.si_positivo}`,
-          `SI DICE QUE NO:\n${borrador.si_negativo}`,
-          `CIERRE:\n${borrador.cierre}`,
-        ].join("\n\n")
-      : borrador.texto;
-
   // Canal llamada tiene su propio componente de visualización
   if (borrador.canal === "llamada") {
+    const borradorIaLlamada = [
+      `APERTURA:\n${borrador.apertura}`,
+      `GANCHO:\n${borrador.gancho}`,
+      `SI RESPONDE CON INTERÉS:\n${borrador.si_positivo}`,
+      `SI DICE QUE NO:\n${borrador.si_negativo}`,
+      `CIERRE:\n${borrador.cierre}`,
+    ].join("\n\n");
     return (
       <PitchLlamadaContent
         borrador={borrador}
         decisor={decisor}
         empresaId={empresaId}
-        borradorIa={borradorIa}
+        borradorIa={borradorIaLlamada}
       />
     );
   }
+
+  // Correo: asunto + cuerpo; whatsapp/linkedin: texto directo
+  const borradorIa =
+    borrador.canal === "correo"
+      ? `Asunto: ${borrador.asunto}\n\n${borrador.cuerpo}`
+      : borrador.texto;
 
   const textoParaCopiar =
     borrador.canal === "correo"
       ? `Asunto: ${borrador.asunto}\n\n${borrador.cuerpo}`
       : borrador.texto;
+
+  console.log("[FeedbackBorrador] montando para canal:", borrador.canal, "empresaId:", empresaId);
 
   return (
     <div>
@@ -679,10 +680,8 @@ function BorradorContent({
         </p>
       </div>
 
-      <CopiarBoton texto={textoParaCopiar} label="Copiar" className="w-full" />
-
-      {/* Feedback */}
-      <div className="mt-3 pt-3 border-t border-border">
+      {/* Feedback — antes del botón copiar */}
+      <div className="mb-3 pt-2 border-t border-border">
         <FeedbackBorrador
           empresaId={empresaId}
           contactoId={decisor.contactoId}
@@ -691,6 +690,8 @@ function BorradorContent({
           borradorIa={borradorIa}
         />
       </div>
+
+      <CopiarBoton texto={textoParaCopiar} label="Copiar" className="w-full" />
     </div>
   );
 }
