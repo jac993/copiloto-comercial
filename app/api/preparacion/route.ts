@@ -14,7 +14,7 @@ import { getEmpresaCompleta, getHistorialResumido } from "@/lib/queries";
 import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const MODEL = "claude-haiku-4-5-20251001";
 

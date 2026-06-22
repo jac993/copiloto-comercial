@@ -14,7 +14,7 @@ import { SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 import type { FichaIA } from "@/lib/types";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function POST(
   _req: NextRequest,
