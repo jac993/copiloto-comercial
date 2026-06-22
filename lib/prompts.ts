@@ -992,7 +992,7 @@ Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
 // Se usa en POST /api/preparacion — genera UN borrador por canal.
 // INPUT: canal ('whatsapp' | 'correo' | 'linkedin')
 // OUTPUT: prompt completo con reglas específicas del canal
-export function buildPromptBorradorCanal(canal: "whatsapp" | "correo" | "linkedin"): string {
+export function buildPromptBorradorCanal(canal: "whatsapp" | "correo" | "linkedin" | "llamada"): string {
   const reglasCanal: Record<string, string> = {
     whatsapp: `
 CANAL: WhatsApp
@@ -1022,6 +1022,47 @@ CANAL: LinkedIn (solicitud de conexión o InMail)
 
 Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
 { "texto": "el mensaje completo" }`,
+
+    llamada: `
+CANAL: LLAMADA TELEFÓNICA
+Genera un pitch de apertura telefónica estructurado en 5 secciones.
+El vendedor lo usará como guía en tiempo real durante la llamada.
+Cada sección debe sonar hablada y natural — NO leída como un script.
+
+SECCIÓN "apertura" (5-10 segundos):
+Presentación: nombre + empresa + razón del contacto en UNA línea.
+NO empezar con "¿Cómo estás?", "Espero no interrumpirte" ni halagos.
+Ejemplo de tono correcto: "Hola [Nombre], soy [Vendedor] de One Label — los llamo porque trabajamos con [industria] y quería hacerle una sola pregunta."
+
+SECCIÓN "gancho" (10-15 segundos):
+Una pregunta de Problema (SPIN) específica al cargo y dolor del decisor.
+Debe sonar como pregunta genuina, no como gancho de ventas.
+Ejemplo: "¿Con qué frecuencia tienen que re-etiquetar productos por problemas con el adhesivo?"
+
+SECCIÓN "si_positivo" (15-20 segundos, si responde con interés o confirma el problema):
+Pregunta de Implicación para amplificar el dolor.
+Conecta el problema con consecuencias operacionales o de negocio.
+Ejemplo: "¿Y eso cuánto tiempo les toma en línea de producción?"
+
+SECCIÓN "si_negativo" (10 segundos, si dice que no tienen ese problema o no tiene tiempo):
+Frase corta que no corta la conversación y deja puerta abierta.
+NO insistir. NO pedir otro momento de inmediato.
+Ejemplo: "Entiendo perfectamente — ¿habría algún momento mejor para una sola pregunta técnica?"
+
+SECCIÓN "cierre" (5-10 segundos):
+CTA de bajo compromiso si hay interés.
+Proponer 15 minutos, no más.
+Ejemplo: "¿Tendrías 15 minutos esta semana para profundizar en eso?"
+
+REGLAS:
+- No inventar datos de la empresa ni casos que no estén en el contexto.
+- Si hay casos reales de One Label en el contexto, mencionarlos en "si_positivo" con nombre de sector.
+- Si no hay historial con el contacto, el tono es de primer contacto en frío.
+- Si ya hubo contacto previo, mencionar brevemente en "apertura".
+- Duración total si el prospecto no interrumpe: máximo 60-90 segundos.
+
+Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
+{ "apertura": "...", "gancho": "...", "si_positivo": "...", "si_negativo": "...", "cierre": "..." }`,
   };
 
   return `Eres un experto en ventas B2B de etiquetas autoadhesivas y packaging industrial en Chile.

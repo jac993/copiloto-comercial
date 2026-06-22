@@ -18,14 +18,15 @@ export const maxDuration = 60;
 
 const MODEL = "claude-haiku-4-5-20251001";
 
-export type CanalBorrador = "whatsapp" | "correo" | "linkedin";
+export type CanalBorrador = "whatsapp" | "correo" | "linkedin" | "llamada";
 export type TipoBorrador = "apertura" | "seguimiento" | "continuacion" | "reactivacion";
 
 // Discriminated union para type-safe acceso en el cliente
 export type BorradorCanalResult =
   | { canal: "whatsapp"; texto: string }
   | { canal: "linkedin"; texto: string }
-  | { canal: "correo"; asunto: string; cuerpo: string };
+  | { canal: "correo"; asunto: string; cuerpo: string }
+  | { canal: "llamada"; apertura: string; gancho: string; si_positivo: string; si_negativo: string; cierre: string };
 
 // Solo los datos dinámicos que el servidor no puede inferir viajan desde el cliente
 interface PrepararBody {
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const canalesValidos: CanalBorrador[] = ["whatsapp", "correo", "linkedin"];
+    const canalesValidos: CanalBorrador[] = ["whatsapp", "correo", "linkedin", "llamada"];
     if (!canalesValidos.includes(canal)) {
       return NextResponse.json({ error: `Canal inválido: ${canal}` }, { status: 400 });
     }
@@ -264,7 +265,7 @@ Ejemplo incorrecto: "el envase monomaterial que lanzaron hace poco"
     const client = new Anthropic();
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 400,
+      max_tokens: canal === "llamada" ? 800 : 400,
       system: `${SYSTEM_PROMPT_VALE}\n\n${buildPromptBorradorCanal(canal)}`,
       messages: [
         { role: "user", content: contexto },
@@ -294,6 +295,18 @@ Ejemplo incorrecto: "el envase monomaterial que lanzaron hace poco"
         return NextResponse.json({ error: "Respuesta incompleta: faltan asunto o cuerpo" }, { status: 500 });
       }
       borrador = { canal: "correo", asunto: parsed.asunto, cuerpo: parsed.cuerpo };
+    } else if (canal === "llamada") {
+      if (!parsed.apertura || !parsed.gancho || !parsed.si_positivo || !parsed.si_negativo || !parsed.cierre) {
+        return NextResponse.json({ error: "Respuesta incompleta: faltan secciones del pitch" }, { status: 500 });
+      }
+      borrador = {
+        canal: "llamada",
+        apertura:     parsed.apertura,
+        gancho:       parsed.gancho,
+        si_positivo:  parsed.si_positivo,
+        si_negativo:  parsed.si_negativo,
+        cierre:       parsed.cierre,
+      };
     } else if (canal === "whatsapp") {
       if (!parsed.texto) {
         return NextResponse.json({ error: "Respuesta incompleta: falta texto" }, { status: 500 });

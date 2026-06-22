@@ -268,15 +268,22 @@ export interface MeddicData {
 // Borradores de mensajes guardados por empresa → decisor → canal
 // La clave del Record es contactoId (UUID) para contactos reales, o "ia-{cargo}" para sugeridos por IA
 export interface BorradorCanal {
-  texto?: string;       // para whatsapp y linkedin
-  asunto?: string;      // para correo
-  cuerpo?: string;      // para correo
-  generado_at: string;  // ISO date de cuando se generó
+  texto?: string;        // para whatsapp y linkedin
+  asunto?: string;       // para correo
+  cuerpo?: string;       // para correo
+  // para llamada (pitch telefónico estructurado por secciones)
+  apertura?: string;
+  gancho?: string;
+  si_positivo?: string;
+  si_negativo?: string;
+  cierre?: string;
+  generado_at: string;   // ISO date de cuando se generó
 }
 export type BorradoresContacto = {
   whatsapp?: BorradorCanal;
   correo?: BorradorCanal;
   linkedin?: BorradorCanal;
+  llamada?: BorradorCanal;
 };
 export type BorradoresGuardados = Record<string, BorradoresContacto>;
 

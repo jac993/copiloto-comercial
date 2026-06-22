@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef } from "react";
 import {
   Copy, CheckCheck, HelpCircle, Clock, MessageSquare,
-  Zap, Loader2, Mail, ExternalLink, AlertCircle, User, RefreshCw,
+  Zap, Loader2, Mail, ExternalLink, AlertCircle, User, RefreshCw, Phone,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
@@ -117,12 +117,13 @@ interface TabPreparacionProps {
 
 // ─── Config de canales ────────────────────────────────────────
 
-const CANALES: CanalBorrador[] = ["whatsapp", "correo", "linkedin"];
+const CANALES: CanalBorrador[] = ["whatsapp", "correo", "linkedin", "llamada"];
 
 const CANAL_META: Record<CanalBorrador, { label: string; icon: React.ReactNode }> = {
   whatsapp: { label: "WhatsApp", icon: <MessageSquare className="h-3.5 w-3.5" /> },
   correo:   { label: "Correo",   icon: <Mail className="h-3.5 w-3.5" /> },
   linkedin: { label: "LinkedIn", icon: <ExternalLink className="h-3.5 w-3.5" /> },
+  llamada:  { label: "Llamada",  icon: <Phone className="h-3.5 w-3.5" /> },
 };
 
 // ─── Componente principal ─────────────────────────────────────
@@ -207,6 +208,16 @@ export function TabPreparacion({
         cached.correo = { canal: "correo", asunto: saved.correo.asunto, cuerpo: saved.correo.cuerpo };
       }
       if (saved.linkedin?.texto) cached.linkedin = { canal: "linkedin", texto: saved.linkedin.texto };
+      if (saved.llamada?.apertura && saved.llamada?.gancho && saved.llamada?.si_positivo && saved.llamada?.si_negativo && saved.llamada?.cierre) {
+        cached.llamada = {
+          canal: "llamada",
+          apertura:    saved.llamada.apertura,
+          gancho:      saved.llamada.gancho,
+          si_positivo: saved.llamada.si_positivo,
+          si_negativo: saved.llamada.si_negativo,
+          cierre:      saved.llamada.cierre,
+        };
+      }
       if (Object.keys(cached).length > 0) inicial[d.id] = cached;
     }
     return inicial;
@@ -223,8 +234,9 @@ export function TabPreparacion({
       if (!saved) continue;
       const df: Partial<Record<CanalBorrador, string>> = {};
       if (saved.whatsapp?.generado_at) df.whatsapp = saved.whatsapp.generado_at;
-      if (saved.correo?.generado_at) df.correo = saved.correo.generado_at;
+      if (saved.correo?.generado_at)   df.correo   = saved.correo.generado_at;
       if (saved.linkedin?.generado_at) df.linkedin = saved.linkedin.generado_at;
+      if (saved.llamada?.generado_at)  df.llamada  = saved.llamada.generado_at;
       if (Object.keys(df).length > 0) inicial[d.id] = df;
     }
     return inicial;
@@ -294,10 +306,21 @@ export function TabPreparacion({
       }));
 
       // Construir el objeto para Supabase según el canal
-      const canalData: BorradorCanal =
-        borrador.canal === "correo"
-          ? { asunto: borrador.asunto, cuerpo: borrador.cuerpo, generado_at: now }
-          : { texto: borrador.texto, generado_at: now };
+      let canalData: BorradorCanal;
+      if (borrador.canal === "correo") {
+        canalData = { asunto: borrador.asunto, cuerpo: borrador.cuerpo, generado_at: now };
+      } else if (borrador.canal === "llamada") {
+        canalData = {
+          apertura:    borrador.apertura,
+          gancho:      borrador.gancho,
+          si_positivo: borrador.si_positivo,
+          si_negativo: borrador.si_negativo,
+          cierre:      borrador.cierre,
+          generado_at: now,
+        };
+      } else {
+        canalData = { texto: borrador.texto, generado_at: now };
+      }
 
       guardarEnSupabase(claveDecisor(decisor), canal, canalData);
     } catch (e) {
@@ -537,7 +560,7 @@ export function TabPreparacion({
                         {cargandoCanal === canalAbierto ? (
                           <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin text-[#7C3AED]" />
-                            <span>Redactando con técnica SPIN...</span>
+                            <span>{canalAbierto === "llamada" ? "Preparando pitch telefónico..." : "Redactando con técnica SPIN..."}</span>
                           </div>
                         ) : errorActivo ? (
                           <div className="flex items-start gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
@@ -598,6 +621,11 @@ function BorradorContent({
   borrador: BorradorCanalResult;
   decisor: DecisorDisplay;
 }) {
+  // Canal llamada tiene su propio componente de visualización
+  if (borrador.canal === "llamada") {
+    return <PitchLlamadaContent borrador={borrador} decisor={decisor} />;
+  }
+
   const textoParaCopiar =
     borrador.canal === "correo"
       ? `Asunto: ${borrador.asunto}\n\n${borrador.cuerpo}`
@@ -629,6 +657,71 @@ function BorradorContent({
       </div>
 
       <CopiarBoton texto={textoParaCopiar} label="Copiar" className="w-full" />
+    </div>
+  );
+}
+
+// ─── Pitch de llamada con secciones ──────────────────────────
+
+const PITCH_SECCIONES: {
+  key: "apertura" | "gancho" | "si_positivo" | "si_negativo" | "cierre";
+  titulo: string;
+  duracion: string;
+  color: string;
+  icono: string;
+}[] = [
+  { key: "apertura",    titulo: "Apertura",               duracion: "5-10 seg",  color: "border-[#7C3AED] bg-[#EDE9FE] dark:bg-violet-900/20",                        icono: "📞" },
+  { key: "gancho",      titulo: "Gancho",                 duracion: "10-15 seg", color: "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20",     icono: "🎯" },
+  { key: "si_positivo", titulo: "Si responde con interés", duracion: "15-20 seg", color: "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20",     icono: "✅" },
+  { key: "si_negativo", titulo: "Si dice que no",          duracion: "10 seg",   color: "border-red-200 bg-red-50/60 dark:border-red-800/40 dark:bg-red-900/15",        icono: "↩️" },
+  { key: "cierre",      titulo: "Cierre",                 duracion: "5-10 seg", color: "border-blue-200 bg-blue-50 dark:border-blue-700/40 dark:bg-blue-900/20",       icono: "🤝" },
+];
+
+function PitchLlamadaContent({
+  borrador,
+  decisor,
+}: {
+  borrador: Extract<BorradorCanalResult, { canal: "llamada" }>;
+  decisor: DecisorDisplay;
+}) {
+  const textoCompleto = [
+    `APERTURA:\n${borrador.apertura}`,
+    `GANCHO:\n${borrador.gancho}`,
+    `SI RESPONDE CON INTERÉS:\n${borrador.si_positivo}`,
+    `SI DICE QUE NO:\n${borrador.si_negativo}`,
+    `CIERRE:\n${borrador.cierre}`,
+  ].join("\n\n");
+
+  return (
+    <div className="space-y-3">
+      {/* Destinatario */}
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Phone className="h-3 w-3" />
+        <span>Llamar a:</span>
+        <span className="font-medium text-foreground">
+          {decisor.nombre ? `${decisor.nombre} · ${decisor.cargo}` : decisor.cargo}
+        </span>
+      </div>
+
+      {/* Secciones del pitch */}
+      {PITCH_SECCIONES.map((sec) => (
+        <div
+          key={sec.key}
+          className={`rounded-xl border p-3 ${sec.color}`}
+        >
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <span>{sec.icono}</span>
+              {sec.titulo}
+            </p>
+            <span className="text-[10px] text-muted-foreground shrink-0">{sec.duracion}</span>
+          </div>
+          <p className="text-sm leading-relaxed">{borrador[sec.key]}</p>
+        </div>
+      ))}
+
+      {/* Botón copiar todo */}
+      <CopiarBoton texto={textoCompleto} label="Copiar pitch completo" className="w-full mt-1" />
     </div>
   );
 }
