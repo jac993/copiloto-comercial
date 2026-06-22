@@ -45,61 +45,81 @@ const INSTRUCCION_TIPO: Record<TipoBorrador, string> = {
   seguimiento:
     "YA HUBO CONTACTO PREVIO pero no se llegó a nada concreto. NO te presentes de nuevo. Retoma el hilo reconociendo el contacto anterior y propone un paso concreto.",
   continuacion:
-    `TIPO CONTINUACION — SIN HISTORIAL SUSTANTIVO (o historial sin respuesta clara).
+    `TIPO CONTINUACION — YA HUBO CONVERSACIÓN REAL CON ESTE CONTACTO.
 
-El borrador debe seguir esta lógica exacta:
+INSTRUCCIÓN PARA CONTINUACIÓN:
 
-PRINCIPIO BASE: El vendedor genuinamente no sabe si puede ayudar al prospecto
-hasta entender su proceso. Eso es verdad, no un truco. El mensaje debe reflejarlo.
+Tienes acceso al historial real de interacciones con este contacto en la sección
+"HISTORIAL DE INTERACCIONES". DEBES partir el mensaje reconociendo explícitamente
+la conversación anterior.
 
-ESTRUCTURA OBLIGATORIA:
-1. Presentación breve: nombre + empresa + contexto de qué hace One Label (1 línea)
-2. Razón honesta del contacto: "antes de proponer cualquier cosa, necesito entender
-   cómo funciona su proceso internamente"
-3. Frase de honestidad consultiva: "no sé si podemos aportarles valor hasta
-   no entender eso" o similar — debe sonar genuino, no como truco
-4. CTA específico: NO "15 minutos esta semana" — usar "¿tendría [X] minutos
-   en los próximos días para hacerle un par de preguntas?" donde X es
-   10-15 según el cargo del decisor
-5. Tono: directo, sin adornos, sin "espero que estés bien", sin halagos
+Si el historial está vacío o no contiene interacciones con este contacto
+específico, tratar como tipo 'apertura' (primer contacto).
 
-REGLA: No mencionar productos específicos de la empresa prospecto a menos que
-el historial confirme que el prospecto los mencionó primero. Si los mencionas
-sin que él los haya mencionado, suenas a que los investigaste — lo cual puede incomodar.
+ESTRUCTURA OBLIGATORIA (cuando hay historial):
 
-PARA CORREO — asunto que no suene a venta:
-Correcto: "Una pregunta sobre su proceso de etiquetado"
-Incorrecto: "Propuesta One Label", "Solución para [empresa]"
+1. REFERENCIA DIRECTA a la última interacción real del historial:
+   - Menciona cuándo fue ("en septiembre", "la semana pasada", con el mes/período real)
+   - Menciona qué se habló o acordó según el resumen de esa interacción
+   - Usa el nombre del contacto si está disponible
+   - NO menciones productos, señales ni nada que no salga del historial
 
-LONGITUD MÁXIMA: 80 palabras para WhatsApp/LinkedIn, 120 para correo.`,
+2. PREGUNTA DE CONTINUIDAD:
+   "¿Llegaron a evaluar...?", "¿Cómo avanzó eso?", "¿Cambió algo desde entonces?"
+   — debe conectar directamente con lo que quedó pendiente según el historial
+
+3. CTA de bajo compromiso: máximo 15 minutos
+
+PROHIBIDO:
+- Empezar como si fuera primer contacto ("Soy [nombre] de One Label...")
+- Mencionar productos, líneas de producción o señales que el vendedor detectó
+  pero el prospecto nunca mencionó en el historial
+- Inventar contexto que no esté en las interacciones registradas
+
+TONO: directo, sin "espero que estés bien", sin halagos.
+LONGITUD MÁXIMA: 80 palabras para WhatsApp/LinkedIn, 120 para correo.
+
+PARA CORREO — asunto que refleje la continuidad:
+Correcto: "Retomando nuestra conversación de [mes]"
+Incorrecto: "Propuesta One Label", "Solución para [empresa]"`,
+
   reactivacion:
-    `TIPO REACTIVACION — INTENTOS ANTERIORES SIN RESPUESTA.
+    `TIPO REACTIVACION — HUBO INTENTOS ANTERIORES SIN RESPUESTA.
 
-El borrador debe seguir esta lógica exacta:
+INSTRUCCIÓN PARA REACTIVACIÓN:
 
-PRINCIPIO BASE: El vendedor genuinamente no sabe si puede ayudar al prospecto
-hasta entender su proceso. Eso es verdad, no un truco. El mensaje debe reflejarlo.
+Tienes acceso al historial real de interacciones con este contacto en la sección
+"HISTORIAL DE INTERACCIONES". DEBES partir el mensaje reconociendo los intentos
+anteriores sin hacerlos sentir como presión.
 
-ESTRUCTURA OBLIGATORIA:
-1. Presentación breve: nombre + empresa + contexto de qué hace One Label (1 línea)
-2. Razón honesta del contacto: "antes de proponer cualquier cosa, necesito entender
-   cómo funciona su proceso internamente"
-3. Frase de honestidad consultiva: "no sé si podemos aportarles valor hasta
-   no entender eso" o similar — debe sonar genuino, no como truco
-4. CTA específico: NO "15 minutos esta semana" — usar "¿tendría [X] minutos
-   en los próximos días para hacerle un par de preguntas?" donde X es
-   10-15 según el cargo del decisor
-5. Tono: directo, sin adornos, sin "espero que estés bien", sin halagos
+Si el historial está vacío, tratar como tipo 'apertura' (primer contacto).
 
-REGLA: No mencionar productos específicos de la empresa prospecto a menos que
-el historial confirme que el prospecto los mencionó primero. Si los mencionas
-sin que él los haya mencionado, suenas a que los investigaste — lo cual puede incomodar.
+ESTRUCTURA OBLIGATORIA (cuando hay historial):
 
-PARA CORREO — asunto que no suene a venta:
-Correcto: "Una pregunta sobre su proceso de etiquetado"
-Incorrecto: "Propuesta One Label", "Solución para [empresa]"
+1. REFERENCIA DIRECTA al último contacto del historial:
+   - Menciona cuándo fue el último intento real
+   - NO menciones que "no respondió" — eso presiona
+   - Sí puedes decir "sé que andas ocupado" o "quería retomar el tema"
 
-LONGITUD MÁXIMA: 80 palabras para WhatsApp/LinkedIn, 120 para correo.`,
+2. PREGUNTA DE REACTIVACIÓN:
+   "¿Cambió algo desde entonces?", "¿Sigue siendo relevante el tema?"
+   — objetivo: saber si el timing cambió, sin insistir
+
+3. CTA de mínimo compromiso: "Si no es el momento, no hay problema — ¿cuándo
+   sería mejor?" o similar. Dejarle la puerta abierta sin presión.
+
+PROHIBIDO:
+- Empezar como si fuera primer contacto
+- Mencionar que no respondió, que llevas varios intentos o que estás haciendo seguimiento
+- Inventar contexto que no esté en las interacciones registradas
+- Mencionar productos o señales que el vendedor detectó pero el prospecto no mencionó
+
+TONO: sin presión, sin urgencia artificial, genuinamente consultivo.
+LONGITUD MÁXIMA: 80 palabras para WhatsApp/LinkedIn, 120 para correo.
+
+PARA CORREO — asunto sin presión:
+Correcto: "Retomando el tema de etiquetado"
+Incorrecto: "Seguimiento pendiente", "¿Pudiste revisar mi mensaje?"`,
 };
 
 export async function POST(req: NextRequest) {
