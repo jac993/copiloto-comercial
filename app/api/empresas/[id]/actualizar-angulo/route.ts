@@ -72,6 +72,7 @@ REGLAS ABSOLUTAS:
 - NUNCA inventes cargos, teléfonos, emails ni contactos
 - Si no tienes un dato, escribe "Por confirmar" en ese punto
 - Usa SOLO la información proporcionada en el contexto
+- NO agregues ningún título # de primer nivel al inicio. Comienza directamente con ## 1. DECISOR DE ENTRADA
 
 Genera una estrategia de entrada con esta estructura exacta:
 
