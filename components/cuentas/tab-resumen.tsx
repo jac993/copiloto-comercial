@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { useRouter } from "next/navigation";
 import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -380,51 +381,6 @@ export function TabResumen({
 
 // ── Renderiza el texto de estrategia con los 5 puntos ─────────
 // Detecta líneas "N. TÍTULO: texto" y las formatea con label en negrita
-// ─── Tooltips de metodología ──────────────────────────────────
-
-const METODOLOGIAS: Record<string, string> = {
-  "SPIN": "Técnica de preguntas — Situación, Problema, Implicación, Necesidad",
-  "Challenger": "Enseñar algo nuevo al prospecto para romper el status quo",
-  "Sandler": "Calificar agresivamente antes de invertir tiempo en propuesta",
-  "MEDDIC": "Sistema de diagnóstico para saber si una oportunidad es real",
-  "Predictable Revenue": "Secuencia de contactos multicanal para prospección fría",
-};
-
-// Términos más largos primero para evitar matches parciales (Predictable Revenue antes que Revenue)
-const PATRON_METODOLOGIA = /(Predictable Revenue|Challenger|MEDDIC|Sandler|SPIN)/g;
-
-function TerminoConTooltip({ termino }: { termino: string }) {
-  const [abierto, setAbierto] = useState(false);
-  const definicion = METODOLOGIAS[termino] ?? "";
-
-  return (
-    <span className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setAbierto((v) => !v)}
-        onMouseEnter={() => setAbierto(true)}
-        onMouseLeave={() => setAbierto(false)}
-        className="border-b border-dotted border-[#7C3AED] text-[#7C3AED] font-semibold cursor-help bg-transparent p-0 text-[length:inherit] leading-[inherit]"
-      >
-        {termino}
-      </button>
-      {abierto && (
-        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 rounded-xl bg-popover text-popover-foreground text-xs px-3 py-2.5 shadow-md border border-border pointer-events-none">
-          <strong className="block text-[#7C3AED] font-semibold mb-1">{termino}</strong>
-          {definicion}
-        </span>
-      )}
-    </span>
-  );
-}
-
-// Divide el texto en segmentos y envuelve los términos con tooltip
-function resaltarTerminos(texto: string): ReactNode[] {
-  return texto.split(PATRON_METODOLOGIA).map((parte, i) =>
-    METODOLOGIAS[parte] ? <TerminoConTooltip key={i} termino={parte} /> : parte
-  );
-}
-
 function EstrategiaTexto({ texto }: { texto: string }) {
   if (!texto) {
     return (
@@ -434,29 +390,12 @@ function EstrategiaTexto({ texto }: { texto: string }) {
     );
   }
 
-  const lineas = texto.split("\n").filter((l) => l.trim());
-  const PATRON = /^(\d+\.\s+[A-ZÁÉÍÓÚÑ\s]+):\s*(.+)$/;
-
   return (
-    <div className="space-y-2">
-      {lineas.map((linea, i) => {
-        const match = linea.match(PATRON);
-        if (match) {
-          return (
-            <div key={i} className="flex gap-2 text-sm leading-relaxed">
-              <span className="font-semibold text-primary shrink-0 whitespace-nowrap">
-                {match[1]}:
-              </span>
-              <span>{resaltarTerminos(match[2])}</span>
-            </div>
-          );
-        }
-        return (
-          <p key={i} className="text-sm leading-relaxed text-muted-foreground">
-            {resaltarTerminos(linea)}
-          </p>
-        );
-      })}
+    // [&_table]:overflow-x-auto → tablas con scroll horizontal en mobile sin override de componentes
+    <div className="[&_table]:overflow-x-auto [&_table]:block [&_table]:rounded-lg [&_table]:border [&_table]:border-border">
+      <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-headings:font-semibold prose-strong:text-foreground prose-table:text-sm prose-th:py-2 prose-td:py-2 prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1 prose-li:my-0.5 prose-a:text-[#7C3AED]">
+        {texto}
+      </ReactMarkdown>
     </div>
   );
 }
