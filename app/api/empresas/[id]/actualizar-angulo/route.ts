@@ -101,8 +101,26 @@ Genera una estrategia de entrada con esta estructura exacta:
 5. RIESGO PRINCIPAL
 ¿Qué obstáculo anticipar? Basa esto en el historial real o en patrones típicos del sector. Si no hay información suficiente, indica qué habría que confirmar antes de contactar.
 
+INSTRUCCIONES ADICIONALES DE PROFUNDIDAD:
+
+Para el punto 3 (ARGUMENTO CENTRAL):
+- Especifica qué técnica de venta usar en este primer contacto y por qué
+- Si hay historial previo sin respuesta, indica qué cambiar respecto al intento anterior
+- La pregunta debe ser específica al cargo del decisor, no genérica
+
+Para el punto 4 (CANAL RECOMENDADO):
+- Si ya se intentó un canal sin éxito, recomendar cambiar de canal
+- Justificar con el perfil del decisor (ej: Gerente de Planta responde mejor a llamada que a email)
+
+Para el punto 5 (RIESGO PRINCIPAL):
+- Incluir un paso concreto para mitigar el riesgo antes de contactar
+- Si el riesgo es "no hay urgencia", indicar cómo crear urgencia sin inventar datos
+
+Al final de los 5 puntos, agregar:
+## PRÓXIMO PASO CONCRETO
+Una sola acción específica que el vendedor debe hacer esta semana, con canal, mensaje de no más de 10 palabras y objetivo esperado.
+
 Tono: directo, estratégico, como un coach hablándole al vendedor en privado.
-Máximo 200 palabras en total.
 
 ━━━ FICHA DE LA EMPRESA ━━━
 Empresa: ${empresa.nombre}
@@ -128,7 +146,7 @@ ${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas del vende
   const client = new Anthropic();
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 500,
+    max_tokens: 1000,
     system: SYSTEM_PROMPT_VALE,
     messages: [{ role: "user", content: prompt }],
   });
