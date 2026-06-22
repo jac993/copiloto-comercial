@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2 } from "lucide-react";
+import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2, CheckCheck, ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -150,6 +150,7 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
   });
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
+  const [verificando, setVerificando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const areaColor = AREA_COLOR[datos.area ?? "otro"] ?? AREA_COLOR.otro;
@@ -163,6 +164,20 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
       onEliminar?.();
     } finally {
       setEliminando(false);
+    }
+  };
+
+  const handleConfirmar = async () => {
+    setVerificando(true);
+    try {
+      await fetch(`/api/contactos/${datos.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verificado: true }),
+      });
+      setDatos((d) => ({ ...d, verificado: true }));
+    } finally {
+      setVerificando(false);
     }
   };
 
@@ -285,6 +300,16 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
                       Decisor
                     </span>
                   )}
+                  {datos.verificado ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      <ShieldCheck className="h-2.5 w-2.5" />
+                      Verificado
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                      No verificado
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">{datos.cargo}</p>
                 {datos.area && (
@@ -347,6 +372,24 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
               </Button>
             )}
           </div>
+        )}
+
+        {/* Botón Confirmar — solo visible si la persona no ha sido verificada */}
+        {!datos.verificado && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mt-2 text-xs gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800/50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+            onClick={handleConfirmar}
+            disabled={verificando}
+          >
+            {verificando ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CheckCheck className="h-3.5 w-3.5" />
+            )}
+            {verificando ? "Confirmando..." : "Confirmar que esta persona es real"}
+          </Button>
         )}
       </CardContent>
     </Card>

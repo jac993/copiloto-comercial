@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       linkedin_url: typeof linkedin_url === "string" ? linkedin_url : null,
       notas_ia: typeof notas_ia === "string" ? notas_ia : null,
       es_decisor: typeof es_decisor === "boolean" ? es_decisor : false,
+      verificado: false, // siempre inicia como no verificado hasta que el vendedor confirme
     };
 
     const nuevo = await insertContacto(contacto);

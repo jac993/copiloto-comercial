@@ -296,6 +296,7 @@ export interface Contacto {
   linkedin_url: string | null;
   notas_ia: string | null;
   es_decisor: boolean;
+  verificado: boolean; // false = nombre sugerido por IA, no confirmado por el vendedor
   creado_en: string;
   actualizado_en: string;
 }

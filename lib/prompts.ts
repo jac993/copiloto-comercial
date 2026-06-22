@@ -394,15 +394,22 @@ INSTRUCCIONES PARA verificacion_contexto:
 // OUTPUT: JSON con los 6 decisores fijos (persona_encontrada incluida) + inteligencia_comercial.
 // Máximo ~2000 tokens de salida.
 export const PROMPT_DECISORES_PERPLEXITY = `
+REGLA ABSOLUTA — NOMBRES DE PERSONAS:
+NUNCA inventes nombres de personas reales.
+En el campo "decisores", el campo "persona_encontrada" solo puede tener un valor
+si Perplexity lo encontró explícitamente con nombre completo y cargo verificado
+en una fuente pública confiable (LinkedIn, web oficial, nota de prensa).
+Si no hay nombre verificado: "persona_encontrada": null en TODOS sus campos — SIEMPRE.
+NUNCA pongas un nombre que no esté en los datos de Perplexity o scraping.
+NUNCA inventes nombres basándote en patrones o suposiciones.
+Es mejor devolver persona_encontrada con todos los campos null que inventar un nombre.
+
 Eres un analista comercial B2B especializado en etiquetas autoadhesivas e imprenta industrial en Chile.
 
 Recibirás el nombre y rubro de una empresa chilena, más texto de búsqueda en internet (Perplexity).
 Tu tarea: generar los 6 decisores fijos (adaptados a la empresa) e inteligencia comercial.
 
 ${CONTEXTO_DOMINIO}
-
-REGLA ABSOLUTA: No inventes personas. Solo incluir persona_encontrada si aparece explícitamente
-en el texto de Perplexity con nombre real + cargo verificable. Si no hay match claro: null.
 
 Responde ÚNICAMENTE con JSON. Sin markdown, sin texto adicional.
 

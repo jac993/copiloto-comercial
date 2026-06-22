@@ -10,16 +10,17 @@ export async function PATCH(
 ) {
   try {
     const body = await req.json() as Record<string, unknown>;
-    const { nombre, cargo, area, email, telefono, linkedin_url, notas_ia } = body;
+    const { nombre, cargo, area, email, telefono, linkedin_url, notas_ia, verificado } = body;
 
     const cambios: ContactoUpdate = {};
-    if (typeof nombre      === "string") cambios.nombre      = nombre;
-    if (typeof cargo       === "string") cambios.cargo       = cargo       || null;
-    if (typeof area        === "string") cambios.area        = (area || null) as AreaContacto | null;
-    if (typeof email       === "string") cambios.email       = email       || null;
-    if (typeof telefono    === "string") cambios.telefono    = telefono    || null;
-    if (typeof linkedin_url === "string") cambios.linkedin_url = linkedin_url || null;
-    if (typeof notas_ia    === "string") cambios.notas_ia    = notas_ia    || null;
+    if (typeof nombre       === "string")  cambios.nombre       = nombre;
+    if (typeof cargo        === "string")  cambios.cargo        = cargo        || null;
+    if (typeof area         === "string")  cambios.area         = (area || null) as AreaContacto | null;
+    if (typeof email        === "string")  cambios.email        = email        || null;
+    if (typeof telefono     === "string")  cambios.telefono     = telefono     || null;
+    if (typeof linkedin_url === "string")  cambios.linkedin_url = linkedin_url || null;
+    if (typeof notas_ia     === "string")  cambios.notas_ia     = notas_ia     || null;
+    if (typeof verificado   === "boolean") cambios.verificado   = verificado;
 
     if (Object.keys(cambios).length === 0) {
       return NextResponse.json({ error: "Sin campos para actualizar" }, { status: 400 });

@@ -63,7 +63,9 @@ Los únicos nombres de personas que puedes mencionar son los que aparecen explí
 Si aparece cualquier nombre que NO esté en esa lista, lo estás inventando.
 Inventar nombres destruye la credibilidad del vendedor.
 Antes de escribir cualquier nombre, verifica que está en la lista de decisores.
-Si no está en la lista: NO LO ESCRIBAS.`;
+Si no está en la lista: NO LO ESCRIBAS.
+Los nombres en la lista DECISORES REGISTRADOS son los únicos permitidos.
+Si un nombre no está en esa lista pero aparece en ficha_ia o en otros campos de la empresa, IGNORARLO — puede ser un dato inventado no verificado.`;
 
   const prompt = `Eres un coach de ventas B2B consultivo. Tu trabajo es ayudar al vendedor a pensar cómo aproximarse a esta empresa, NO generar mensajes para enviar.
 
