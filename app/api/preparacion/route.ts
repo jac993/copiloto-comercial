@@ -44,9 +44,61 @@ const INSTRUCCION_TIPO: Record<TipoBorrador, string> = {
   seguimiento:
     "YA HUBO CONTACTO PREVIO pero no se llegó a nada concreto. NO te presentes de nuevo. Retoma el hilo reconociendo el contacto anterior y propone un paso concreto.",
   continuacion:
-    "HAY HISTORIAL POSITIVO. NO te presentes. Construye directamente sobre lo conversado, referencia lo acordado y propulsa el siguiente paso.",
+    `TIPO CONTINUACION — SIN HISTORIAL SUSTANTIVO (o historial sin respuesta clara).
+
+El borrador debe seguir esta lógica exacta:
+
+PRINCIPIO BASE: El vendedor genuinamente no sabe si puede ayudar al prospecto
+hasta entender su proceso. Eso es verdad, no un truco. El mensaje debe reflejarlo.
+
+ESTRUCTURA OBLIGATORIA:
+1. Presentación breve: nombre + empresa + contexto de qué hace One Label (1 línea)
+2. Razón honesta del contacto: "antes de proponer cualquier cosa, necesito entender
+   cómo funciona su proceso internamente"
+3. Frase de honestidad consultiva: "no sé si podemos aportarles valor hasta
+   no entender eso" o similar — debe sonar genuino, no como truco
+4. CTA específico: NO "15 minutos esta semana" — usar "¿tendría [X] minutos
+   en los próximos días para hacerle un par de preguntas?" donde X es
+   10-15 según el cargo del decisor
+5. Tono: directo, sin adornos, sin "espero que estés bien", sin halagos
+
+REGLA: No mencionar productos específicos de la empresa prospecto a menos que
+el historial confirme que el prospecto los mencionó primero. Si los mencionas
+sin que él los haya mencionado, suenas a que los investigaste — lo cual puede incomodar.
+
+PARA CORREO — asunto que no suene a venta:
+Correcto: "Una pregunta sobre su proceso de etiquetado"
+Incorrecto: "Propuesta One Label", "Solución para [empresa]"
+
+LONGITUD MÁXIMA: 80 palabras para WhatsApp/LinkedIn, 120 para correo.`,
   reactivacion:
-    "LOS INTENTOS ANTERIORES NO TUVIERON ÉXITO. NO te presentes. Intenta con un ángulo completamente distinto al anterior — no repitas el mismo mensaje.",
+    `TIPO REACTIVACION — INTENTOS ANTERIORES SIN RESPUESTA.
+
+El borrador debe seguir esta lógica exacta:
+
+PRINCIPIO BASE: El vendedor genuinamente no sabe si puede ayudar al prospecto
+hasta entender su proceso. Eso es verdad, no un truco. El mensaje debe reflejarlo.
+
+ESTRUCTURA OBLIGATORIA:
+1. Presentación breve: nombre + empresa + contexto de qué hace One Label (1 línea)
+2. Razón honesta del contacto: "antes de proponer cualquier cosa, necesito entender
+   cómo funciona su proceso internamente"
+3. Frase de honestidad consultiva: "no sé si podemos aportarles valor hasta
+   no entender eso" o similar — debe sonar genuino, no como truco
+4. CTA específico: NO "15 minutos esta semana" — usar "¿tendría [X] minutos
+   en los próximos días para hacerle un par de preguntas?" donde X es
+   10-15 según el cargo del decisor
+5. Tono: directo, sin adornos, sin "espero que estés bien", sin halagos
+
+REGLA: No mencionar productos específicos de la empresa prospecto a menos que
+el historial confirme que el prospecto los mencionó primero. Si los mencionas
+sin que él los haya mencionado, suenas a que los investigaste — lo cual puede incomodar.
+
+PARA CORREO — asunto que no suene a venta:
+Correcto: "Una pregunta sobre su proceso de etiquetado"
+Incorrecto: "Propuesta One Label", "Solución para [empresa]"
+
+LONGITUD MÁXIMA: 80 palabras para WhatsApp/LinkedIn, 120 para correo.`,
 };
 
 export async function POST(req: NextRequest) {
