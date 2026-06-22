@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
 import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -393,7 +394,10 @@ function EstrategiaTexto({ texto }: { texto: string }) {
   return (
     // [&_table]:overflow-x-auto → tablas con scroll horizontal en mobile sin override de componentes
     <div className="[&_table]:overflow-x-auto [&_table]:block [&_table]:rounded-lg [&_table]:border [&_table]:border-border">
-      <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-headings:font-semibold prose-strong:text-foreground prose-table:text-sm prose-th:py-2 prose-td:py-2 prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1 prose-li:my-0.5 prose-a:text-[#7C3AED]">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-headings:font-semibold prose-strong:text-foreground prose-table:text-sm prose-table:border prose-td:border prose-td:px-2 prose-td:py-1 prose-th:border prose-th:px-2 prose-th:py-1 prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1 prose-li:my-0.5 prose-a:text-[#7C3AED]"
+      >
         {texto}
       </ReactMarkdown>
     </div>
