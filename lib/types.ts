@@ -601,6 +601,34 @@ export interface Caso {
 export type CasoInsert = Omit<Caso, "id" | "creado_en" | "actualizado_en">;
 export type CasoUpdate = Partial<CasoInsert>;
 
+// ─── TABLA: borradores_feedback ──────────────────────────────
+
+export type EvaluacionFeedback = "positivo" | "negativo";
+
+export interface BorradorFeedback {
+  id: string;
+  creado_en: string;
+  empresa_id: string | null;
+  contacto_id: string | null;
+  canal: string;
+  tipo_borrador: string | null;
+  borrador_ia: string;
+  evaluacion: EvaluacionFeedback | null;
+  version_vendedor: string | null;
+  notas: string | null;
+}
+
+export interface BorradorFeedbackInsert {
+  empresa_id: string;
+  contacto_id?: string | null;
+  canal: string;
+  tipo_borrador?: string | null;
+  borrador_ia: string;
+  evaluacion: EvaluacionFeedback;
+  version_vendedor?: string | null;
+  notas?: string | null;
+}
+
 // ─── TABLA: correos_detectados ────────────────────────────────
 
 export interface CorreoDetectado {

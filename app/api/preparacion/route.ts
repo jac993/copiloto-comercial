@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector } from "@/lib/queries";
+import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector, getFeedbackEjemplos } from "@/lib/queries";
 import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 
@@ -140,9 +140,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Cargar contexto completo desde Supabase en paralelo
-    const [empresa, historialTexto] = await Promise.all([
+    const [empresa, historialTexto, feedbackEjemplos] = await Promise.all([
       getEmpresaCompleta(empresaId),
       getHistorialResumido(empresaId),
+      getFeedbackEjemplos(canal),
     ]);
 
     // Casos reales relevantes por sector — se cargan después de tener la empresa
@@ -273,6 +274,17 @@ ${casosRelevantes.length > 0
       `- Sector: ${c.sector}${c.tamano_empresa ? ` (${c.tamano_empresa})` : ""} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Solución: ${c.solucion} | Resultado: ${c.resultado}${c.tecnica_venta ? ` | Técnica: ${c.tecnica_venta}` : ""}`
     ).join("\n")
   : "Sin casos documentados aún — no inventar referencias de ventas anteriores"}
+
+━━━ EJEMPLOS DE MENSAJES APROBADOS POR EL VENDEDOR (aprende el estilo, no copies) ━━━
+${feedbackEjemplos.length > 0
+  ? feedbackEjemplos.map((fb, i) => {
+      const texto = fb.version_vendedor?.trim() || fb.borrador_ia;
+      return `Ejemplo ${i + 1} (canal ${fb.canal}${fb.tipo_borrador ? `, tipo ${fb.tipo_borrador}` : ""}):\n${texto}`;
+    }).join("\n---\n")
+  : "Sin ejemplos aprobados aún para este canal — usar las técnicas de venta definidas."}
+
+INSTRUCCIÓN: Si hay ejemplos, úsalos para calibrar el tono, longitud y estilo de comunicación
+que prefiere el vendedor. Adáptalos a este prospecto específico sin copiarlos textualmente.
 
 ━━━ MANEJO DE FECHAS ━━━
 Cuando menciones eventos del historial o señales de la empresa, siempre indica

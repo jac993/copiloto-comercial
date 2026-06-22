@@ -579,7 +579,7 @@ export function TabPreparacion({
                           </div>
                         ) : borradorActivo ? (
                           <div>
-                            <BorradorContent borrador={borradorActivo} decisor={d} />
+                            <BorradorContent borrador={borradorActivo} decisor={d} empresaId={empresaId} />
                             {/* Fecha + botón Generar nuevo */}
                             <div className="mt-3 flex items-center justify-between gap-2">
                               {fechaActiva && (
@@ -617,13 +617,36 @@ export function TabPreparacion({
 function BorradorContent({
   borrador,
   decisor,
+  empresaId,
 }: {
   borrador: BorradorCanalResult;
   decisor: DecisorDisplay;
+  empresaId: string;
 }) {
+  // Texto plano que se guarda como borrador_ia en el feedback
+  const borradorIa =
+    borrador.canal === "correo"
+      ? `Asunto: ${borrador.asunto}\n\n${borrador.cuerpo}`
+      : borrador.canal === "llamada"
+      ? [
+          `APERTURA:\n${borrador.apertura}`,
+          `GANCHO:\n${borrador.gancho}`,
+          `SI RESPONDE CON INTERÉS:\n${borrador.si_positivo}`,
+          `SI DICE QUE NO:\n${borrador.si_negativo}`,
+          `CIERRE:\n${borrador.cierre}`,
+        ].join("\n\n")
+      : borrador.texto;
+
   // Canal llamada tiene su propio componente de visualización
   if (borrador.canal === "llamada") {
-    return <PitchLlamadaContent borrador={borrador} decisor={decisor} />;
+    return (
+      <PitchLlamadaContent
+        borrador={borrador}
+        decisor={decisor}
+        empresaId={empresaId}
+        borradorIa={borradorIa}
+      />
+    );
   }
 
   const textoParaCopiar =
@@ -657,6 +680,17 @@ function BorradorContent({
       </div>
 
       <CopiarBoton texto={textoParaCopiar} label="Copiar" className="w-full" />
+
+      {/* Feedback */}
+      <div className="mt-3 pt-3 border-t border-border">
+        <FeedbackBorrador
+          empresaId={empresaId}
+          contactoId={decisor.contactoId}
+          canal={borrador.canal}
+          tipo={decisor.tipo}
+          borradorIa={borradorIa}
+        />
+      </div>
     </div>
   );
 }
@@ -680,9 +714,13 @@ const PITCH_SECCIONES: {
 function PitchLlamadaContent({
   borrador,
   decisor,
+  empresaId,
+  borradorIa,
 }: {
   borrador: Extract<BorradorCanalResult, { canal: "llamada" }>;
   decisor: DecisorDisplay;
+  empresaId: string;
+  borradorIa: string;
 }) {
   const textoCompleto = [
     `APERTURA:\n${borrador.apertura}`,
@@ -722,6 +760,130 @@ function PitchLlamadaContent({
 
       {/* Botón copiar todo */}
       <CopiarBoton texto={textoCompleto} label="Copiar pitch completo" className="w-full mt-1" />
+
+      {/* Feedback */}
+      <div className="pt-3 border-t border-border">
+        <FeedbackBorrador
+          empresaId={empresaId}
+          contactoId={decisor.contactoId}
+          canal="llamada"
+          tipo={decisor.tipo}
+          borradorIa={borradorIa}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Feedback de borrador ─────────────────────────────────────
+
+type FeedbackEstado = "idle" | "positivo_ok" | "negativo_form" | "guardado";
+
+function FeedbackBorrador({
+  empresaId,
+  contactoId,
+  canal,
+  tipo,
+  borradorIa,
+}: {
+  empresaId: string;
+  contactoId: string | null;
+  canal: CanalBorrador;
+  tipo: TipoBorrador;
+  borradorIa: string;
+}) {
+  const [estado, setEstado] = useState<FeedbackEstado>("idle");
+  const [versionVendedor, setVersionVendedor] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const guardar = async (evaluacion: "positivo" | "negativo") => {
+    setGuardando(true);
+    try {
+      await fetch("/api/borradores-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          contacto_id: contactoId ?? null,
+          canal,
+          tipo_borrador: tipo,
+          borrador_ia: borradorIa,
+          evaluacion,
+          version_vendedor: evaluacion === "negativo" ? (versionVendedor.trim() || null) : null,
+        }),
+      });
+      setEstado(evaluacion === "positivo" ? "positivo_ok" : "guardado");
+    } catch (e) {
+      console.error("[feedback] error guardando:", e);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  if (estado === "positivo_ok") {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+        <CheckCheck className="h-3.5 w-3.5" />
+        <span>Guardado — la IA aprenderá tu estilo</span>
+      </div>
+    );
+  }
+
+  if (estado === "guardado") {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <CheckCheck className="h-3.5 w-3.5" />
+        <span>Feedback guardado</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {estado === "idle" && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">¿Te sirve este borrador?</span>
+          <button
+            onClick={() => void guardar("positivo")}
+            className="text-xs px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-800/40 dark:bg-green-900/15 dark:text-green-400 transition-colors min-h-[32px]"
+          >
+            👍 Me sirve
+          </button>
+          <button
+            onClick={() => setEstado("negativo_form")}
+            className="text-xs px-2.5 py-1 rounded-lg border border-red-200 bg-red-50/60 text-red-600 hover:bg-red-100/80 dark:border-red-800/40 dark:bg-red-900/15 dark:text-red-400 transition-colors min-h-[32px]"
+          >
+            👎 No me sirve
+          </button>
+        </div>
+      )}
+      {estado === "negativo_form" && (
+        <div className="space-y-2">
+          <textarea
+            value={versionVendedor}
+            onChange={(e) => setVersionVendedor(e.target.value)}
+            placeholder="Pega tu versión del mensaje para que la IA aprenda tu estilo..."
+            rows={3}
+            className="w-full text-xs rounded-xl border border-border bg-muted/40 px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-[#7C3AED] focus:border-[#7C3AED] placeholder:text-muted-foreground/60"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => void guardar("negativo")}
+              disabled={guardando}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#7C3AED] text-white font-medium disabled:opacity-50 min-h-[32px]"
+            >
+              {guardando && <Loader2 className="h-3 w-3 animate-spin" />}
+              Guardar feedback
+            </button>
+            <button
+              onClick={() => setEstado("idle")}
+              className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted-foreground min-h-[32px]"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

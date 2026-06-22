@@ -52,6 +52,8 @@ import type {
   Caso,
   CasoInsert,
   CasoUpdate,
+  BorradorFeedback,
+  BorradorFeedbackInsert,
 } from "@/lib/types";
 
 // ─── EMPRESAS ────────────────────────────────────────────────
@@ -1030,4 +1032,31 @@ export async function deleteCaso(id: string): Promise<void> {
     .eq("id", id);
 
   if (error) throw new Error(`deleteCaso: ${error.message}`);
+}
+
+// ─── FEEDBACK DE BORRADORES ───────────────────────────────────
+
+export async function insertBorradorFeedback(fb: BorradorFeedbackInsert): Promise<void> {
+  const { error } = await getSupabase()
+    .from("borradores_feedback")
+    .insert(fb as unknown as Record<string, unknown>);
+
+  if (error) throw new Error(`insertBorradorFeedback: ${error.message}`);
+}
+
+// Últimos N borradores aprobados para un canal — se inyectan como ejemplos de estilo
+export async function getFeedbackEjemplos(canal: string, limite = 3): Promise<BorradorFeedback[]> {
+  const { data, error } = await getSupabase()
+    .from("borradores_feedback")
+    .select("*")
+    .eq("canal", canal)
+    .eq("evaluacion", "positivo")
+    .order("creado_en", { ascending: false })
+    .limit(limite);
+
+  if (error) {
+    console.error(`getFeedbackEjemplos: ${error.message}`);
+    return [];
+  }
+  return (data ?? []) as BorradorFeedback[];
 }
