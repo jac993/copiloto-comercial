@@ -449,31 +449,42 @@ const PROSE_CLS =
   "prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-table:text-sm prose-table:border prose-td:border prose-td:px-2 prose-td:py-1 prose-th:border prose-th:px-2 prose-th:py-1 prose-p:my-1.5 prose-li:my-0.5 prose-a:text-[#7C3AED]";
 
 // Sección individual del acordeón con contenido Markdown + tooltips
+// destacado=true → fondo violeta para "Cómo posicionar tu oferta"
 function SeccionAcordeon({
   titulo,
   contenido,
   abierto,
   onToggle,
+  destacado = false,
 }: {
   titulo: string;
   contenido: string;
   abierto: boolean;
   onToggle: () => void;
+  destacado?: boolean;
 }) {
   return (
     <div className="border-b border-border last:border-b-0">
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between py-3 px-4 bg-gray-50 dark:bg-muted/30 text-left hover:bg-gray-100 dark:hover:bg-muted/50 transition-colors"
+        className={`w-full flex items-center justify-between py-3 px-4 text-left transition-colors ${
+          destacado
+            ? "bg-[#EDE9FE] dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30"
+            : "bg-gray-50 dark:bg-muted/30 hover:bg-gray-100 dark:hover:bg-muted/50"
+        }`}
       >
-        <span className="font-semibold text-[#1F2937] dark:text-foreground text-sm">
+        <span
+          className={`font-semibold text-sm ${
+            destacado ? "text-[#5B21B6] dark:text-violet-300" : "text-[#1F2937] dark:text-foreground"
+          }`}
+        >
           {titulo}
         </span>
         <ChevronDown
-          className={`h-4 w-4 text-[#7C3AED] shrink-0 transition-transform duration-200 ${
+          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
             abierto ? "rotate-180" : ""
-          }`}
+          } ${destacado ? "text-[#5B21B6] dark:text-violet-300" : "text-[#7C3AED]"}`}
         />
       </button>
 
@@ -684,63 +695,76 @@ function EncontradoEnInternet({ raw }: { raw: BusquedaWebRaw }) {
 
 // ── Inteligencia comercial de Perplexity ──────────────────────
 function InteligenciaComercialCard({ intel }: { intel: InteligenciaComercial }) {
-  const filas: { label: string; valor: string }[] = [
-    { label: "Situación actual", valor: intel.situacion_mercado },
-    { label: "Prioridades este año", valor: intel.prioridades_actuales },
-    { label: "Dolores que resolvemos", valor: intel.dolores_probables },
-    { label: "Clientes y exigencias", valor: intel.clientes_y_exigencias },
-    { label: "Debilidades proveedor actual", valor: intel.debilidades_proveedor_actual },
-  ].filter((f) => f.valor && !f.valor.toLowerCase().startsWith("sin información"));
-
   const propuesta = intel.propuesta_valor_especifica;
+  const tienePropuesta = !!propuesta && !propuesta.toLowerCase().startsWith("sin información");
+
+  const filas: { titulo: string; contenido: string }[] = [
+    { titulo: "Situación actual", contenido: intel.situacion_mercado },
+    { titulo: "Prioridades este año", contenido: intel.prioridades_actuales },
+    { titulo: "Dolores que resolvemos", contenido: intel.dolores_probables },
+    { titulo: "Clientes y exigencias", contenido: intel.clientes_y_exigencias },
+    { titulo: "Debilidades proveedor actual", contenido: intel.debilidades_proveedor_actual },
+  ].filter((f) => f.contenido && !f.contenido.toLowerCase().startsWith("sin información"));
+
   const fuentes = (intel.fuentes ?? []).filter(Boolean);
 
-  if (filas.length === 0 && !propuesta) return null;
+  // Armar la lista de secciones: propuesta primero (destacada), luego filas
+  const secciones: { titulo: string; contenido: string; destacado: boolean }[] = [
+    ...(tienePropuesta ? [{ titulo: "Cómo posicionar tu oferta", contenido: propuesta!, destacado: true }] : []),
+    ...filas.map((f) => ({ ...f, destacado: false })),
+  ];
+
+  // Primera sección abierta por defecto
+  const [abiertos, setAbiertos] = useState<Set<number>>(() => new Set([0]));
+
+  const toggle = (i: number) => {
+    setAbiertos((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  if (secciones.length === 0) return null;
 
   return (
     <div>
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
         🧠 Inteligencia comercial
       </p>
-      <Card className="overflow-hidden">
-        <CardContent className="pt-4 pb-4 space-y-3">
-          {propuesta && !propuesta.toLowerCase().startsWith("sin información") && (
-            <div className="bg-[#EDE9FE] border border-violet-200 rounded-xl p-3">
-              <p className="text-xs font-semibold text-[#5B21B6] mb-1">Cómo posicionar tu oferta</p>
-              <p className="text-xs text-[#4C1D95] leading-relaxed">{propuesta}</p>
-            </div>
-          )}
-          {filas.map(({ label, valor }) => (
-            <div key={label} className="border-b border-border last:border-0 pb-2.5 last:pb-0">
-              <p className="text-xs font-semibold text-muted-foreground mb-0.5">{label}</p>
-              <p className="text-xs leading-relaxed">{valor}</p>
-            </div>
-          ))}
-          {fuentes.length > 0 && (
-            <div className="pt-1">
-              <p className="text-xs text-muted-foreground mb-1">Fuentes:</p>
-              <div className="flex flex-wrap gap-1.5">
-                {fuentes.slice(0, 5).map((url, i) => {
-                  let host = url;
-                  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* mantener url original */ }
-                  return (
-                    <a
-                      key={i}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      {host}
-                    </a>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-border overflow-hidden">
+        {secciones.map((sec, i) => (
+          <SeccionAcordeon
+            key={sec.titulo}
+            titulo={sec.titulo}
+            contenido={sec.contenido}
+            abierto={abiertos.has(i)}
+            onToggle={() => toggle(i)}
+            destacado={sec.destacado}
+          />
+        ))}
+      </div>
+      {fuentes.length > 0 && (
+        <div className="mt-2 px-1 flex flex-wrap gap-1.5">
+          {fuentes.slice(0, 5).map((url, i) => {
+            let host = url;
+            try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* mantener url original */ }
+            return (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {host}
+              </a>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
