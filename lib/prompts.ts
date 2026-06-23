@@ -1032,15 +1032,11 @@ REGLAS DE ESTE BORRADOR:
 - La inteligencia de la ficha es para que TÚ entiendas al cliente, no para citarla en el mensaje. El prospecto no debe sentir que lo investigaste.
 - Usa el dolor identificado para formular UNA pregunta SPIN relevante, no para afirmar datos sobre su operación.
 
-FORMATO DE RESPUESTA — JSON sin texto adicional:
-{
-  "whatsapp": "máximo 4 líneas, tono directo y humano, termina con una pregunta corta",
-  "correo": {
-    "asunto": "asunto concreto, sin clickbait",
-    "cuerpo": "máximo 80 palabras: observación del sector del decisor + 1 pregunta de problema o implicación + CTA de bajo compromiso (15 minutos)"
-  },
-  "linkedin": "máximo 3 líneas, tono profesional cercano, enfocado en el cargo, sin mencionar ventas"
-}
+INSTRUCCIÓN DE FORMATO — CRÍTICA:
+Responde ÚNICAMENTE con el JSON a continuación. Sin texto antes, sin texto después, sin bloques markdown, sin comillas de código.
+El JSON debe estar en una sola línea continua, sin saltos de línea reales dentro de los valores.
+
+{"whatsapp":"texto aquí","correo":{"asunto":"asunto aquí","cuerpo":"cuerpo aquí"},"linkedin":"texto aquí"}
 `.trim();
 }
 

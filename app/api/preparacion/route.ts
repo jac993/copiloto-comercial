@@ -248,7 +248,7 @@ ${casosRelevantes.length > 0
     const client = new Anthropic();
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: canal === "llamada" ? 800 : 600,
+      max_tokens: canal === "llamada" ? 800 : 1200,
       system: systemPrompt,
       messages: [
         { role: "user", content: userMessage },
@@ -294,23 +294,28 @@ ${casosRelevantes.length > 0
       };
     } else {
       // Texto: JSON con whatsapp / correo / linkedin en un solo llamado.
-      // Normalizar caracteres de control antes de parsear — Claude a veces
-      // incluye saltos de línea reales dentro de los strings del JSON.
       type TextResponse = {
         whatsapp: string;
         correo: { asunto: string; cuerpo: string };
         linkedin: string;
       };
 
-      // Escapar saltos de línea reales dentro de los strings del JSON
-      const normalized = jsonMatch[0]
-        .split('\n').join('\\n')
-        .split('\r').join('')
-        .split('\t').join(' ');
+      // Limpiar posibles bloques markdown antes de buscar el JSON
+      const cleaned = textoRaw
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+
+      const jsonMatchText = cleaned.match(/\{[\s\S]*\}/);
+      if (!jsonMatchText) {
+        console.error("[preparacion] respuesta sin JSON:", textoRaw.slice(0, 300));
+        return NextResponse.json({ error: "La IA no devolvió un JSON válido", raw: textoRaw.substring(0, 500) }, { status: 500 });
+      }
 
       let parsed: TextResponse;
       try {
-        parsed = JSON.parse(normalized) as TextResponse;
+        parsed = JSON.parse(jsonMatchText[0]) as TextResponse;
       } catch (e) {
         console.error("[preparacion] JSON parse error borradores:", e, "\nRaw:", textoRaw.slice(0, 400));
         return NextResponse.json(
