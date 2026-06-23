@@ -1031,6 +1031,8 @@ REGLAS DE ESTE BORRADOR:
 - NUNCA menciones conversaciones previas que no estén en el historial.
 - La inteligencia de la ficha es para que TÚ entiendas al cliente, no para citarla en el mensaje. El prospecto no debe sentir que lo investigaste.
 - Usa el dolor identificado para formular UNA pregunta SPIN relevante, no para afirmar datos sobre su operación.
+- NUNCA uses frases como "trabajo con empresas de tu sector", "hemos visto que en tu industria" o cualquier afirmación que implique experiencia previa con clientes similares. Eso es inventado. Si no tienes casos reales documentados en el contexto, formula una pregunta SPIN en vez de hacer una afirmación.
+- TONO: escribe como una persona real, no como una plantilla corporativa. Nada de "Estimado/a", nada de estructuras de 3 párrafos perfectos. En WhatsApp: directo y humano, como un mensaje real. En correo: máximo 5 líneas, abre con una pregunta o una observación del sector (no sobre One Label), sin párrafo de presentación.
 
 INSTRUCCIÓN DE FORMATO — CRÍTICA:
 Responde ÚNICAMENTE con el JSON a continuación. Sin texto antes, sin texto después, sin bloques markdown, sin comillas de código.
