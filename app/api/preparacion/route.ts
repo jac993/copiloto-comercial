@@ -264,6 +264,12 @@ ${casosRelevantes.length > 0
     });
 
     const textoRaw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+
+    // LOG TEMPORAL — eliminar después de diagnosticar el parse error
+    console.log("=== RAW CONTENT BORRADORES ===");
+    console.log(textoRaw);
+    console.log("=== END RAW CONTENT ===");
+
     const jsonMatch = textoRaw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("[preparacion] respuesta sin JSON:", textoRaw.slice(0, 300));
