@@ -996,50 +996,48 @@ Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
 // la relación detectado en el historial.
 // =============================================================
 export function buildPromptBorradores(datos: {
-  nombre: string;
-  rubro: string;
-  dolorPrincipal: string;
-  anguloEntrada: string;
-  decisorNombre: string;
-  decisorCargo: string;
-  historialReciente: string;
-  contextoVendedor: string;
+  nombre: string
+  rubro: string
+  dolorPrincipal: string
+  anguloEntrada: string
+  decisorNombre: string
+  decisorCargo: string
+  historialReciente: string
+  contextoVendedor: string
 }): string {
-  return `
-Genera tres borradores de primer contacto para esta empresa usando las metodologías que conoces.
+  const estadoRelacion = datos.historialReciente
+    ? `HISTORIAL DE INTERACCIONES (últimas interacciones reales):\n${datos.historialReciente}`
+    : `HISTORIAL: Sin interacciones previas. Estado 1 — primer contacto en frío. Aplica Predictable Revenue.`
 
-DATOS DE LA EMPRESA (usa SOLO estos — no agregues datos de tu conocimiento general):
+  return `Redacta tres borradores de contacto para esta empresa aplicando las metodologías que conoces.
+
+EMPRESA:
 - Nombre: ${datos.nombre}
 - Rubro: ${datos.rubro}
-- Dolor principal identificado en la ficha: ${datos.dolorPrincipal}
-- Estrategia de entrada definida: ${datos.anguloEntrada}
+- Dolor identificado en la ficha: ${datos.dolorPrincipal}
+- Estrategia de entrada: ${datos.anguloEntrada}
 
-DECISOR AL QUE VA DIRIGIDO:
-- Nombre: ${datos.decisorNombre}
-- Cargo: ${datos.decisorCargo}
+DECISOR:
+- Nombre: ${datos.decisorNombre || 'No registrado'}
+- Cargo: ${datos.decisorCargo || 'No registrado'}
 
-HISTORIAL DE INTERACCIONES:
-${datos.historialReciente || "Sin interacciones previas registradas. Este es un primer contacto en frío — Estado 1 según tu clasificación."}
+${estadoRelacion}
 
-CONTEXTO ADICIONAL DEL VENDEDOR:
-${datos.contextoVendedor || "Sin contexto adicional."}
+${datos.contextoVendedor ? `CONTEXTO DEL VENDEDOR:\n${datos.contextoVendedor}` : ''}
 
-REGLAS DE ESTE BORRADOR:
-- El historial determina el Estado de la relación. Aplica la técnica que corresponde a ese estado.
-- Si no hay historial, es Estado 1: Predictable Revenue. Objetivo único: obtener respuesta. No calificar, no proponer.
-- NUNCA menciones datos operacionales específicos de la empresa (volúmenes, SKUs, plantas, fiscalizaciones) aunque los conozcas. Usa solo lo que está en los campos de arriba.
-- NUNCA menciones conversaciones previas que no estén en el historial.
-- La inteligencia de la ficha es para que TÚ entiendas al cliente, no para citarla en el mensaje. El prospecto no debe sentir que lo investigaste.
-- Usa el dolor identificado para formular UNA pregunta SPIN relevante, no para afirmar datos sobre su operación.
-- NUNCA uses frases como "trabajo con empresas de tu sector", "hemos visto que en tu industria" o cualquier afirmación que implique experiencia previa con clientes similares. Eso es inventado. Si no tienes casos reales documentados en el contexto, formula una pregunta SPIN en vez de hacer una afirmación.
-- TONO: escribe como una persona real, no como una plantilla corporativa. Nada de "Estimado/a", nada de estructuras de 3 párrafos perfectos. En WhatsApp: directo y humano, como un mensaje real. En correo: máximo 5 líneas, abre con una pregunta o una observación del sector (no sobre One Label), sin párrafo de presentación.
+RESTRICCIONES:
+- Usa SOLO los datos de esta ficha. No agregues datos operacionales de tu conocimiento general sobre la empresa.
+- No menciones conversaciones previas que no estén en el historial.
+- No inventes casos de clientes ni estadísticas.
+- Si no tienes casos reales, usa preguntas SPIN en vez de afirmaciones.
 
-INSTRUCCIÓN DE FORMATO — CRÍTICA:
-Responde ÚNICAMENTE con el JSON a continuación. Sin texto antes, sin texto después, sin bloques markdown, sin comillas de código.
-El JSON debe estar en una sola línea continua, sin saltos de línea reales dentro de los valores.
+CANALES Y FORMATO:
+- whatsapp: máximo 4 líneas, tono humano y directo, termina con una pregunta
+- correo: asunto concreto + cuerpo máximo 5 líneas, abre con observación del sector o pregunta, sin párrafo de presentación genérico
+- linkedin: máximo 3 líneas, profesional y cercano
 
-{"whatsapp":"texto aquí","correo":{"asunto":"asunto aquí","cuerpo":"cuerpo aquí"},"linkedin":"texto aquí"}
-`.trim();
+Responde ÚNICAMENTE con este JSON en una sola línea, sin markdown:
+{"whatsapp":"...","correo":{"asunto":"...","cuerpo":"..."},"linkedin":"..."}`
 }
 
 // =============================================================
