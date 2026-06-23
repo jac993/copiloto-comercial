@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@supabase/supabase-js";
 import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector } from "@/lib/queries";
 import { buildPromptBorradorCanal, buildPromptBorradores, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
@@ -225,18 +226,28 @@ ${casosRelevantes.length > 0
   : "Sin casos documentados aún — no inventar referencias."}
 `.trim();
 
-    // DEBUG TEMPORAL — ver qué datos llegan a buildPromptBorradores
+    // DEBUG TEMPORAL — insertar en debug_logs para inspeccionar desde Supabase
     if (canal !== "llamada") {
-      console.log('=== DATOS BORRADORES ===', JSON.stringify({
-        nombre: empresa.nombre,
-        rubro: empresa.industria,
-        dolorPrincipal: decisorFicha?.dolor_especifico ?? ficha?.por_que_necesitan_etiquetas,
-        anguloEntrada: ficha?.angulo_entrada,
-        decisorNombre: decisorNombre,
-        decisorCargo: decisorCargo,
-        historialTextoLen: historialTexto?.length,
-        contextoVendedor: empresa.notas_vendedor,
-      }, null, 2));
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+      await supabaseAdmin.from('debug_logs').insert({
+        endpoint: 'preparacion',
+        empresa_id: empresaId,
+        datos: {
+          nombre: empresa.nombre,
+          rubro: empresa.industria,
+          dolor_principal: decisorFicha?.dolor_especifico ?? ficha?.por_que_necesitan_etiquetas,
+          angulo_entrada: ficha?.angulo_entrada,
+          decisor_nombre: decisorNombre,
+          decisor_cargo: decisorCargo,
+          historial_texto_len: historialTexto?.length,
+          contexto_vendedor: empresa.notas_vendedor,
+          ficha_completa: ficha,
+        },
+        created_at: new Date().toISOString(),
+      });
     }
 
     // Texto (whatsapp/correo/linkedin): buildPromptBorradores con SYSTEM_PROMPT_VALE
