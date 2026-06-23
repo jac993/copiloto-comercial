@@ -233,6 +233,7 @@ export async function POST(request: Request) {
         });
 
         const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
+        console.log('[CLAUDE_RAW]', textoRespuesta.substring(0, 800));
         registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: mensaje.usage.input_tokens, output_tokens: mensaje.usage.output_tokens });
         if (perplexityResult.input_tokens > 0 || perplexityResult.output_tokens > 0) {
           registrarUso({ api: "perplexity", endpoint: "sonar", input_tokens: perplexityResult.input_tokens, output_tokens: perplexityResult.output_tokens });
