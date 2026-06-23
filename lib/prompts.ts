@@ -1,6 +1,4 @@
-﻿import type { DecisorIA, ObjecionProbable, InteligenciaComercial } from "@/lib/types";
-
-// =============================================================
+﻿// =============================================================
 // Prompts centralizados — TODA llamada a Claude pasa por aquí.
 // Editar aquí para iterar la calidad de las fichas sin tocar
 // el código de la API route.
