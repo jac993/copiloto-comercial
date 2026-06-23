@@ -1000,93 +1000,48 @@ Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
 export function buildPromptBorradores(datos: {
   nombre: string
   rubro: string
-  dolorPrincipal: string
-  anguloEntrada: string
-  resumenEjecutivo?: string
-  preguntasSpin?: Array<{ pregunta?: string } | string>
-  objecionesProbables?: ObjecionProbable[]
-  inteligenciaComercial?: Partial<InteligenciaComercial>
-  decisores?: DecisorIA[]
   decisorCargo: string
   decisorNombre: string
   historialReciente: string
   contextoVendedor: string
 }): string {
-  const decisorPrincipal = datos.decisores?.[0]
-  const dolorDecisor = decisorPrincipal?.dolor_especifico || datos.dolorPrincipal
-  const tecnica = decisorPrincipal?.tecnica_recomendada || 'SPIN'
-
-  const spinTexto = datos.preguntasSpin
-    ?.map(p => typeof p === 'string' ? p : p.pregunta)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('\n- ') || ''
+  const saludo = datos.decisorNombre && datos.decisorNombre !== 'No registrado'
+    ? `Hola ${datos.decisorNombre},`
+    : 'Buen día,'
 
   const estadoRelacion = datos.historialReciente && datos.historialReciente !== 'Sin interacciones previas registradas.'
-    ? `HISTORIAL REAL DE INTERACCIONES:\n${datos.historialReciente}`
-    : `HISTORIAL: Sin interacciones previas. Estado 1 — primer contacto en frío. Aplica Predictable Revenue.`
+    ? `HISTORIAL REAL:\n${datos.historialReciente}\nEste NO es primer contacto — adecúa el tono al historial.`
+    : `Sin historial. Primer contacto en frío.`
 
-  return `Redacta tres borradores de primer contacto para esta empresa usando las metodologías que conoces.
+  return `Eres un vendedor B2B consultivo chileno. Redacta tres borradores de primer contacto.
 
-EMPRESA:
-- Nombre: ${datos.nombre}
+DATOS:
+- Empresa: ${datos.nombre}
 - Rubro: ${datos.rubro}
-- Resumen ejecutivo: ${datos.resumenEjecutivo || 'No disponible'}
-
-DECISOR AL QUE VA DIRIGIDO:
-- Cargo: ${datos.decisorCargo || decisorPrincipal?.cargo || 'No registrado'}
-- Nombre: ${datos.decisorNombre || 'No registrado'}
-- Dolor específico de este cargo: ${dolorDecisor}
-- Técnica recomendada para este cargo: ${tecnica}
-
-ÁNGULO DE ENTRADA (estrategia definida):
-${datos.anguloEntrada}
-
-PREGUNTAS SPIN YA FORMULADAS PARA ESTA EMPRESA (úsalas como referencia):
-- ${spinTexto}
-
-INTELIGENCIA COMERCIAL:
-- Dolores probables: ${datos.inteligenciaComercial?.dolores_probables || 'No disponible'}
-- Prioridades actuales: ${datos.inteligenciaComercial?.prioridades_actuales || 'No disponible'}
-- Propuesta de valor específica: ${datos.inteligenciaComercial?.propuesta_valor_especifica || 'No disponible'}
+- Cargo del decisor: ${datos.decisorCargo || 'No registrado'}
+- Nombre del decisor: ${datos.decisorNombre || 'No registrado'}
+${datos.contextoVendedor ? `- Contexto del vendedor: ${datos.contextoVendedor}` : ''}
 
 ${estadoRelacion}
 
-${datos.contextoVendedor ? `CONTEXTO DEL VENDEDOR:\n${datos.contextoVendedor}` : ''}
+EJEMPLO REAL DE CORREO QUE OBTUVO RESPUESTA (replica este tono exacto):
+"${saludo} ¿Cómo estás? Mi nombre es José Antonio, soy KAM en One Label, imprenta industrial especialista en etiquetas autoadhesivas. Me gustaría presentarnos como posible socio para sus etiquetas. ¿Han tenido alguna dificultad con su proveedor actual — tiempos de entrega, adhesión, o cambios de última hora? ¿Te parece si agendamos 15 minutos la próxima semana?"
 
-RESTRICCIONES:
-- Usa SOLO los datos de esta ficha. No agregues datos operacionales de tu conocimiento general.
-- No menciones conversaciones previas que no estén en el historial.
-- No inventes casos de clientes ni estadísticas de One Label.
-- La inteligencia comercial es para que TÚ entiendas al cliente — no la cites textualmente en el mensaje.
-- El prospecto no debe sentir que lo investigaste. Debe sentir que le hiciste una pregunta inteligente.
-- Estado 1 sin historial: objetivo único es obtener respuesta. No calificar, no proponer todavía.
-
-EJEMPLO REAL DE CORREO QUE FUNCIONÓ (imita este tono y estructura, no el contenido):
-
-"Buen día Felipe, ¿cómo estás? Mi nombre es José Antonio Castro, soy KAM en One Label,
-una imprenta industrial especialista en etiquetas autoadhesivas.
-Me gustaría presentarnos como posible socio estratégico para sus etiquetas.
-¿Han tenido alguna dificultad con su proveedor actual — tiempos de entrega,
-adhesión, o cambios de última hora? ¿Te parece si agendamos 15 minutos la próxima semana?"
-
-LO QUE HACE BIEN ESTE CORREO:
-- Saluda con nombre y pregunta cómo está — es una persona real hablando
+POR QUÉ FUNCIONA ESE CORREO:
+- Saluda con nombre y pregunta cómo está
 - Se presenta brevemente sin presumir
-- Hace UNA pregunta amplia y abierta sobre posibles problemas — no afirma que tiene problemas
-- La pregunta es fácil de responder con sí o no, o con una frase corta
-- No menciona regulaciones, normativas ni datos específicos de la empresa
-- CTA simple: 15 minutos, sin presión
+- Hace UNA pregunta amplia sobre posibles problemas — no afirma que el cliente tiene problemas
+- El cliente decide si quiere responder o no — baja fricción total
+- Sin regulaciones, sin normativas, sin datos específicos del cliente
 
-INSTRUCCIÓN CLAVE: Si no tienes el nombre real del decisor, usa solo el cargo al final
-del correo como firma contextual, nunca como apertura.
-Abre SIEMPRE con "Buen día [nombre]," o "Hola [nombre]," —
-si no hay nombre, usa "Buen día," sin más.
-
-CANALES:
-- whatsapp: máximo 4 líneas, tono humano y directo, termina con una pregunta corta
-- correo: asunto concreto + cuerpo máximo 5 líneas, sin párrafo de presentación genérico, abre con observación del sector o pregunta relevante al cargo
-- linkedin: máximo 3 líneas, profesional y cercano, enfocado en el cargo
+REGLAS:
+1. Abre SIEMPRE con "${saludo} ¿Cómo estás?" — nunca con el cargo ni con un problema
+2. Haz UNA sola pregunta abierta sobre su situación actual con proveedores o procesos
+3. NUNCA afirmes que el cliente tiene un problema — pregunta si lo tiene
+4. NUNCA menciones regulaciones, normativas, fiscalizaciones ni datos de tu entrenamiento
+5. NUNCA uses el rubro para asumir problemas — úsalo solo para contextualizar la pregunta
+6. CTA simple: 15 minutos, sin presión
+7. Firma: "Saludos, José Antonio — One Label"
 
 Responde ÚNICAMENTE con este JSON en una sola línea sin markdown:
 {"whatsapp":"...","correo":{"asunto":"...","cuerpo":"..."},"linkedin":"..."}`
