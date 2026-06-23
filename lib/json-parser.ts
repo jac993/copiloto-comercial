@@ -38,13 +38,16 @@ export function extraerJsonSeguro<T>(texto: string): T | null {
 
     // Intento 4: limpiar el bloque extraído y reintentar
     try {
-      const limpio = jsonMatch[0]
+      let limpio = jsonMatch[0]
         .replace(/[\x00-\x1F]/g, " ")           // todos los control chars → espacio
         .replace(/,(\s*[}\]])/g, "$1")           // comas finales antes de } o ]
         .replace(/([{,]\s*)(\w+)(\s*):/g, '$1"$2"$3:'); // claves sin comillas → con comillas
+      limpio = limpio.replace(/:\s*"([^"]*)"/g, (_, v) =>
+        ': "' + v.replace(/\n/g, ' ').replace(/\r/g, '') + '"');
       return JSON.parse(limpio) as T;
     } catch {}
   }
 
+  console.error('[JSON_PARSE_FAIL] Raw Claude output:', texto.substring(0, 500));
   return null;
 }
