@@ -265,10 +265,15 @@ ${casosRelevantes.length > 0
 
     const textoRaw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
 
+    // DEBUG TEMPORAL — eliminar después de diagnosticar
+    if (!textoRaw || textoRaw.length < 10) {
+      return NextResponse.json({ error: "Claude no devolvió contenido", raw: textoRaw }, { status: 500 });
+    }
+
     const jsonMatch = textoRaw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("[preparacion] respuesta sin JSON:", textoRaw.slice(0, 300));
-      return NextResponse.json({ error: "La IA no devolvió un JSON válido" }, { status: 500 });
+      return NextResponse.json({ error: "La IA no devolvió un JSON válido", raw: textoRaw.substring(0, 500) }, { status: 500 });
     }
 
     let borrador: BorradorCanalResult;
@@ -309,7 +314,7 @@ ${casosRelevantes.length > 0
       } catch (e) {
         console.error("[preparacion] JSON parse error borradores:", e, "\nRaw:", textoRaw.slice(0, 400));
         return NextResponse.json(
-          { error: "Error al parsear respuesta de IA. Intenta de nuevo." },
+          { error: "Parse failed", raw: textoRaw.substring(0, 500) },
           { status: 500 }
         );
       }
