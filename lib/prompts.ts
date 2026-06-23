@@ -1047,7 +1047,18 @@ POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
 REGLAS:
 1. Abre correo y LinkedIn con "Hola [nombre]," — nunca con el cargo
 2. Segunda línea: "Estuve revisando la operación de [empresa] y me surgió una pregunta"
-3. Haz UNA pregunta abierta sobre su operación actual — relacionada al rubro, no a regulaciones
+3. La pregunta de apertura debe apuntar a un PROBLEMA CONCRETO con consecuencia operacional,
+   no a un proceso genérico. Sigue esta estructura:
+   "¿han tenido [problema específico del rubro]? ¿Es algo que [consecuencia operacional]
+   o lo tienen bien controlado?"
+
+   Ejemplos correctos por rubro:
+   - Química + Jefe Calidad → "¿han tenido problemas con quiebres de stock de etiquetas GHS en despacho? ¿Es algo que les genera paradas o lo tienen resuelto?"
+   - Higiene/consumo masivo → "¿han tenido etiquetas que se despegan o pierden legibilidad en línea de producción? ¿Es algo recurrente o lo tienen controlado?"
+   - Farmacéutico → "¿han tenido rechazos por etiquetas con datos incorrectos o ilegibles en lotes? ¿Es algo que les genera reprocesos?"
+   - Alimentos → "¿han tenido problemas con adhesión de etiquetas en cámara de frío o con humedad? ¿Les ha generado devoluciones?"
+
+   NUNCA preguntes por procesos ("¿cómo manejan X?") — pregunta si existe el dolor ("¿han tenido X?").
 4. NUNCA afirmes que el cliente tiene un problema
 5. NUNCA menciones regulaciones, fiscalizaciones, normativas ni datos de tu entrenamiento
 6. Correo: máximo 4 líneas de cuerpo, firma "Saludos, José Antonio — One Label"
