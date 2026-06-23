@@ -10,8 +10,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector, getFeedbackEjemplos } from "@/lib/queries";
-import { buildPromptBorradorCanal, SYSTEM_PROMPT_VALE, SYSTEM_PROMPT_BORRADORES_TEXTO } from "@/lib/prompts";
+import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector } from "@/lib/queries";
+import { buildPromptBorradorCanal, buildPromptBorradores, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 
 export const maxDuration = 60;
@@ -140,10 +140,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Cargar contexto completo desde Supabase en paralelo
-    const [empresa, historialTexto, feedbackEjemplos] = await Promise.all([
+    const [empresa, historialTexto] = await Promise.all([
       getEmpresaCompleta(empresaId),
       getHistorialResumido(empresaId),
-      getFeedbackEjemplos(canal),
     ]);
 
     // Casos reales relevantes por sector — se cargan después de tener la empresa
@@ -162,35 +161,6 @@ export async function POST(req: NextRequest) {
     const decisorFicha = ficha?.decisores?.find(
       (d) => d.cargo.toLowerCase() === decisorCargo.toLowerCase()
     );
-
-    // ── Instrucción de output por canal de texto ──────────────
-    const INSTRUCCION_OUTPUT: Record<"whatsapp" | "correo" | "linkedin", string> = {
-      whatsapp: `CANAL: WhatsApp
-- Máximo 4 líneas (≈80 palabras). Tono directo y cercano.
-- Sin asteriscos ni emojis. Texto plano únicamente.
-- NO empezar con "Hola soy X de empresa Y".
-- Terminar con UNA pregunta de situación o problema (SPIN), nunca con despedida formal.
-
-Genera exactamente este JSON sin texto adicional:
-{"texto": "el mensaje completo"}`,
-
-      correo: `CANAL: Correo electrónico
-- "asunto": máximo 8 palabras, sin signos de exclamación, que nombre el dolor del decisor.
-- "cuerpo": exactamente 3 párrafos. P1: hook concreto sobre su negocio (no sobre One Label). P2: problema probable según su cargo/industria + cómo se resuelve (sin inventar casos). P3: un solo CTA (15 min de llamada o respuesta a una pregunta). Máximo 120 palabras en el cuerpo.
-- Si hay nombre del decisor, usar "Hola [Nombre],". Si no, omitir saludo personalizado.
-
-Genera exactamente este JSON sin texto adicional:
-{"asunto": "el asunto", "cuerpo": "el cuerpo completo del correo"}`,
-
-      linkedin: `CANAL: LinkedIn
-- Máximo 3 líneas (≈60 palabras). Tono profesional. CERO lenguaje de ventas.
-- Prohibido: "ventas", "propuesta", "cotización", "proveedor", "oferta", "producto".
-- Abrir con algo que demuestre que se investigó SU empresa específicamente.
-- Terminar con una pregunta de diagnóstico que invite a responder.
-
-Genera exactamente este JSON sin texto adicional:
-{"texto": "el mensaje completo"}`,
-    };
 
     // ── Construir contextos ────────────────────────────────────
 
@@ -255,63 +225,30 @@ ${casosRelevantes.length > 0
   : "Sin casos documentados aún — no inventar referencias."}
 `.trim();
 
-    // Texto (whatsapp/correo/linkedin): prompt anti-alucinación estricto
-    const ejemplosFeedbackTexto = feedbackEjemplos.length > 0
-      ? `EJEMPLOS DE MENSAJES APROBADOS POR EL VENDEDOR (aprende el tono y estilo, no copies):\n${
-          feedbackEjemplos.map((fb, i) => {
-            const texto = fb.version_vendedor?.trim() || fb.borrador_ia;
-            return `Ejemplo ${i + 1}:\n${texto}`;
-          }).join("\n---\n")
-        }\n`
-      : "";
-
-    const casosTexto = casosRelevantes.length > 0
-      ? `CASOS REALES DE ONE LABEL (referencia de sector — no inventar otros):\n${
-          casosRelevantes.map((c) =>
-            `- Sector: ${c.sector} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Resultado: ${c.resultado}`
-          ).join("\n")
-        }\n`
-      : "";
-
-    const instruccionTipoTexto = tipo !== "apertura"
-      ? `INSTRUCCIÓN ADICIONAL PARA ESTE TIPO:\n${INSTRUCCION_TIPO[tipo]}\n`
-      : "";
-
-    const canalKey = canal as "whatsapp" | "correo" | "linkedin";
-    const contextoTexto = `
-TIPO DE CONTACTO: ${tipo.toUpperCase()}
-${instruccionTipoTexto}
-CONTEXTO DE LA EMPRESA:
-- Nombre: ${empresa.nombre}
-- Rubro: ${empresa.industria ?? "no especificado"}
-- Por qué necesitan etiquetas: ${ficha?.por_que_necesitan_etiquetas ?? "no especificado"}
-- Ángulo de entrada (estrategia): ${ficha?.angulo_entrada ?? "sin definir"}
-
-DECISOR PRINCIPAL:
-- Nombre: ${decisorNombre ?? "No identificado aún"}
-- Cargo: ${decisorCargo}
-- Área: ${decisorArea ?? "no especificada"}
-${decisorFicha?.dolor_especifico ? `- Dolor específico: ${decisorFicha.dolor_especifico}` : ""}
-
-HISTORIAL DE INTERACCIONES:
-${historialTexto || "Sin interacciones previas registradas."}
-
-CONTEXTO ADICIONAL DEL VENDEDOR:
-${empresa.notas_vendedor?.trim() || "Sin notas adicionales."}
-
-${casosTexto}${ejemplosFeedbackTexto}${INSTRUCCION_OUTPUT[canalKey]}
-`.trim();
+    // Texto (whatsapp/correo/linkedin): buildPromptBorradores con SYSTEM_PROMPT_VALE
+    const promptBorradores = canal !== "llamada"
+      ? buildPromptBorradores({
+          nombre:          empresa.nombre,
+          rubro:           empresa.industria ?? "no especificado",
+          dolorPrincipal:  decisorFicha?.dolor_especifico ?? ficha?.por_que_necesitan_etiquetas ?? "no identificado",
+          anguloEntrada:   ficha?.angulo_entrada ?? "sin definir",
+          decisorNombre:   decisorNombre ?? "No identificado",
+          decisorCargo:    decisorCargo,
+          historialReciente: historialTexto || "",
+          contextoVendedor:  empresa.notas_vendedor?.trim() || "",
+        })
+      : null;
 
     const systemPrompt = canal === "llamada"
       ? `${SYSTEM_PROMPT_VALE}\n\n${buildPromptBorradorCanal("llamada")}`
-      : SYSTEM_PROMPT_BORRADORES_TEXTO;
+      : SYSTEM_PROMPT_VALE;
 
-    const userMessage = canal === "llamada" ? contextoLlamada : contextoTexto;
+    const userMessage = canal === "llamada" ? contextoLlamada : (promptBorradores ?? "");
 
     const client = new Anthropic();
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: canal === "llamada" ? 800 : 400,
+      max_tokens: canal === "llamada" ? 800 : 600,
       system: systemPrompt,
       messages: [
         { role: "user", content: userMessage },
@@ -333,36 +270,47 @@ ${casosTexto}${ejemplosFeedbackTexto}${INSTRUCCION_OUTPUT[canalKey]}
       return NextResponse.json({ error: "La IA no devolvió un JSON válido" }, { status: 500 });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as Record<string, string>;
-
     let borrador: BorradorCanalResult;
-    if (canal === "correo") {
-      if (!parsed.asunto || !parsed.cuerpo) {
-        return NextResponse.json({ error: "Respuesta incompleta: faltan asunto o cuerpo" }, { status: 500 });
-      }
-      borrador = { canal: "correo", asunto: parsed.asunto, cuerpo: parsed.cuerpo };
-    } else if (canal === "llamada") {
+
+    if (canal === "llamada") {
+      // Llamada: JSON plano con las 5 secciones del pitch
+      const parsed = JSON.parse(jsonMatch[0]) as Record<string, string>;
       if (!parsed.apertura || !parsed.gancho || !parsed.si_positivo || !parsed.si_negativo || !parsed.cierre) {
         return NextResponse.json({ error: "Respuesta incompleta: faltan secciones del pitch" }, { status: 500 });
       }
       borrador = {
-        canal: "llamada",
-        apertura:     parsed.apertura,
-        gancho:       parsed.gancho,
-        si_positivo:  parsed.si_positivo,
-        si_negativo:  parsed.si_negativo,
-        cierre:       parsed.cierre,
+        canal:       "llamada",
+        apertura:    parsed.apertura,
+        gancho:      parsed.gancho,
+        si_positivo: parsed.si_positivo,
+        si_negativo: parsed.si_negativo,
+        cierre:      parsed.cierre,
       };
-    } else if (canal === "whatsapp") {
-      if (!parsed.texto) {
-        return NextResponse.json({ error: "Respuesta incompleta: falta texto" }, { status: 500 });
-      }
-      borrador = { canal: "whatsapp", texto: parsed.texto };
     } else {
-      if (!parsed.texto) {
-        return NextResponse.json({ error: "Respuesta incompleta: falta texto" }, { status: 500 });
+      // Texto: JSON con whatsapp / correo / linkedin en un solo llamado
+      type TextResponse = {
+        whatsapp: string;
+        correo: { asunto: string; cuerpo: string };
+        linkedin: string;
+      };
+      const parsed = JSON.parse(jsonMatch[0]) as TextResponse;
+
+      if (canal === "correo") {
+        if (!parsed.correo?.asunto || !parsed.correo?.cuerpo) {
+          return NextResponse.json({ error: "Respuesta incompleta: faltan asunto o cuerpo" }, { status: 500 });
+        }
+        borrador = { canal: "correo", asunto: parsed.correo.asunto, cuerpo: parsed.correo.cuerpo };
+      } else if (canal === "whatsapp") {
+        if (!parsed.whatsapp) {
+          return NextResponse.json({ error: "Respuesta incompleta: falta whatsapp" }, { status: 500 });
+        }
+        borrador = { canal: "whatsapp", texto: parsed.whatsapp };
+      } else {
+        if (!parsed.linkedin) {
+          return NextResponse.json({ error: "Respuesta incompleta: falta linkedin" }, { status: 500 });
+        }
+        borrador = { canal: "linkedin", texto: parsed.linkedin };
       }
-      borrador = { canal: "linkedin", texto: parsed.texto };
     }
 
     return NextResponse.json({ ok: true, borrador });

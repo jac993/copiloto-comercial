@@ -988,32 +988,61 @@ Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
 
 
 // =============================================================
-// SYSTEM_PROMPT_BORRADORES_TEXTO
-// System prompt para borradores de WhatsApp, Correo y LinkedIn.
-// Reemplaza SYSTEM_PROMPT_VALE para estos canales — reglas de
-// anti-alucinación explícitas y obligatorias en primer lugar.
+// buildPromptBorradores
+// Genera el prompt de usuario (no system) para borradores de
+// WhatsApp, Correo y LinkedIn en un solo llamado a Claude.
+// El system prompt es SYSTEM_PROMPT_VALE — así Claude aplica
+// las metodologías de venta correctas según el estado real de
+// la relación detectado en el historial.
 // =============================================================
-export const SYSTEM_PROMPT_BORRADORES_TEXTO = `
-Eres un vendedor B2B consultivo experto en apertura de cuentas industriales en Chile.
-Tu tarea es redactar borradores de contacto para canales de venta.
+export function buildPromptBorradores(datos: {
+  nombre: string;
+  rubro: string;
+  dolorPrincipal: string;
+  anguloEntrada: string;
+  decisorNombre: string;
+  decisorCargo: string;
+  historialReciente: string;
+  contextoVendedor: string;
+}): string {
+  return `
+Genera tres borradores de primer contacto para esta empresa usando las metodologías que conoces.
 
-REGLAS ABSOLUTAS — NUNCA las violes:
-1. NUNCA menciones reuniones, llamadas, visitas o conversaciones anteriores a menos que
-   aparezcan textualmente en el historial de interacciones que se te entrega.
-2. NUNCA menciones nombres de productos, proyectos, envases, máquinas o procesos
-   específicos del cliente a menos que estén escritos en la ficha de la empresa.
-3. NUNCA inventes estadísticas, porcentajes ni resultados de otros clientes.
-4. NUNCA uses frases como "retomando nuestra conversación de X fecha" si no hay
-   registro de esa conversación en el historial de interacciones.
-5. Si no tienes información concreta para personalizar, usa preguntas abiertas
-   de diagnóstico (técnica SPIN). Un borrador con pregunta honesta es mejor que
-   uno con datos inventados.
-6. Usa SOLO la información que se te entrega en los campos a continuación.
+DATOS DE LA EMPRESA (usa SOLO estos — no agregues datos de tu conocimiento general):
+- Nombre: ${datos.nombre}
+- Rubro: ${datos.rubro}
+- Dolor principal identificado en la ficha: ${datos.dolorPrincipal}
+- Estrategia de entrada definida: ${datos.anguloEntrada}
 
-INSTRUCCIÓN CRÍTICA: Si la sección "HISTORIAL DE INTERACCIONES" dice "Sin interacciones
-previas registradas", es porque NUNCA ha habido contacto previo con esta empresa.
-En ese caso, NO inventes conversaciones anteriores. Redacta como primer contacto en frío.
+DECISOR AL QUE VA DIRIGIDO:
+- Nombre: ${datos.decisorNombre}
+- Cargo: ${datos.decisorCargo}
+
+HISTORIAL DE INTERACCIONES:
+${datos.historialReciente || "Sin interacciones previas registradas. Este es un primer contacto en frío — Estado 1 según tu clasificación."}
+
+CONTEXTO ADICIONAL DEL VENDEDOR:
+${datos.contextoVendedor || "Sin contexto adicional."}
+
+REGLAS DE ESTE BORRADOR:
+- El historial determina el Estado de la relación. Aplica la técnica que corresponde a ese estado.
+- Si no hay historial, es Estado 1: Predictable Revenue. Objetivo único: obtener respuesta. No calificar, no proponer.
+- NUNCA menciones datos operacionales específicos de la empresa (volúmenes, SKUs, plantas, fiscalizaciones) aunque los conozcas. Usa solo lo que está en los campos de arriba.
+- NUNCA menciones conversaciones previas que no estén en el historial.
+- La inteligencia de la ficha es para que TÚ entiendas al cliente, no para citarla en el mensaje. El prospecto no debe sentir que lo investigaste.
+- Usa el dolor identificado para formular UNA pregunta SPIN relevante, no para afirmar datos sobre su operación.
+
+FORMATO DE RESPUESTA — JSON sin texto adicional:
+{
+  "whatsapp": "máximo 4 líneas, tono directo y humano, termina con una pregunta corta",
+  "correo": {
+    "asunto": "asunto concreto, sin clickbait",
+    "cuerpo": "máximo 80 palabras: observación del sector del decisor + 1 pregunta de problema o implicación + CTA de bajo compromiso (15 minutos)"
+  },
+  "linkedin": "máximo 3 líneas, tono profesional cercano, enfocado en el cargo, sin mencionar ventas"
+}
 `.trim();
+}
 
 // =============================================================
 // ─── buildPromptBorradorCanal ─────────────────────────────────
