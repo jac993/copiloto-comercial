@@ -1003,10 +1003,6 @@ export function buildPromptBorradores(datos: {
   historialReciente: string
   contextoVendedor: string
 }): string {
-  const saludo = datos.decisorNombre && datos.decisorNombre !== 'No registrado'
-    ? `Hola ${datos.decisorNombre},`
-    : 'Buen día,'
-
   const estadoRelacion = datos.historialReciente && datos.historialReciente !== 'Sin interacciones previas registradas.'
     ? `HISTORIAL REAL:\n${datos.historialReciente}\nEste NO es primer contacto — adecúa el tono al historial.`
     : `Sin historial. Primer contacto en frío.`
