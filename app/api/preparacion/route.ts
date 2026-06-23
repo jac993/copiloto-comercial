@@ -253,14 +253,19 @@ ${casosRelevantes.length > 0
     // Texto (whatsapp/correo/linkedin): buildPromptBorradores con SYSTEM_PROMPT_VALE
     const promptBorradores = canal !== "llamada"
       ? buildPromptBorradores({
-          nombre:          empresa.nombre,
-          rubro:           empresa.industria ?? "no especificado",
-          dolorPrincipal:  decisorFicha?.dolor_especifico ?? ficha?.por_que_necesitan_etiquetas ?? "no identificado",
-          anguloEntrada:   ficha?.angulo_entrada ?? "sin definir",
-          decisorNombre:   decisorNombre ?? "No identificado",
-          decisorCargo:    decisorCargo,
-          historialReciente: historialTexto || "",
-          contextoVendedor:  empresa.notas_vendedor?.trim() || "",
+          nombre:               empresa.razon_social || empresa.nombre,
+          rubro:                empresa.industria ?? "no especificado",
+          dolorPrincipal:       decisorFicha?.dolor_especifico ?? ficha?.por_que_necesitan_etiquetas ?? "no identificado",
+          anguloEntrada:        ficha?.angulo_entrada ?? "sin definir",
+          resumenEjecutivo:     ficha?.resumen_ejecutivo,
+          preguntasSpin:        ficha?.preguntas_spin,
+          objecionesProbables:  ficha?.objeciones_probables,
+          inteligenciaComercial: ficha?.inteligencia_comercial ?? undefined,
+          decisores:            ficha?.decisores,
+          decisorCargo:         decisorCargo,
+          decisorNombre:        decisorNombre ?? "No identificado",
+          historialReciente:    historialTexto || "",
+          contextoVendedor:     empresa.notas_vendedor?.trim() || "",
         })
       : null;
 

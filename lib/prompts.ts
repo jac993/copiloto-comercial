@@ -1,4 +1,6 @@
-﻿// =============================================================
+﻿import type { DecisorIA, ObjecionProbable, InteligenciaComercial } from "@/lib/types";
+
+// =============================================================
 // Prompts centralizados — TODA llamada a Claude pasa por aquí.
 // Editar aquí para iterar la calidad de las fichas sin tocar
 // el código de la API route.
@@ -1000,43 +1002,72 @@ export function buildPromptBorradores(datos: {
   rubro: string
   dolorPrincipal: string
   anguloEntrada: string
-  decisorNombre: string
+  resumenEjecutivo?: string
+  preguntasSpin?: Array<{ pregunta?: string } | string>
+  objecionesProbables?: ObjecionProbable[]
+  inteligenciaComercial?: Partial<InteligenciaComercial>
+  decisores?: DecisorIA[]
   decisorCargo: string
+  decisorNombre: string
   historialReciente: string
   contextoVendedor: string
 }): string {
-  const estadoRelacion = datos.historialReciente
-    ? `HISTORIAL DE INTERACCIONES (últimas interacciones reales):\n${datos.historialReciente}`
+  const decisorPrincipal = datos.decisores?.[0]
+  const dolorDecisor = decisorPrincipal?.dolor_especifico || datos.dolorPrincipal
+  const tecnica = decisorPrincipal?.tecnica_recomendada || 'SPIN'
+
+  const spinTexto = datos.preguntasSpin
+    ?.map(p => typeof p === 'string' ? p : p.pregunta)
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('\n- ') || ''
+
+  const estadoRelacion = datos.historialReciente && datos.historialReciente !== 'Sin interacciones previas registradas.'
+    ? `HISTORIAL REAL DE INTERACCIONES:\n${datos.historialReciente}`
     : `HISTORIAL: Sin interacciones previas. Estado 1 — primer contacto en frío. Aplica Predictable Revenue.`
 
-  return `Redacta tres borradores de contacto para esta empresa aplicando las metodologías que conoces.
+  return `Redacta tres borradores de primer contacto para esta empresa usando las metodologías que conoces.
 
 EMPRESA:
 - Nombre: ${datos.nombre}
 - Rubro: ${datos.rubro}
-- Dolor identificado en la ficha: ${datos.dolorPrincipal}
-- Estrategia de entrada: ${datos.anguloEntrada}
+- Resumen ejecutivo: ${datos.resumenEjecutivo || 'No disponible'}
 
-DECISOR:
+DECISOR AL QUE VA DIRIGIDO:
+- Cargo: ${datos.decisorCargo || decisorPrincipal?.cargo || 'No registrado'}
 - Nombre: ${datos.decisorNombre || 'No registrado'}
-- Cargo: ${datos.decisorCargo || 'No registrado'}
+- Dolor específico de este cargo: ${dolorDecisor}
+- Técnica recomendada para este cargo: ${tecnica}
+
+ÁNGULO DE ENTRADA (estrategia definida):
+${datos.anguloEntrada}
+
+PREGUNTAS SPIN YA FORMULADAS PARA ESTA EMPRESA (úsalas como referencia):
+- ${spinTexto}
+
+INTELIGENCIA COMERCIAL:
+- Dolores probables: ${datos.inteligenciaComercial?.dolores_probables || 'No disponible'}
+- Prioridades actuales: ${datos.inteligenciaComercial?.prioridades_actuales || 'No disponible'}
+- Propuesta de valor específica: ${datos.inteligenciaComercial?.propuesta_valor_especifica || 'No disponible'}
 
 ${estadoRelacion}
 
 ${datos.contextoVendedor ? `CONTEXTO DEL VENDEDOR:\n${datos.contextoVendedor}` : ''}
 
 RESTRICCIONES:
-- Usa SOLO los datos de esta ficha. No agregues datos operacionales de tu conocimiento general sobre la empresa.
+- Usa SOLO los datos de esta ficha. No agregues datos operacionales de tu conocimiento general.
 - No menciones conversaciones previas que no estén en el historial.
-- No inventes casos de clientes ni estadísticas.
-- Si no tienes casos reales, usa preguntas SPIN en vez de afirmaciones.
+- No inventes casos de clientes ni estadísticas de One Label.
+- La inteligencia comercial es para que TÚ entiendas al cliente — no la cites textualmente en el mensaje.
+- El prospecto no debe sentir que lo investigaste. Debe sentir que le hiciste una pregunta inteligente.
+- Estado 1 sin historial: objetivo único es obtener respuesta. No calificar, no proponer todavía.
 
-CANALES Y FORMATO:
-- whatsapp: máximo 4 líneas, tono humano y directo, termina con una pregunta
-- correo: asunto concreto + cuerpo máximo 5 líneas, abre con observación del sector o pregunta, sin párrafo de presentación genérico
-- linkedin: máximo 3 líneas, profesional y cercano
+CANALES:
+- whatsapp: máximo 4 líneas, tono humano y directo, termina con una pregunta corta
+- correo: asunto concreto + cuerpo máximo 5 líneas, sin párrafo de presentación genérico, abre con observación del sector o pregunta relevante al cargo
+- linkedin: máximo 3 líneas, profesional y cercano, enfocado en el cargo
 
-Responde ÚNICAMENTE con este JSON en una sola línea, sin markdown:
+Responde ÚNICAMENTE con este JSON en una sola línea sin markdown:
 {"whatsapp":"...","correo":{"asunto":"...","cuerpo":"..."},"linkedin":"..."}`
 }
 
