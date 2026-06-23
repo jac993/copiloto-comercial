@@ -225,6 +225,20 @@ ${casosRelevantes.length > 0
   : "Sin casos documentados aún — no inventar referencias."}
 `.trim();
 
+    // DEBUG TEMPORAL — ver qué datos llegan a buildPromptBorradores
+    if (canal !== "llamada") {
+      console.log('=== DATOS BORRADORES ===', JSON.stringify({
+        nombre: empresa.nombre,
+        rubro: empresa.industria,
+        dolorPrincipal: decisorFicha?.dolor_especifico ?? ficha?.por_que_necesitan_etiquetas,
+        anguloEntrada: ficha?.angulo_entrada,
+        decisorNombre: decisorNombre,
+        decisorCargo: decisorCargo,
+        historialTextoLen: historialTexto?.length,
+        contextoVendedor: empresa.notas_vendedor,
+      }, null, 2));
+    }
+
     // Texto (whatsapp/correo/linkedin): buildPromptBorradores con SYSTEM_PROMPT_VALE
     const promptBorradores = canal !== "llamada"
       ? buildPromptBorradores({
