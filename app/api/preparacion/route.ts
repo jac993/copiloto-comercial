@@ -265,11 +265,6 @@ ${casosRelevantes.length > 0
 
     const textoRaw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
 
-    // LOG TEMPORAL — eliminar después de diagnosticar el parse error
-    console.log("=== RAW CONTENT BORRADORES ===");
-    console.log(textoRaw);
-    console.log("=== END RAW CONTENT ===");
-
     const jsonMatch = textoRaw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("[preparacion] respuesta sin JSON:", textoRaw.slice(0, 300));
@@ -294,31 +289,23 @@ ${casosRelevantes.length > 0
       };
     } else {
       // Texto: JSON con whatsapp / correo / linkedin en un solo llamado.
-      // Escapar saltos de línea dentro de strings antes de parsear —
-      // Claude a veces incluye \n literales en el cuerpo del correo.
+      // Normalizar caracteres de control antes de parsear — Claude a veces
+      // incluye saltos de línea reales dentro de los strings del JSON.
       type TextResponse = {
         whatsapp: string;
         correo: { asunto: string; cuerpo: string };
         linkedin: string;
       };
 
-      let jsonStr = textoRaw
-        .replace(/```json\n?/g, "")
-        .replace(/```\n?/g, "")
-        .trim();
-
-      // Reemplaza saltos de línea literales dentro de cada valor string
-      jsonStr = jsonStr.replace(/:\s*"([\s\S]*?)"/g, (_match, p1: string) => {
-        const cleaned = p1
-          .replace(/\n/g, "\\n")
-          .replace(/\r/g, "")
-          .replace(/\t/g, " ");
-        return `: "${cleaned}"`;
-      });
+      // Escapar saltos de línea reales dentro de los strings del JSON
+      const normalized = jsonMatch[0]
+        .split('\n').join('\\n')
+        .split('\r').join('')
+        .split('\t').join(' ');
 
       let parsed: TextResponse;
       try {
-        parsed = JSON.parse(jsonStr) as TextResponse;
+        parsed = JSON.parse(normalized) as TextResponse;
       } catch (e) {
         console.error("[preparacion] JSON parse error borradores:", e, "\nRaw:", textoRaw.slice(0, 400));
         return NextResponse.json(
