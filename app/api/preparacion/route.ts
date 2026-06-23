@@ -287,13 +287,39 @@ ${casosRelevantes.length > 0
         cierre:      parsed.cierre,
       };
     } else {
-      // Texto: JSON con whatsapp / correo / linkedin en un solo llamado
+      // Texto: JSON con whatsapp / correo / linkedin en un solo llamado.
+      // Escapar saltos de línea dentro de strings antes de parsear —
+      // Claude a veces incluye \n literales en el cuerpo del correo.
       type TextResponse = {
         whatsapp: string;
         correo: { asunto: string; cuerpo: string };
         linkedin: string;
       };
-      const parsed = JSON.parse(jsonMatch[0]) as TextResponse;
+
+      let jsonStr = textoRaw
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
+
+      // Reemplaza saltos de línea literales dentro de cada valor string
+      jsonStr = jsonStr.replace(/:\s*"([\s\S]*?)"/g, (_match, p1: string) => {
+        const cleaned = p1
+          .replace(/\n/g, "\\n")
+          .replace(/\r/g, "")
+          .replace(/\t/g, " ");
+        return `: "${cleaned}"`;
+      });
+
+      let parsed: TextResponse;
+      try {
+        parsed = JSON.parse(jsonStr) as TextResponse;
+      } catch (e) {
+        console.error("[preparacion] JSON parse error borradores:", e, "\nRaw:", textoRaw.slice(0, 400));
+        return NextResponse.json(
+          { error: "Error al parsear respuesta de IA. Intenta de nuevo." },
+          { status: 500 }
+        );
+      }
 
       if (canal === "correo") {
         if (!parsed.correo?.asunto || !parsed.correo?.cuerpo) {
