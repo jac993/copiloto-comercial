@@ -373,6 +373,15 @@ export interface Interaccion {
 export type InteraccionInsert = Omit<Interaccion, "id" | "creado_en" | "actualizado_en">;
 export type InteraccionUpdate = Partial<InteraccionInsert>;
 
+// Tarea pendiente: interacción con proximo_paso_fecha <= hoy — usada por pantalla Hoy
+export interface TareaPendiente {
+  id: string;
+  empresa_id: string;
+  empresa_nombre: string;
+  proximo_paso: string;
+  proximo_paso_fecha: string; // YYYY-MM-DD
+}
+
 // Interacción cuyo plazo de respuesta de 48h ya venció — usada por la API /vencidas
 export interface InteraccionVencida {
   id: string;

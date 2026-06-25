@@ -26,7 +26,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import type { Empresa, PrioridadCacheItem, ResultadoMision } from "@/lib/types";
+import type { Empresa, PrioridadCacheItem, ResultadoMision, TareaPendiente } from "@/lib/types";
 
 // ── Tipos de respuesta de las APIs ──────────────────────────
 
@@ -40,6 +40,7 @@ interface MetricasHoy {
   prioridades_cache: PrioridadCacheItem[] | null;
   prioridades_generadas_en: string | null;
   resumen_dia_cache: string | null;
+  tareas_pendientes: TareaPendiente[];
 }
 
 // Feedback de coaching que devuelve la API tras guardar misiones
@@ -100,6 +101,8 @@ export function HoyClient() {
   const [cargandoPrioridades, setCargandoPrioridades] = useState(false);
   const [errorPrioridades, setErrorPrioridades] = useState<string | null>(null);
   const [cacheTimestamp, setCacheTimestamp] = useState<string | null>(null);
+  const [tareasHechas, setTareasHechas] = useState<Set<string>>(new Set());
+  const [marcandoId, setMarcandoId] = useState<string | null>(null);
   const [dialogReporte, setDialogReporte] = useState(false);
   const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
   const [guardandoReporte, setGuardandoReporte] = useState(false);
@@ -156,6 +159,20 @@ export function HoyClient() {
     return () => window.removeEventListener("focus", onFocus);
   }, [cargarMetricas]);
 
+  async function marcarHecha(id: string) {
+    setMarcandoId(id);
+    try {
+      await fetch(`/api/interacciones/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resuelta: true }),
+      });
+      setTareasHechas((prev) => new Set(Array.from(prev).concat(id)));
+    } finally {
+      setMarcandoId(null);
+    }
+  }
+
   const actualizarPrioridades = async () => {
     setCargandoPrioridades(true);
     setErrorPrioridades(null);
@@ -208,6 +225,8 @@ export function HoyClient() {
       setGuardandoReporte(false);
     }
   };
+
+  const tareas = (metricas?.tareas_pendientes ?? []).filter((t) => !tareasHechas.has(t.id));
 
   const contactos = metricas?.contactos_hoy ?? 0;
   const meta = metricas?.meta ?? 5;
@@ -318,6 +337,29 @@ export function HoyClient() {
             <div className="space-y-3">
               {metricas!.reactivaciones.map((empresa) => (
                 <ReactivacionCard key={empresa.id} empresa={empresa} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Tareas pendientes */}
+        {tareas.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">📋</span>
+              <h2 className="font-semibold text-base">Tareas pendientes</h2>
+              <span className="text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
+                {tareas.length}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {tareas.map((t) => (
+                <TareaCard
+                  key={t.id}
+                  tarea={t}
+                  marcando={marcandoId === t.id}
+                  onMarcar={() => marcarHecha(t.id)}
+                />
               ))}
             </div>
           </section>
@@ -753,6 +795,60 @@ function ResultadoBtn({
       {icon}
       {label}
     </button>
+  );
+}
+
+// ── Tarjeta de tarea pendiente ───────────────────────────────
+
+function TareaCard({
+  tarea,
+  marcando,
+  onMarcar,
+}: {
+  tarea: TareaPendiente;
+  marcando: boolean;
+  onMarcar: () => void;
+}) {
+  const hoy = new Date().toISOString().split("T")[0];
+  const vencida = tarea.proximo_paso_fecha < hoy;
+  const esHoy = tarea.proximo_paso_fecha === hoy;
+
+  const fechaCorta = new Date(tarea.proximo_paso_fecha + "T12:00:00").toLocaleDateString("es-CL", {
+    day: "numeric",
+    month: "short",
+  });
+
+  return (
+    <div className="rounded-2xl border border-border bg-card px-4 py-3 flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <Link
+            href={`/cuentas/${tarea.empresa_id}`}
+            className="text-sm font-semibold hover:text-primary transition-colors truncate"
+          >
+            {tarea.empresa_nombre}
+          </Link>
+          {vencida && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400 shrink-0">
+              Vencida · {fechaCorta}
+            </span>
+          )}
+          {esHoy && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 shrink-0">
+              Hoy
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground leading-snug">{tarea.proximo_paso}</p>
+      </div>
+      <button
+        onClick={onMarcar}
+        disabled={marcando}
+        className="shrink-0 h-8 px-3 rounded-xl border border-green-300 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 flex items-center gap-1"
+      >
+        {marcando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓ Hecho"}
+      </button>
+    </div>
   );
 }
 

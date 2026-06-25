@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import type { Empresa, PrioridadCacheItem } from "@/lib/types";
+import type { Empresa, PrioridadCacheItem, TareaPendiente } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +108,24 @@ export async function GET() {
     .not("fecha_reactivacion", "is", null)
     .order("fecha_reactivacion", { ascending: true });
 
+  // Tareas pendientes: interacciones con proximo_paso_fecha <= hoy y no resueltas
+  const { data: tareasRaw } = await supabase
+    .from("interacciones")
+    .select("id, empresa_id, proximo_paso, proximo_paso_fecha, empresas(nombre)")
+    .not("proximo_paso", "is", null)
+    .lte("proximo_paso_fecha", hoy)
+    .eq("resuelta", false)
+    .order("proximo_paso_fecha", { ascending: true })
+    .limit(20);
+
+  const tareasPendientes: TareaPendiente[] = (tareasRaw ?? []).map((r) => ({
+    id: r.id as string,
+    empresa_id: r.empresa_id as string,
+    empresa_nombre: (r.empresas as unknown as { nombre: string } | null)?.nombre ?? "Empresa",
+    proximo_paso: r.proximo_paso as string,
+    proximo_paso_fecha: r.proximo_paso_fecha as string,
+  }));
+
   // Leer caché de prioridades del día (generado en la última llamada a /api/priorizar)
   const { data: metricaHoy } = await supabase
     .from("metricas_diarias")
@@ -129,5 +147,6 @@ export async function GET() {
     prioridades_cache: prioridadesCache,
     prioridades_generadas_en: metricaHoy?.prioridades_generadas_en ?? null,
     resumen_dia_cache: metricaHoy?.notas_dia ?? null,
+    tareas_pendientes: tareasPendientes,
   });
 }
