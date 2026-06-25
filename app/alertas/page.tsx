@@ -59,7 +59,7 @@ export default function AlertasPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           empresa_id: v.empresa_id,
-          tipo: v.tipo,
+          tipo: "seguimiento",
           contacto_id: v.contacto_id ?? undefined,
           texto: resumen,
           sentimiento,
