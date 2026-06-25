@@ -20,6 +20,7 @@ import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Upload, Loader2, CheckCircle2,
 } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 import type { Contacto, Interaccion, TipoInteraccion } from "@/lib/types";
 
 type Fase = "tipos" | "form" | "transcribiendo" | "ok";
@@ -208,12 +209,25 @@ export function NuevaInteraccionSheet({
     setCargando(true);
     setError(null);
     try {
-      setMensajeCarga("Subiendo audio... ⚡");
+      setMensajeCarga("Subiendo audio a la nube... ⚡");
       setFase("transcribiendo");
 
-      const formData = new FormData();
-      formData.append("file", archivo);
-      const resT = await fetch("/api/transcribir", { method: "POST", body: formData });
+      const supabase = createClient();
+      const pathStorage = `${Date.now()}_${archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("Llamadas")
+        .upload(pathStorage, archivo, { contentType: archivo.type.startsWith("video/") ? archivo.type.replace("video/", "audio/") : archivo.type, upsert: false });
+
+      if (uploadError || !uploadData?.path) {
+        throw new Error(`Error al subir el audio: ${uploadError?.message ?? "sin respuesta de Storage"}`);
+      }
+
+      const resT = await fetch("/api/transcribir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath: uploadData.path }),
+      });
       const dataT = await resT.json();
       if (!resT.ok) throw new Error(dataT.error);
 

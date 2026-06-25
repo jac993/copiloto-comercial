@@ -14,6 +14,7 @@ import {
   insertInteraccion,
 } from "@/lib/queries";
 import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
+import { extraerJsonSeguro } from "@/lib/json-parser";
 import { registrarUso } from "@/lib/registrarUso";
 import type {
   ResultadoAnalisis,
@@ -155,14 +156,12 @@ ${encabezadoEmail}${texto.trim()}
     registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens, empresa_id });
 
     // ── Parsear JSON de Claude ──
-    let resultado: ResultadoAnalisis;
-    try {
-      // Limpiar posible markdown code block si Claude lo agrega
-      const jsonLimpio = textContent.text.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
-      resultado = JSON.parse(jsonLimpio) as ResultadoAnalisis;
-    } catch {
+    const resultadoRaw = extraerJsonSeguro<ResultadoAnalisis>(textContent.text);
+    if (!resultadoRaw) {
+      console.error('[ANALIZAR_PARSE_FAIL] Raw Claude output:', textContent.text.substring(0, 500));
       throw new Error("Error parseando respuesta de IA. Intenta de nuevo.");
     }
+    const resultado = resultadoRaw;
 
     // ── Próximo paso ──
     // Prefiere el campo proximo_paso generado por Claude (más específico y accionable).

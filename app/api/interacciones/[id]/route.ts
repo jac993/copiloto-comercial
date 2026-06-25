@@ -24,7 +24,7 @@ export async function PATCH(
   );
 
   const body = await req.json() as Record<string, unknown>;
-  const { tipo, contacto_id, fecha, texto, sentimiento } = body;
+  const { tipo, contacto_id, fecha, texto, sentimiento, resuelta } = body;
 
   const cambios: Record<string, unknown> = {};
   if (typeof tipo === "string" && TIPOS_VALIDOS.includes(tipo as TipoInteraccion)) {
@@ -44,6 +44,9 @@ export async function PATCH(
     cambios.sentimiento = SENTIMIENTOS_VALIDOS.includes(sentimiento as SentimientoInteraccion)
       ? sentimiento
       : null;
+  }
+  if (typeof resuelta === "boolean") {
+    cambios.resuelta = resuelta;
   }
 
   if (Object.keys(cambios).length === 0) {

@@ -262,20 +262,15 @@ ${casosRelevantes.length > 0
         })
       : null;
 
-    const systemBorradores = `Eres José Antonio, KAM de One Label, imprenta industrial de etiquetas autoadhesivas en Chile.
-Generas borradores de contacto en frío siguiendo ejemplos reales.
-REGLA ABSOLUTA: NUNCA digas "trabajo con empresas de X sector" ni afirmes experiencia previa con clientes similares.
-Si no tienes casos reales documentados, haz preguntas abiertas. Nunca inventes.`;
-
     const systemPrompt = canal === "llamada"
       ? `${SYSTEM_PROMPT_VALE}\n\n${buildPromptBorradorCanal("llamada")}`
-      : systemBorradores;
+      : SYSTEM_PROMPT_VALE;
 
     const userMessage = canal === "llamada" ? contextoLlamada : (promptBorradores ?? "");
 
     const client = new Anthropic();
     const response = await client.messages.create({
-      model: MODEL,
+      model: canal === "llamada" ? MODEL : "claude-sonnet-4-6",
       max_tokens: canal === "llamada" ? 800 : 1200,
       system: systemPrompt,
       messages: [

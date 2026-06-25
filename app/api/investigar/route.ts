@@ -185,9 +185,7 @@ export async function POST(request: Request) {
         const { texto, nombreDetectado } = scrapeResult;
 
         if (!texto || texto.length < 50) {
-          throw new Error(
-            "No se pudo leer el sitio web. Verifica que la URL sea correcta y accesible."
-          );
+          console.warn('[SCRAPE_FALLBACK] Scraping insuficiente, continuando solo con Perplexity:', url);
         }
 
         // ── Una sola llamada a Claude ──────────────────────────

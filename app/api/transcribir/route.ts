@@ -1,8 +1,8 @@
 // =============================================================
 // POST /api/transcribir
-// Recibe archivo de audio, lo sube a Supabase Storage y lo
-// transcribe con AssemblyAI (reemplaza Whisper).
-// AssemblyAI acepta mp4/m4a de WhatsApp sin conversión.
+// Recibe el storagePath de un audio ya subido a Supabase Storage,
+// genera una signed URL y la pasa a AssemblyAI para transcripción.
+// El audio NUNCA pasa por Vercel — el cliente lo sube directo a Storage.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -31,14 +31,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+    const { storagePath } = await req.json() as { storagePath?: string };
 
-    if (!file) {
-      return NextResponse.json({ error: "Archivo de audio requerido" }, { status: 400 });
+    if (!storagePath) {
+      return NextResponse.json({ error: "storagePath requerido" }, { status: 400 });
     }
+    console.log('[TRANSCRIBIR] storagePath recibido:', storagePath)
 
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    // Validar extensión desde el nombre del archivo en el path
+    const ext = storagePath.split(".").pop()?.toLowerCase() ?? "";
     if (!EXTENSIONES_PERMITIDAS.includes(ext)) {
       return NextResponse.json(
         { error: `Formato no soportado: .${ext}. Usa MP3, M4A, MP4, WAV, OGG, FLAC o WEBM.` },
@@ -46,40 +47,50 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    // ── Subir a Supabase Storage ────────────────────────────────
+    // ── Generar signed URL (1 hora) para que AssemblyAI descargue el audio ──
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    const timestamp = Date.now();
-    const nombreSeguro = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const pathStorage = `${timestamp}_${nombreSeguro}`;
-
-    const { data: storageData, error: storageError } = await supabaseAdmin.storage
+    const { data: signedData, error: signedError } = await supabaseAdmin.storage
       .from("Llamadas")
-      .upload(pathStorage, buffer, { contentType: "audio/mp4", upsert: false });
+      .createSignedUrl(storagePath, 3600);
 
-    if (storageError) {
-      console.error("[transcribir] Error Storage (no crítico):", storageError.message);
+    console.log('[TRANSCRIBIR] signedUrl generada:', signedData?.signedUrl?.substring(0, 80))
+    if (signedError || !signedData?.signedUrl) {
+      console.error("[transcribir] Error generando signed URL:", signedError?.message);
+      return NextResponse.json(
+        { error: `Error generando URL de acceso al audio: ${signedError?.message ?? "sin respuesta"}` },
+        { status: 500 }
+      );
     }
 
-    // ── Transcribir con AssemblyAI ──────────────────────────────
-    // AssemblyAI recibe el buffer directamente — no necesita URL pública
+    // ── Transcribir con AssemblyAI usando la URL firmada ───────────
     const client = new AssemblyAI({ apiKey: process.env.ASSEMBLYAI_API_KEY });
 
     console.log("[transcribir] Enviando a AssemblyAI:", {
       ext,
-      tamaño_bytes: buffer.length,
+      storagePath,
     });
 
-    const transcript = await client.transcripts.transcribe({
-      audio: buffer,
-      language_code: "es",
-    });
+    console.log('[ASSEMBLYAI] Iniciando transcripción:', {
+      url: signedData.signedUrl.substring(0, 100),
+      modelo: 'universal-2',
+      timestamp: new Date().toISOString()
+    })
+    const transcript = await Promise.race([
+      client.transcripts.transcribe({
+        audio: signedData.signedUrl,
+        language_code: "es",
+        speech_models: ["universal-2"],
+        punctuate: true,
+        format_text: true,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("AssemblyAI timeout: transcripción tardó más de 4 minutos")), 270000)
+      )
+    ]);
 
     if (transcript.status === "error") {
       console.error("[transcribir] AssemblyAI error:", transcript.error);
@@ -99,10 +110,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       transcripcion,
-      audio_url: storageData?.path ?? null,
+      audio_url: storagePath,
     });
 
   } catch (err) {
+    console.error('[TRANSCRIBIR_ERROR]', err)
     const mensaje = err instanceof Error ? err.message : "Error desconocido";
     console.error("[transcribir] Error general:", mensaje);
     return NextResponse.json({ error: mensaje }, { status: 500 });

@@ -642,6 +642,27 @@ REGLAS PARA "borrador_respuesta" (máximo 5 líneas — los mensajes largos no s
 - Para WhatsApp/LinkedIn: mensaje directo, sin saludo formal, máximo 4-5 líneas.
 - Para llamada: email breve de seguimiento con los 2-3 acuerdos clave, sin repetir todo lo hablado.
 
+ANÁLISIS ESTRATÉGICO REQUERIDO — aplica esto antes de generar el JSON:
+
+1. MAPA DE PODER: ¿Quién tiene poder real de decisión en esta empresa?
+   Si el contacto menciona "elevar internamente", "consultar con otros" o
+   estructuras separadas, identifica cuántos centros de decisión hay y
+   si el contacto es decisor real o intermediario.
+
+2. POSICIÓN DEL VENDEDOR: ¿El vendedor quedó en control activo o en
+   espera pasiva? Espera pasiva = oportunidad enfriándose.
+   Si quedó en espera pasiva, el coaching DEBE proponer cómo recuperar
+   el control con un próximo paso concreto.
+
+3. MOVIMIENTO CORRECTO: Si hay múltiples decisores, el próximo paso
+   debe buscar acceso directo a ellos — no seguir dependiendo del
+   intermediario. Ejemplo: "¿Quién en [área] sería la persona indicada
+   para que yo le explique directamente?"
+
+4. FECHA CONCRETA: proximo_paso nunca puede quedar sin fecha o timing
+   específico. "Llamar la próxima semana" no es válido — debe ser
+   "Llamar el jueves" o "escribir en 48 horas".
+
 Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional, sin explicaciones fuera del JSON.
 La estructura EXACTA es:
 
@@ -1017,6 +1038,13 @@ EMPRESA Y DECISOR:
 ${datos.contextoVendedor ? `- Contexto adicional: ${datos.contextoVendedor}` : ''}
 
 ${estadoRelacion}
+
+RESTRICCIONES ABSOLUTAS (Predictable Revenue — violarlas invalida el borrador):
+1. LONGITUD: correo máximo 100 palabras · LinkedIn máximo 60 palabras.
+2. APERTURA: la primera línea habla del mundo del prospecto (su empresa, su industria, un problema observable en su sector). NUNCA empieces hablando de One Label, de ti mismo ni de lo que ofreces.
+3. UNA SOLA PREGUNTA: el mensaje termina con exactamente una pregunta abierta. Múltiples preguntas reducen la tasa de respuesta.
+4. SIN ADJUNTOS NI LINKS: no incluyas URLs, PDFs ni referencias a documentos en el primer contacto.
+5. CTA DE BAJO COMPROMISO: el objetivo del mensaje es obtener UNA RESPUESTA, no agendar una reunión. Pide algo mínimo ("¿es algo que les pasa?" · "¿tiene sentido conversarlo?"). Nunca pidas directamente una reunión o llamada de 30+ minutos en el primer mensaje.
 
 EJEMPLOS REALES QUE DEBES IMITAR (mismo tono, adapta el contenido al rubro y cargo):
 

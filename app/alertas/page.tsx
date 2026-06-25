@@ -49,6 +49,11 @@ export default function AlertasPage() {
   ) {
     setResolviendoId(v.id);
     try {
+      await fetch(`/api/interacciones/${v.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resuelta: true }),
+      });
       await fetch("/api/interacciones/crear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,15 +166,6 @@ export default function AlertasPage() {
                         onClick={() => resolver(v, "Respondió al contacto", "positivo")}
                       >
                         {resolviendo ? <Loader2 className="h-3 w-3 animate-spin" /> : "✅ Sí contestó"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 h-9 text-xs rounded-xl bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-400"
-                        disabled={resolviendo}
-                        onClick={() => resolver(v, "Vio el mensaje pero no respondió", "negativo")}
-                      >
-                        {resolviendo ? <Loader2 className="h-3 w-3 animate-spin" /> : "👁️ Lo vio"}
                       </Button>
                       <Button
                         size="sm"

@@ -23,10 +23,13 @@ export function sanitizarTexto(texto: string, maxChars = 3000): string {
 // Devuelve null si todos fallan — el caller decide el fallback.
 export function extraerJsonSeguro<T>(texto: string): T | null {
   // Intento 1: parse directo
+  console.log('[JSON_PARSER_INTENTO1] largo:', texto.length, 'inicio:', texto.substring(0, 50))
   try { return JSON.parse(texto) as T; } catch {}
 
   // Intento 2: bloque markdown ```json ... ```
   const mdMatch = texto.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  const extraido = mdMatch?.[1];
+  console.log('[JSON_PARSER_INTENTO2]', extraido?.substring(0, 200))
   if (mdMatch) {
     try { return JSON.parse(mdMatch[1]) as T; } catch {}
   }

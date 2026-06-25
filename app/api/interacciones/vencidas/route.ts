@@ -21,6 +21,7 @@ export async function GET() {
     .from("interacciones")
     .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id, empresas(nombre)")
     .in("tipo", ["whatsapp", "email", "linkedin"])
+    .eq("resuelta", false)
     .lt("fecha", limite48h)
     .gt("fecha", limite7d)
     .order("fecha", { ascending: false });

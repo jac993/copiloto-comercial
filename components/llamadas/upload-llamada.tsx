@@ -1,14 +1,16 @@
 "use client";
 
 // Panel para subir y transcribir una llamada de audio.
-// Flujo: seleccionar archivo → elegir empresa → "⚡ Transcribir y analizar"
-// El archivo se envía al servidor (límite recomendado ~25 MB en MP3/M4A).
+// Flujo: seleccionar archivo → subir directo a Supabase Storage (sin pasar por Vercel)
+//        → enviar storagePath al API route → AssemblyAI transcribe desde URL firmada.
+// Sin límite de tamaño de Vercel porque el audio nunca pasa por el servidor.
 
 import { useState, useRef } from "react";
 import { Mic, Upload, FileAudio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EmpresaSelector } from "./empresa-selector";
+import { createClient } from "@/utils/supabase/client";
 import type { Empresa, Contacto, ResultadoAnalisis } from "@/lib/types";
 
 type Etapa =
@@ -18,8 +20,8 @@ type Etapa =
   | "listo";
 
 const ETAPA_LABEL: Record<Etapa, string> = {
-  subiendo:      "Subiendo audio...",
-  transcribiendo:"Transcribiendo con Whisper...",
+  subiendo:      "Subiendo audio a la nube...",
+  transcribiendo:"Transcribiendo con AssemblyAI...",
   analizando:    "Analizando con IA...",
   listo:         "¡Listo!",
 };
@@ -54,14 +56,25 @@ export function UploadLlamada({ empresas, onResultado }: UploadLlamadaProps) {
     setError(null);
 
     try {
-      // 1. Subir y transcribir
+      // 1. Subir directo a Supabase Storage desde el cliente (sin pasar por Vercel)
       setEtapa("subiendo");
-      const formData = new FormData();
-      formData.append("file", archivo);
+      const supabase = createClient();
+      const pathStorage = `${Date.now()}_${archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("Llamadas")
+        .upload(pathStorage, archivo, { contentType: archivo.type.startsWith("video/") ? archivo.type.replace("video/", "audio/") : archivo.type, upsert: false });
+
+      if (uploadError || !uploadData?.path) {
+        throw new Error(`Error al subir el audio: ${uploadError?.message ?? "sin respuesta de Storage"}`);
+      }
+
+      // 2. Enviar el path al servidor — la API genera la signed URL y transcribe
+      setEtapa("transcribiendo");
       const resTranscribir = await fetch("/api/transcribir", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath: uploadData.path }),
       });
       const dataTranscribir = await resTranscribir.json() as {
         ok?: boolean;
@@ -74,11 +87,7 @@ export function UploadLlamada({ empresas, onResultado }: UploadLlamadaProps) {
         throw new Error(dataTranscribir.error ?? "Error al transcribir");
       }
 
-      setEtapa("transcribiendo");
-      // Breve pausa visual para que el usuario vea el cambio de estado
-      await new Promise((r) => setTimeout(r, 400));
-
-      // 2. Analizar con IA
+      // 3. Analizar con IA
       setEtapa("analizando");
       const resAnalizar = await fetch("/api/analizar-interaccion", {
         method: "POST",
