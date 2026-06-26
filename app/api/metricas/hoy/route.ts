@@ -124,6 +124,7 @@ export async function GET() {
     proximo_paso: r.proximo_paso as string,
     proximo_paso_fecha: r.proximo_paso_fecha as string,
   }));
+  console.log('[TAREAS_PENDIENTES]', tareasPendientes.length);
 
   // Leer caché de prioridades del día (generado en la última llamada a /api/priorizar)
   const { data: metricaHoy } = await supabase
