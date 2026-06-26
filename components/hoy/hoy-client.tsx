@@ -8,6 +8,7 @@
 // =============================================================
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Sun, Zap, Target, TrendingUp, RefreshCw,
@@ -101,6 +102,7 @@ export function HoyClient() {
   const [cargandoPrioridades, setCargandoPrioridades] = useState(false);
   const [errorPrioridades, setErrorPrioridades] = useState<string | null>(null);
   const [cacheTimestamp, setCacheTimestamp] = useState<string | null>(null);
+  const router = useRouter();
   const [tareasHechas, setTareasHechas] = useState<Set<string>>(new Set());
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
   const [filtroTareas, setFiltroTareas] = useState<"hoy" | "7d" | "todas">("7d");
@@ -169,7 +171,7 @@ export function HoyClient() {
         body: JSON.stringify({ resuelta: true }),
       });
       setTareasHechas((prev) => new Set(Array.from(prev).concat(id)));
-      window.location.reload();
+      router.refresh();
     } finally {
       setMarcandoId(null);
     }
