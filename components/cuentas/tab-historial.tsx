@@ -730,6 +730,7 @@ function TarjetaHilo({
   async function guardarRecordatorio() {
     if (!hilo.rootId) return;
     setGuardandoRec(true);
+    console.log('[RECORDATORIO] guardando en id:', hilo.rootId, 'fecha:', recFecha, 'texto:', recTexto);
     try {
       await fetch(`/api/interacciones/${hilo.rootId}`, {
         method: "PATCH",

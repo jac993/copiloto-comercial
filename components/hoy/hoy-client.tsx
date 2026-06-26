@@ -169,8 +169,7 @@ export function HoyClient() {
         body: JSON.stringify({ resuelta: true }),
       });
       setTareasHechas((prev) => new Set(Array.from(prev).concat(id)));
-      await cargarMetricas();
-      console.log('[MARCAR_HECHA] metricas después de recargar:', metricas?.tareas_pendientes?.length, metricas?.tareas_pendientes?.map(t => t.id));
+      window.location.reload();
     } finally {
       setMarcandoId(null);
     }
