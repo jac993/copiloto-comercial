@@ -8,7 +8,6 @@
 // =============================================================
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Sun, Zap, Target, TrendingUp, RefreshCw,
@@ -102,8 +101,6 @@ export function HoyClient() {
   const [cargandoPrioridades, setCargandoPrioridades] = useState(false);
   const [errorPrioridades, setErrorPrioridades] = useState<string | null>(null);
   const [cacheTimestamp, setCacheTimestamp] = useState<string | null>(null);
-  const router = useRouter();
-  const [tareasHechas, setTareasHechas] = useState<Set<string>>(new Set());
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
   const [filtroTareas, setFiltroTareas] = useState<"hoy" | "7d" | "todas">("7d");
   const [dialogReporte, setDialogReporte] = useState(false);
@@ -165,13 +162,20 @@ export function HoyClient() {
   async function marcarHecha(id: string) {
     setMarcandoId(id);
     try {
-      await fetch(`/api/interacciones/${id}`, {
+      const res = await fetch(`/api/interacciones/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resuelta: true }),
       });
-      setTareasHechas((prev) => new Set(Array.from(prev).concat(id)));
-      router.refresh();
+      if (res.ok) {
+        setMetricas((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            tareas_pendientes: prev.tareas_pendientes.filter((t) => t.id !== id),
+          };
+        });
+      }
     } finally {
       setMarcandoId(null);
     }
@@ -233,7 +237,6 @@ export function HoyClient() {
   const hoyStr = new Date().toISOString().split("T")[0];
   const en7dias = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
   const tareas = (metricas?.tareas_pendientes ?? [])
-    .filter((t) => !tareasHechas.has(t.id))
     .filter((t) => {
       if (filtroTareas === "hoy")  return t.proximo_paso_fecha <= hoyStr;
       if (filtroTareas === "7d")   return t.proximo_paso_fecha <= en7dias;
@@ -355,7 +358,7 @@ export function HoyClient() {
         )}
 
         {/* Tareas pendientes */}
-        {(metricas?.tareas_pendientes ?? []).filter((t) => !tareasHechas.has(t.id)).length > 0 && (
+        {tareas.length > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-2">
               <span className="text-base">📋</span>
