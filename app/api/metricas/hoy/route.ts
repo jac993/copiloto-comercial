@@ -108,10 +108,10 @@ export async function GET() {
     .not("fecha_reactivacion", "is", null)
     .order("fecha_reactivacion", { ascending: true });
 
-  // Tareas pendientes: interacciones con proximo_paso_fecha <= hoy y no resueltas
+  // Tareas pendientes: interacciones con proximo_paso y no resueltas
   const { data: tareasRaw, error: tareasError } = await supabase
     .from("interacciones")
-    .select("id, empresa_id, proximo_paso, proximo_paso_fecha")
+    .select("id, empresa_id, contacto_id, proximo_paso, proximo_paso_fecha")
     .not("proximo_paso", "is", null)
     .eq("resuelta", false)
     .order("proximo_paso_fecha", { ascending: true })
@@ -119,10 +119,26 @@ export async function GET() {
 
   console.log('[TAREAS_RAW]', tareasRaw?.length, tareasError?.message);
 
+  // Resolver nombres de empresas y contactos en queries separadas
+  const empresaIds = [...new Set((tareasRaw ?? []).map((r) => r.empresa_id as string))];
+  const { data: empresasRaw } = empresaIds.length > 0
+    ? await supabase.from("empresas").select("id, nombre").in("id", empresaIds)
+    : { data: [] };
+  const empresasMap = new Map((empresasRaw ?? []).map((e) => [e.id, e.nombre as string]));
+
+  const contactoIds = (tareasRaw ?? [])
+    .map((r) => r.contacto_id as string | null)
+    .filter(Boolean) as string[];
+  const { data: contactosRaw } = contactoIds.length > 0
+    ? await supabase.from("contactos").select("id, nombre").in("id", contactoIds)
+    : { data: [] };
+  const contactosMap = new Map((contactosRaw ?? []).map((c) => [c.id, c.nombre as string]));
+
   const tareasPendientes: TareaPendiente[] = (tareasRaw ?? []).map((r) => ({
     id: r.id as string,
     empresa_id: r.empresa_id as string,
-    empresa_nombre: "Empresa",
+    empresa_nombre: empresasMap.get(r.empresa_id as string) ?? "Empresa",
+    contacto_nombre: contactosMap.get(r.contacto_id as string) ?? null,
     proximo_paso: r.proximo_paso as string,
     proximo_paso_fecha: r.proximo_paso_fecha as string,
   }));

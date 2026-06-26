@@ -879,6 +879,9 @@ function TareaCard({
             </span>
           )}
         </div>
+        {tarea.contacto_nombre && (
+          <p className="text-xs text-muted-foreground">👤 {tarea.contacto_nombre}</p>
+        )}
         <p className="text-xs text-muted-foreground leading-snug">{tarea.proximo_paso}</p>
       </div>
       <button

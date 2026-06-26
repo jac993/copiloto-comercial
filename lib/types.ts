@@ -378,6 +378,7 @@ export interface TareaPendiente {
   id: string;
   empresa_id: string;
   empresa_nombre: string;
+  contacto_nombre: string | null;
   proximo_paso: string;
   proximo_paso_fecha: string; // YYYY-MM-DD
 }

@@ -1126,10 +1126,10 @@ function TarjetaHilo({
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <CalendarPlus className="w-3.5 h-3.5" />
-                {rootMsg?.proximo_paso ? "📅 Editar recordatorio" : "📅 Agregar recordatorio"}
+                {rootMsg?.proximo_paso ? "📅 Editar tarea" : "📅 Crear tarea"}
               </button>
             ) : recGuardado ? (
-              <p className="text-xs text-green-600 dark:text-green-400 font-medium">✓ Recordatorio guardado</p>
+              <p className="text-xs text-green-600 dark:text-green-400 font-medium">✓ Tarea guardada</p>
             ) : (
               <div className="space-y-2">
                 <div className="flex gap-2">
