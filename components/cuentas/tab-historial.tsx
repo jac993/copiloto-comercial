@@ -11,7 +11,7 @@ import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Trash2, ChevronDown, Loader2, Plus, Zap,
   TrendingUp, Minus, Brain, AlertCircle, Clock,
-  CheckCircle2, XCircle, AlertTriangle, User, Send, Pencil,
+  CheckCircle2, XCircle, AlertTriangle, User, Send, Pencil, CalendarPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -542,6 +542,11 @@ function TarjetaHilo({
   const [editandoHiloFecha, setEditandoHiloFecha] = useState<string | null>(null);
   const [guardandoHiloFecha, setGuardandoHiloFecha] = useState(false);
   const [errorHiloFecha, setErrorHiloFecha] = useState<string | null>(null);
+  const [recordatorioAbierto, setRecordatorioAbierto] = useState(false);
+  const [recFecha, setRecFecha] = useState("");
+  const [recTexto, setRecTexto] = useState("");
+  const [guardandoRec, setGuardandoRec] = useState(false);
+  const [recGuardado, setRecGuardado] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -711,6 +716,30 @@ function TarjetaHilo({
       setEditandoMsg((prev) => prev
         ? { ...prev, guardando: false, error: e instanceof Error ? e.message : "Error al guardar" }
         : null);
+    }
+  }
+
+  // ── Recordatorio: pre-rellena si el root ya tiene proximo_paso ──
+  function abrirRecordatorio() {
+    setRecFecha(rootMsg?.proximo_paso_fecha ?? "");
+    setRecTexto(rootMsg?.proximo_paso ?? "");
+    setRecordatorioAbierto(true);
+    setRecGuardado(false);
+  }
+
+  async function guardarRecordatorio() {
+    if (!hilo.rootId) return;
+    setGuardandoRec(true);
+    try {
+      await fetch(`/api/interacciones/${hilo.rootId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proximo_paso: recTexto, proximo_paso_fecha: recFecha }),
+      });
+      setRecGuardado(true);
+      setTimeout(() => { setRecordatorioAbierto(false); setRecGuardado(false); }, 2000);
+    } finally {
+      setGuardandoRec(false);
     }
   }
 
@@ -1086,6 +1115,54 @@ function TarjetaHilo({
               </button>
             </div>
             {inputBar.error && <p className="text-xs text-destructive mt-1.5 pl-1">{inputBar.error}</p>}
+          </div>
+
+          {/* ── Recordatorio ── */}
+          <div className="px-4 py-2.5 border-t border-border/40">
+            {!recordatorioAbierto ? (
+              <button
+                onClick={abrirRecordatorio}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <CalendarPlus className="w-3.5 h-3.5" />
+                {rootMsg?.proximo_paso ? "📅 Editar recordatorio" : "📅 Agregar recordatorio"}
+              </button>
+            ) : recGuardado ? (
+              <p className="text-xs text-green-600 dark:text-green-400 font-medium">✓ Recordatorio guardado</p>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={recFecha}
+                    onChange={(e) => setRecFecha(e.target.value)}
+                    className="flex-1 text-xs rounded-xl border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={recTexto}
+                  onChange={(e) => setRecTexto(e.target.value)}
+                  placeholder="Ej: Visitar planta, llamar para confirmar..."
+                  className="w-full text-xs rounded-xl border border-border bg-background px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void guardarRecordatorio()}
+                    disabled={guardandoRec}
+                    className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    {guardandoRec ? <Loader2 className="w-3 h-3 animate-spin" /> : "Guardar"}
+                  </button>
+                  <button
+                    onClick={() => setRecordatorioAbierto(false)}
+                    className="px-3 py-1.5 rounded-xl border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Barra de acciones ── */}

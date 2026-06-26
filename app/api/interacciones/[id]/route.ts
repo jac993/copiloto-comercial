@@ -24,7 +24,7 @@ export async function PATCH(
   );
 
   const body = await req.json() as Record<string, unknown>;
-  const { tipo, contacto_id, fecha, texto, sentimiento, resuelta } = body;
+  const { tipo, contacto_id, fecha, texto, sentimiento, resuelta, proximo_paso, proximo_paso_fecha } = body;
 
   const cambios: Record<string, unknown> = {};
   if (typeof tipo === "string" && TIPOS_VALIDOS.includes(tipo as TipoInteraccion)) {
@@ -47,6 +47,12 @@ export async function PATCH(
   }
   if (typeof resuelta === "boolean") {
     cambios.resuelta = resuelta;
+  }
+  if (typeof proximo_paso === "string") {
+    cambios.proximo_paso = proximo_paso.trim() || null;
+  }
+  if (typeof proximo_paso_fecha === "string") {
+    cambios.proximo_paso_fecha = proximo_paso_fecha || null;
   }
 
   if (Object.keys(cambios).length === 0) {
