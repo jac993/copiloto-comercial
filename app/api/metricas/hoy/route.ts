@@ -117,6 +117,9 @@ export async function GET() {
     .order("proximo_paso_fecha", { ascending: true })
     .limit(50);
 
+  console.log('[TAREAS_RAW]', tareasRaw?.length ?? 0, JSON.stringify(tareasRaw?.map(r => r.id)));
+  console.log('[TAREAS_ERROR]', JSON.stringify(await supabase.from("interacciones").select("id").eq("resuelta", false).not("proximo_paso", "is", null).then(r => r.error)));
+
   const tareasPendientes: TareaPendiente[] = (tareasRaw ?? []).map((r) => ({
     id: r.id as string,
     empresa_id: r.empresa_id as string,
