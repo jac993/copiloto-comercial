@@ -1,41 +1,52 @@
 "use client";
 
 // =============================================================
-// Vista Kanban del pipeline comercial.
-// 6 columnas visibles + "Perdidos" colapsable.
-// Clic en tarjeta → navega a la ficha. × → marcar como perdido.
+// Vista Kanban del pipeline comercial con drag & drop entre columnas.
+// Drag: @dnd-kit/core — cada tarjeta es draggable, cada columna es droppable.
+// Al soltar en columna distinta → PATCH optimista + revert si falla.
 // =============================================================
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, ChevronLeft, X } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { PerdidoDialog } from "@/components/cuentas/perdido-dialog";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import type { Empresa, EstadoEmpresa } from "@/lib/types";
 
-// Columnas visibles en orden
+// Columnas visibles en orden (excluye "perdido" — tiene sección aparte)
 const COLUMNAS: { id: EstadoEmpresa; label: string; accentColor: string }[] = [
-  { id: "prospecto",      label: "Prospecto",        accentColor: "bg-gray-400" },
-  { id: "contactado",     label: "Contactado",        accentColor: "bg-blue-500" },
-  { id: "en_conversacion",label: "En conversación",   accentColor: "bg-indigo-500" },
-  { id: "reunion_agendada", label: "Reunión agendada",  accentColor: "bg-amber-500" },
-  { id: "cotizado",         label: "Cotizado",          accentColor: "bg-purple-500" },
-  { id: "ganado",           label: "Ganado",            accentColor: "bg-green-500" },
+  { id: "prospecto",        label: "Prospecto",         accentColor: "bg-gray-400" },
+  { id: "contactado",       label: "Contactado",         accentColor: "bg-blue-500" },
+  { id: "en_conversacion",  label: "En conversación",    accentColor: "bg-indigo-500" },
+  { id: "reunion_agendada", label: "Reunión agendada",   accentColor: "bg-amber-500" },
+  { id: "cotizado",         label: "Cotizado",           accentColor: "bg-purple-500" },
+  { id: "ganado",           label: "Ganado",             accentColor: "bg-green-500" },
 ];
 
-// Puntos de color por técnica recomendada
 const TECNICA_DOT: Record<string, string> = {
-  SPIN:       "bg-[#7C3AED]",   // violeta
-  consultiva: "bg-[#22C55E]",   // verde
-  relacional: "bg-blue-500",    // azul
-  challenger: "bg-[#F97316]",   // naranja
+  SPIN:       "bg-[#7C3AED]",
+  consultiva: "bg-[#22C55E]",
+  relacional: "bg-blue-500",
+  challenger: "bg-[#F97316]",
 };
 
 function labelReactivacion(
   fechaStr: string | null
 ): { texto: string; vencida: boolean } | null {
   if (!fechaStr) return null;
-  // Forzar interpretación como fecha local para evitar off-by-one de TZ
   const [y, m, d] = fechaStr.split("-").map(Number);
   const fecha = new Date(y, m - 1, d);
   const hoy = new Date();
@@ -47,101 +58,162 @@ function labelReactivacion(
 
 interface VistaKanbanProps {
   empresas: Empresa[];
-  empresasVencidasIds: string[]; // IDs con próximo paso vencido
+  empresasVencidasIds: string[];
 }
 
-export function VistaKanban({ empresas, empresasVencidasIds }: VistaKanbanProps) {
+export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: VistaKanbanProps) {
   const router = useRouter();
+  // Estado local para actualización optimista al hacer drag
+  const [empresas, setEmpresas] = useState<Empresa[]>(empresasInit);
   const [perdidoExpanded, setPerdidoExpanded] = useState(false);
   const [dialogEmpresa, setDialogEmpresa] = useState<Empresa | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const vencidasSet = new Set(empresasVencidasIds);
 
-  // Agrupar empresas por estado
+  // Agrupar por estado
   const porEstado = new Map<EstadoEmpresa, Empresa[]>();
-  for (const col of COLUMNAS) {
-    porEstado.set(col.id, []);
-  }
+  for (const col of COLUMNAS) porEstado.set(col.id, []);
   porEstado.set("perdido", []);
   for (const e of empresas) {
     const lista = porEstado.get(e.estado);
     if (lista) lista.push(e);
   }
-
   const perdidas = porEstado.get("perdido") ?? [];
+
+  // Sensor con umbral de 8px para no interferir con clicks
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 200, tolerance: 5 } })
+  );
+
+  function handleDragStart(event: DragStartEvent) {
+    setDraggingId(event.active.id as string);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setDraggingId(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const empresaId = active.id as string;
+    const nuevoEstado = over.id as EstadoEmpresa;
+    const empresa = empresas.find((e) => e.id === empresaId);
+    if (!empresa || empresa.estado === nuevoEstado) return;
+
+    // No permitir arrastrar a "perdido" — esa acción va por el botón ×
+    if (nuevoEstado === "perdido") return;
+
+    const estadoAnterior = empresa.estado;
+
+    // Actualización optimista
+    setEmpresas((prev) =>
+      prev.map((e) => (e.id === empresaId ? { ...e, estado: nuevoEstado } : e))
+    );
+
+    try {
+      const res = await fetch(`/api/empresas/${empresaId}/estado`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: nuevoEstado }),
+      });
+      if (!res.ok) throw new Error("PATCH fallido");
+    } catch {
+      // Revertir si falla
+      setEmpresas((prev) =>
+        prev.map((e) => (e.id === empresaId ? { ...e, estado: estadoAnterior } : e))
+      );
+    }
+  }
 
   const handleConfirmPerdido = () => {
     setDialogEmpresa(null);
-    router.refresh(); // recarga datos del servidor sin full reload
+    router.refresh();
   };
+
+  const draggingEmpresa = draggingId ? empresas.find((e) => e.id === draggingId) : null;
 
   return (
     <>
-      {/* Encabezado del pipeline con ayuda contextual */}
       <div className="flex items-center gap-1.5 px-5 pt-4 pb-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pipeline de ventas</p>
         <HelpTooltip
           titulo="¿Cómo funciona el pipeline?"
-          explicacion="Muestra en qué etapa está cada empresa del proceso de venta. El estado cambia automáticamente cuando la IA detecta avances en tus interacciones, o puedes cambiarlo tú manualmente desde la ficha."
+          explicacion="Muestra en qué etapa está cada empresa del proceso de venta. Arrastra las tarjetas entre columnas para cambiar la etapa, o usa la ficha de la empresa."
           ejemplo={"Prospecto → la investigaste.\nContactado → hiciste el primer contacto.\nEn conversación → hay intercambio activo.\nReunión agendada → confirmaron reunión.\nCotizado → enviaste propuesta.\nGanado → cerraste el negocio."}
         />
       </div>
 
-      {/* Tablero con scroll horizontal en móvil */}
-      <div
-        className="flex gap-3 px-4 pt-2 pb-6 overflow-x-auto"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        {/* Columnas principales */}
-        {COLUMNAS.map((col) => {
-          const items = porEstado.get(col.id) ?? [];
-          return (
-            <KanbanColumna
-              key={col.id}
-              label={col.label}
-              accentColor={col.accentColor}
-              items={items}
-              vencidasSet={vencidasSet}
-              onMarcarPerdido={setDialogEmpresa}
-            />
-          );
-        })}
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div
+          className="flex gap-3 px-4 pt-2 pb-6 overflow-x-auto"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
+          {/* Columnas principales */}
+          {COLUMNAS.map((col) => {
+            const items = porEstado.get(col.id) ?? [];
+            return (
+              <KanbanColumna
+                key={col.id}
+                colId={col.id}
+                label={col.label}
+                accentColor={col.accentColor}
+                items={items}
+                vencidasSet={vencidasSet}
+                draggingId={draggingId}
+                onMarcarPerdido={setDialogEmpresa}
+              />
+            );
+          })}
 
-        {/* Columna Perdido — colapsable */}
-        <div className="flex-none w-[220px]">
-          <button
-            onClick={() => setPerdidoExpanded((v) => !v)}
-            className="flex items-center gap-2 w-full mb-3 group"
-          >
-            <div className="h-2.5 w-2.5 rounded-full bg-red-400 shrink-0" />
-            <span className="text-xs font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-              Perdidos ({perdidas.length})
-            </span>
-            {perdidoExpanded ? (
-              <ChevronLeft className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+          {/* Columna Perdido — colapsable, sin droppable */}
+          <div className="flex-none w-[220px]">
+            <button
+              onClick={() => setPerdidoExpanded((v) => !v)}
+              className="flex items-center gap-2 w-full mb-3 group"
+            >
+              <div className="h-2.5 w-2.5 rounded-full bg-red-400 shrink-0" />
+              <span className="text-xs font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                Perdidos ({perdidas.length})
+              </span>
+              {perdidoExpanded ? (
+                <ChevronLeft className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </button>
+
+            {perdidoExpanded && (
+              <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-1 pb-2">
+                {perdidas.length === 0 && <ColumnaVacia />}
+                {perdidas.map((empresa) => (
+                  <KanbanCardStatic
+                    key={empresa.id}
+                    empresa={empresa}
+                    vencida={vencidasSet.has(empresa.id)}
+                    esPerdido
+                    onMarcarPerdido={() => {}}
+                  />
+                ))}
+              </div>
             )}
-          </button>
-
-          {perdidoExpanded && (
-            <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-1 pb-2">
-              {perdidas.length === 0 && <ColumnaVacia />}
-              {perdidas.map((empresa) => (
-                <KanbanCard
-                  key={empresa.id}
-                  empresa={empresa}
-                  vencida={vencidasSet.has(empresa.id)}
-                  esPerdido
-                  onMarcarPerdido={() => {}} // ya está perdido
-                />
-              ))}
-            </div>
-          )}
+          </div>
         </div>
-      </div>
 
-      {/* Dialog de perdido */}
+        {/* Tarjeta flotante durante el drag */}
+        <DragOverlay dropAnimation={null}>
+          {draggingEmpresa ? (
+            <KanbanCardStatic
+              empresa={draggingEmpresa}
+              vencida={vencidasSet.has(draggingEmpresa.id)}
+              esPerdido={false}
+              onMarcarPerdido={() => {}}
+              isOverlay
+            />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
       {dialogEmpresa && (
         <PerdidoDialog
           empresa={dialogEmpresa}
@@ -154,39 +226,48 @@ export function VistaKanban({ empresas, empresasVencidasIds }: VistaKanbanProps)
   );
 }
 
-// ── Columna individual ──────────────────────────────────────────
+// ── Columna droppable ───────────────────────────────────────────
 
 function KanbanColumna({
+  colId,
   label,
   accentColor,
   items,
   vencidasSet,
+  draggingId,
   onMarcarPerdido,
 }: {
+  colId: EstadoEmpresa;
   label: string;
   accentColor: string;
   items: Empresa[];
   vencidasSet: Set<string>;
+  draggingId: string | null;
   onMarcarPerdido: (e: Empresa) => void;
 }) {
+  const { setNodeRef, isOver } = useDroppable({ id: colId });
+
   return (
     <div className="flex-none w-[220px]">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${accentColor}`} />
         <span className="text-xs font-semibold text-foreground leading-none">{label}</span>
         <span className="ml-auto text-xs font-bold text-muted-foreground">{items.length}</span>
       </div>
 
-      {/* Cards */}
-      <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-1 pb-2">
-        {items.length === 0 && <ColumnaVacia />}
+      <div
+        ref={setNodeRef}
+        className={`space-y-2 min-h-[60px] max-h-[calc(100vh-200px)] overflow-y-auto pr-1 pb-2 rounded-xl transition-colors ${
+          isOver ? "bg-primary/5 ring-1 ring-primary/20" : ""
+        }`}
+      >
+        {items.length === 0 && !isOver && <ColumnaVacia />}
         {items.map((empresa) => (
-          <KanbanCard
+          <KanbanCardDraggable
             key={empresa.id}
             empresa={empresa}
             vencida={vencidasSet.has(empresa.id)}
-            esPerdido={false}
+            isDraggingThis={draggingId === empresa.id}
             onMarcarPerdido={() => onMarcarPerdido(empresa)}
           />
         ))}
@@ -196,23 +277,60 @@ function KanbanColumna({
 }
 
 function ColumnaVacia() {
+  return <div className="h-16 rounded-xl border-2 border-dashed border-border/50" />;
+}
+
+// ── Tarjeta draggable ───────────────────────────────────────────
+
+function KanbanCardDraggable({
+  empresa,
+  vencida,
+  isDraggingThis,
+  onMarcarPerdido,
+}: {
+  empresa: Empresa;
+  vencida: boolean;
+  isDraggingThis: boolean;
+  onMarcarPerdido: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: empresa.id });
+
+  const style = transform
+    ? { transform: CSS.Translate.toString(transform) }
+    : undefined;
+
   return (
-    <div className="h-16 rounded-xl border-2 border-dashed border-border/50" />
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={`transition-opacity ${isDraggingThis ? "opacity-30" : "opacity-100"}`}
+    >
+      <KanbanCardStatic
+        empresa={empresa}
+        vencida={vencida}
+        esPerdido={false}
+        onMarcarPerdido={onMarcarPerdido}
+      />
+    </div>
   );
 }
 
-// ── Tarjeta individual ──────────────────────────────────────────
+// ── Tarjeta visual (sin lógica DnD) ────────────────────────────
 
-function KanbanCard({
+function KanbanCardStatic({
   empresa,
   vencida,
   esPerdido,
   onMarcarPerdido,
+  isOverlay = false,
 }: {
   empresa: Empresa;
   vencida: boolean;
   esPerdido: boolean;
   onMarcarPerdido: () => void;
+  isOverlay?: boolean;
 }) {
   const router = useRouter();
   const tecnica = empresa.ficha_ia?.tecnica_recomendada;
@@ -223,10 +341,10 @@ function KanbanCard({
     <div
       className={`relative group rounded-xl border bg-card p-3 cursor-pointer
         hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98]
-        ${vencida ? "border-red-300 dark:border-red-800/50" : "border-border"}`}
-      onClick={() => router.push(`/cuentas/${empresa.id}`)}
+        ${vencida ? "border-red-300 dark:border-red-800/50" : "border-border"}
+        ${isOverlay ? "shadow-lg rotate-1 scale-105" : ""}`}
+      onClick={() => !isOverlay && router.push(`/cuentas/${empresa.id}`)}
     >
-      {/* Técnica + nombre */}
       <div className="flex items-start gap-2">
         <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
         <p className="font-semibold text-sm leading-tight line-clamp-2 pr-4">
@@ -234,14 +352,12 @@ function KanbanCard({
         </p>
       </div>
 
-      {/* Industria */}
       {empresa.industria && (
         <p className="text-xs text-muted-foreground mt-1 pl-4 line-clamp-1">
           {empresa.industria}
         </p>
       )}
 
-      {/* Chip de reactivación (solo en columna perdido) */}
       {reac && (
         <div
           className={`mt-2 pl-4 inline-flex items-center gap-1 text-xs font-medium ${
@@ -254,8 +370,7 @@ function KanbanCard({
         </div>
       )}
 
-      {/* Botón × para marcar como perdido (solo columnas activas) */}
-      {!esPerdido && (
+      {!esPerdido && !isOverlay && (
         <button
           className="absolute top-2 right-2 h-5 w-5 rounded-full bg-background border border-border
             flex items-center justify-center opacity-0 group-hover:opacity-100
