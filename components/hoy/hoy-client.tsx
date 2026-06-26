@@ -358,7 +358,7 @@ export function HoyClient() {
         )}
 
         {/* Tareas pendientes */}
-        {tareas.length > 0 && (
+        {(metricas?.tareas_pendientes.length ?? 0) > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-2">
               <span className="text-base">📋</span>
@@ -397,8 +397,8 @@ export function HoyClient() {
                 />
               ))}
               {tareas.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Sin tareas para este filtro
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  ✅ Sin tareas pendientes para este filtro
                 </p>
               )}
             </div>
