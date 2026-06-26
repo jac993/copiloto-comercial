@@ -109,21 +109,20 @@ export async function GET() {
     .order("fecha_reactivacion", { ascending: true });
 
   // Tareas pendientes: interacciones con proximo_paso_fecha <= hoy y no resueltas
-  const { data: tareasRaw } = await supabase
+  const { data: tareasRaw, error: tareasError } = await supabase
     .from("interacciones")
-    .select("id, empresa_id, proximo_paso, proximo_paso_fecha, empresas(nombre)")
+    .select("id, empresa_id, proximo_paso, proximo_paso_fecha")
     .not("proximo_paso", "is", null)
     .eq("resuelta", false)
     .order("proximo_paso_fecha", { ascending: true })
     .limit(50);
 
-  console.log('[TAREAS_RAW]', tareasRaw?.length ?? 0, JSON.stringify(tareasRaw?.map(r => r.id)));
-  console.log('[TAREAS_ERROR]', JSON.stringify(await supabase.from("interacciones").select("id").eq("resuelta", false).not("proximo_paso", "is", null).then(r => r.error)));
+  console.log('[TAREAS_RAW]', tareasRaw?.length, tareasError?.message);
 
   const tareasPendientes: TareaPendiente[] = (tareasRaw ?? []).map((r) => ({
     id: r.id as string,
     empresa_id: r.empresa_id as string,
-    empresa_nombre: (r.empresas as unknown as { nombre: string } | null)?.nombre ?? "Empresa",
+    empresa_nombre: "Empresa",
     proximo_paso: r.proximo_paso as string,
     proximo_paso_fecha: r.proximo_paso_fecha as string,
   }));
