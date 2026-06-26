@@ -876,15 +876,21 @@ const SEMAFORO_CONFIG: Record<MeddicSemaforo, { emoji: string; label: string; ne
   verde:    { emoji: "🟢", label: "Calificado", next: "rojo" },
 };
 
-const SCORE_ETIQUETA: { min: number; max: number; label: string; color: string }[] = [
-  { min: 0,  max: 4,  label: "Débil 🔴",                  color: "bg-red-500" },
-  { min: 5,  max: 7,  label: "Regular 🟡",                color: "bg-amber-500" },
-  { min: 8,  max: 10, label: "Fuerte 🟢",                 color: "bg-green-500" },
-  { min: 11, max: 12, label: "⭐ Listo para propuesta formal", color: "bg-[#7C3AED]" },
+// Rangos en porcentaje (score máx = 12)
+const SCORE_ETIQUETA: { minPct: number; maxPct: number; label: string; color: string; descripcion: string }[] = [
+  { minPct: 0,  maxPct: 25,  label: "Débil",              color: "bg-red-500",    descripcion: "No tienes información suficiente. Sigue en discovery antes de proponer." },
+  { minPct: 26, maxPct: 50,  label: "En exploración",     color: "bg-orange-500", descripcion: "Tienes algunos datos pero faltan piezas clave. No cotices aún." },
+  { minPct: 51, maxPct: 75,  label: "Oportunidad real",   color: "bg-amber-500",  descripcion: "Estás listo para hacer una propuesta con alta probabilidad de éxito." },
+  { minPct: 76, maxPct: 100, label: "Listo para cerrar",  color: "bg-green-500",  descripcion: "Tienes todo mapeado. Una propuesta aquí tiene altísima probabilidad de ganar." },
 ];
 
 function scoreEtiqueta(score: number) {
-  return SCORE_ETIQUETA.find((e) => score >= e.min && score <= e.max) ?? SCORE_ETIQUETA[0];
+  const pct = Math.round((score / 12) * 100);
+  return SCORE_ETIQUETA.find((e) => pct >= e.minPct && pct <= e.maxPct) ?? SCORE_ETIQUETA[0];
+}
+
+function scorePct(score: number) {
+  return Math.round((score / 12) * 100);
 }
 
 function formatCLP(valor: number): string {
@@ -908,20 +914,46 @@ interface MeddicCardProps {
 
 function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: MeddicCardProps) {
   const etiqueta = scoreEtiqueta(meddic.score);
+  const pct = scorePct(meddic.score);
   const [valorRaw, setValorRaw] = useState<string>(
     meddic.valor_estimado != null ? String(meddic.valor_estimado) : ""
   );
   const [editandoTexto, setEditandoTexto] = useState<string | null>(null);
   const [textoLocal, setTextoLocal] = useState<string>("");
+  const [mostrarAyuda, setMostrarAyuda] = useState(false);
 
   return (
     <div>
       <div className="flex items-center justify-between px-1 mb-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Calificación MEDDIC
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Calificación MEDDIC
+          </p>
+          <button
+            onClick={() => setMostrarAyuda((v) => !v)}
+            className="h-4 w-4 rounded-full border border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-colors flex items-center justify-center text-[10px] font-bold leading-none"
+            title="¿Qué significa este score?"
+          >
+            ?
+          </button>
+        </div>
         {guardando && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
       </div>
+
+      {/* Panel explicativo de rangos */}
+      {mostrarAyuda && (
+        <div className="mb-3 rounded-xl border border-border bg-muted/40 p-3 space-y-1.5">
+          {SCORE_ETIQUETA.map((e) => (
+            <div key={e.label} className="flex items-start gap-2">
+              <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${e.color}`} />
+              <p className="text-xs text-foreground leading-snug">
+                <span className="font-semibold">{e.minPct}–{e.maxPct}% {e.label}:</span>{" "}
+                {e.descripcion}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Card>
         <CardContent className="pt-4 pb-4 space-y-4">
@@ -930,12 +962,12 @@ function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: Me
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-foreground">{etiqueta.label}</span>
-              <span className="text-xs text-muted-foreground">{meddic.score} / 12</span>
+              <span className="text-xs font-bold text-muted-foreground">{pct}%</span>
             </div>
             <div className="h-2 rounded-full bg-muted overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${etiqueta.color}`}
-                style={{ width: `${(meddic.score / 12) * 100}%` }}
+                style={{ width: `${pct}%` }}
               />
             </div>
           </div>
