@@ -120,7 +120,7 @@ export async function GET() {
   console.log('[TAREAS_RAW]', tareasRaw?.length, tareasError?.message);
 
   // Resolver nombres de empresas y contactos en queries separadas
-  const empresaIds = [...new Set((tareasRaw ?? []).map((r) => r.empresa_id as string))];
+  const empresaIds = Array.from(new Set((tareasRaw ?? []).map((r) => r.empresa_id as string)));
   const { data: empresasRaw } = empresaIds.length > 0
     ? await supabase.from("empresas").select("id, nombre").in("id", empresaIds)
     : { data: [] };
