@@ -113,10 +113,9 @@ export async function GET() {
     .from("interacciones")
     .select("id, empresa_id, proximo_paso, proximo_paso_fecha, empresas(nombre)")
     .not("proximo_paso", "is", null)
-    .lte("proximo_paso_fecha", hoy)
     .eq("resuelta", false)
     .order("proximo_paso_fecha", { ascending: true })
-    .limit(20);
+    .limit(50);
 
   const tareasPendientes: TareaPendiente[] = (tareasRaw ?? []).map((r) => ({
     id: r.id as string,

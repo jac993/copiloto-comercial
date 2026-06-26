@@ -103,6 +103,7 @@ export function HoyClient() {
   const [cacheTimestamp, setCacheTimestamp] = useState<string | null>(null);
   const [tareasHechas, setTareasHechas] = useState<Set<string>>(new Set());
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
+  const [filtroTareas, setFiltroTareas] = useState<"hoy" | "7d" | "todas">("7d");
   const [dialogReporte, setDialogReporte] = useState(false);
   const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
   const [guardandoReporte, setGuardandoReporte] = useState(false);
@@ -226,7 +227,15 @@ export function HoyClient() {
     }
   };
 
-  const tareas = (metricas?.tareas_pendientes ?? []).filter((t) => !tareasHechas.has(t.id));
+  const hoyStr = new Date().toISOString().split("T")[0];
+  const en7dias = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+  const tareas = (metricas?.tareas_pendientes ?? [])
+    .filter((t) => !tareasHechas.has(t.id))
+    .filter((t) => {
+      if (filtroTareas === "hoy")  return t.proximo_paso_fecha <= hoyStr;
+      if (filtroTareas === "7d")   return t.proximo_paso_fecha <= en7dias;
+      return true;
+    });
 
   const contactos = metricas?.contactos_hoy ?? 0;
   const meta = metricas?.meta ?? 5;
@@ -343,14 +352,34 @@ export function HoyClient() {
         )}
 
         {/* Tareas pendientes */}
-        {tareas.length > 0 && (
+        {(metricas?.tareas_pendientes ?? []).filter((t) => !tareasHechas.has(t.id)).length > 0 && (
           <section>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-2">
               <span className="text-base">📋</span>
               <h2 className="font-semibold text-base">Tareas pendientes</h2>
               <span className="text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
                 {tareas.length}
               </span>
+            </div>
+            {/* Selector de filtro */}
+            <div className="flex gap-1.5 mb-3">
+              {(["hoy", "7d", "todas"] as const).map((id) => {
+                const label = id === "hoy" ? "Hoy y vencidas" : id === "7d" ? "7 días" : "Todas";
+                const activo = filtroTareas === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setFiltroTareas(id)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      activo
+                        ? "bg-primary text-white border-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
             <div className="space-y-2">
               {tareas.map((t) => (
@@ -361,6 +390,11 @@ export function HoyClient() {
                   onMarcar={() => marcarHecha(t.id)}
                 />
               ))}
+              {tareas.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  Sin tareas para este filtro
+                </p>
+              )}
             </div>
           </section>
         )}
