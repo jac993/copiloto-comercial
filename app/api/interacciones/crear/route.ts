@@ -34,9 +34,11 @@ export async function POST(req: NextRequest) {
       fecha?: string;      // ISO string — si el usuario cambió la fecha/hora
       sentimiento?: string; // resultado manual: positivo / neutro / negativo
       remitente?: "vendedor" | "prospecto"; // quién envió el mensaje
+      proximo_paso?: string;
+      proximo_paso_fecha?: string; // YYYY-MM-DD
     };
 
-    const { empresa_id, contacto_id, parent_id, tipo, texto, audio_url, fecha, sentimiento, remitente } = body;
+    const { empresa_id, contacto_id, parent_id, tipo, texto, audio_url, fecha, sentimiento, remitente, proximo_paso, proximo_paso_fecha } = body;
 
     if (!empresa_id || !tipo) {
       return NextResponse.json({ error: "empresa_id y tipo son requeridos" }, { status: 400 });
@@ -60,8 +62,8 @@ export async function POST(req: NextRequest) {
       sentimiento: sentimientoFinal,
       tecnica_usada: null,
       coaching_ia: null,
-      proximo_paso: tipo === "sin_respuesta" ? "Intentar contacto nuevamente" : null,
-      proximo_paso_fecha: tipo === "sin_respuesta" ? sumarDiasHabiles(5) : null,
+      proximo_paso: tipo === "sin_respuesta" ? "Intentar contacto nuevamente" : (proximo_paso?.trim() || null),
+      proximo_paso_fecha: tipo === "sin_respuesta" ? sumarDiasHabiles(5) : (proximo_paso_fecha || null),
       badge_estado: tipo === "sin_respuesta" ? "sin_respuesta" : null,
       decision_sugerida: null,
       remitente: remitente ?? "vendedor",

@@ -56,6 +56,8 @@ export function NuevaInteraccionSheet({
   const [fecha, setFecha] = useState<string>(() => new Date().toISOString().slice(0, 16));
   const [resultado, setResultado] = useState<string>("");
   const [noContesto, setNoContesto] = useState(false);
+  const [proximoPasoFecha, setProximoPasoFecha] = useState("");
+  const [proximoPasoTexto, setProximoPasoTexto] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reset() {
@@ -70,6 +72,8 @@ export function NuevaInteraccionSheet({
     setFecha(new Date().toISOString().slice(0, 16));
     setResultado("");
     setNoContesto(false);
+    setProximoPasoFecha("");
+    setProximoPasoTexto("");
   }
 
   function cerrar() {
@@ -126,6 +130,8 @@ export function NuevaInteraccionSheet({
           contacto_id: contactoId || undefined,
           fecha: new Date(fecha).toISOString(),
           sentimiento: resultado || undefined,
+          proximo_paso: proximoPasoTexto || undefined,
+          proximo_paso_fecha: proximoPasoFecha || undefined,
         }),
       });
       const data = await res.json();
@@ -480,6 +486,35 @@ export function NuevaInteraccionSheet({
                         {r === "positivo" ? "👍 Positivo" : r === "negativo" ? "👎 Negativo" : "😐 Neutro"}
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Seguimiento — solo para whatsapp, email, linkedin */}
+              {(tipo === "whatsapp" || tipo === "email" || tipo === "linkedin") && (
+                <div className="space-y-3 pt-1 border-t border-border">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                      📅 Recordarme el (opcional)
+                    </label>
+                    <input
+                      type="date"
+                      value={proximoPasoFecha}
+                      onChange={(e) => setProximoPasoFecha(e.target.value)}
+                      className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                      📝 Qué hacer (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={proximoPasoTexto}
+                      onChange={(e) => setProximoPasoTexto(e.target.value)}
+                      placeholder="Ej: Ir a visitar planta, llamar para confirmar reunión..."
+                      className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
                   </div>
                 </div>
               )}
