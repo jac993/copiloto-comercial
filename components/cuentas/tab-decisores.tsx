@@ -418,6 +418,7 @@ function DecisorSugeridoCard({
   const [telefono, setTelefono] = useState("");
   const [mostrando, setMostrando] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const areaColor = AREA_COLOR[decisor.area] ?? AREA_COLOR.otro;
   const persona = decisor.persona_encontrada;
@@ -426,6 +427,7 @@ function DecisorSugeridoCard({
   const guardar = async () => {
     if (!nombre.trim()) return;
     setGuardando(true);
+    setError(null);
     try {
       const res = await fetch("/api/contactos", {
         method: "POST",
@@ -442,6 +444,10 @@ function DecisorSugeridoCard({
           notas_ia:    `${decisor.por_que_es_clave}\n\nDolor: ${decisor.dolor_especifico}`,
         }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "Error al guardar el decisor");
+      }
       const nuevo = (await res.json()) as Contacto;
       setAgregados((prev) => [...prev, nuevo]);
       onContactoAgregado(nuevo);
@@ -450,6 +456,10 @@ function DecisorSugeridoCard({
       setLinkedinUrl("");
       setTelefono("");
       setMostrando(false);
+    } catch (err) {
+      console.error("[GUARDAR_DECISOR]", err);
+      setError(err instanceof Error ? err.message : "Error al guardar");
+      return;
     } finally {
       setGuardando(false);
     }
@@ -615,6 +625,7 @@ function DecisorSugeridoCard({
               onChange={(e) => setLinkedinUrl(e.target.value)}
               className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
+            {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
             <Button
               size="sm"
               className="w-full bg-[#7C3AED] hover:bg-violet-700"
