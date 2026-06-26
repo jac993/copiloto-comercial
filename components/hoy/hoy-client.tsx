@@ -169,6 +169,7 @@ export function HoyClient() {
         body: JSON.stringify({ resuelta: true }),
       });
       setTareasHechas((prev) => new Set(Array.from(prev).concat(id)));
+      await cargarMetricas();
     } finally {
       setMarcandoId(null);
     }
