@@ -243,6 +243,7 @@ export async function getInteraccionesConProximoPaso(): Promise<Interaccion[]> {
     .from("interacciones")
     .select("*")
     .not("proximo_paso_fecha", "is", null)
+    .eq("resuelta", false)
     .lte("proximo_paso_fecha", en7dias.toISOString().split("T")[0])
     .order("proximo_paso_fecha", { ascending: true });
 
