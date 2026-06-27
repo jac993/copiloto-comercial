@@ -17,15 +17,27 @@ export async function GET() {
   const limite48h = new Date(ahora - 48 * 60 * 60 * 1000).toISOString();
   const limite7d  = new Date(ahora - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data, error } = await supabase
+  // Obtener IDs de empresas con conversación pausada para excluirlas
+  const { data: pausadas } = await supabase
+    .from("empresas")
+    .select("id")
+    .not("conversacion_pausada_at", "is", null);
+  const idsPausadas = (pausadas ?? []).map((e) => e.id as string);
+
+  let query = supabase
     .from("interacciones")
-    .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id, empresas(nombre, conversacion_pausada_at)")
+    .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id, empresas(nombre)")
     .in("tipo", ["whatsapp", "email", "linkedin"])
     .eq("resuelta", false)
-    .is("empresas.conversacion_pausada_at", null)
     .lt("fecha", limite48h)
     .gt("fecha", limite7d)
     .order("fecha", { ascending: false });
+
+  if (idsPausadas.length > 0) {
+    query = query.not("empresa_id", "in", `(${idsPausadas.join(",")})`);
+  }
+
+  const { data, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
