@@ -70,6 +70,23 @@ export async function POST(req: NextRequest) {
     };
 
     const interaccion = await insertInteraccion(interaccionData);
+
+    // Al registrar un mensaje saliente, marcar como resueltas las tareas
+    // pendientes anteriores de esta empresa (el vendedor actuó sobre ellas)
+    if (interaccionData.remitente === "vendedor") {
+      const { createClient } = await import("@supabase/supabase-js");
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+      await supabase
+        .from("interacciones")
+        .update({ resuelta: true })
+        .eq("empresa_id", empresa_id)
+        .eq("resuelta", false)
+        .lt("fecha", new Date().toISOString());
+    }
+
     return NextResponse.json({ ok: true, interaccion });
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : "Error desconocido";
