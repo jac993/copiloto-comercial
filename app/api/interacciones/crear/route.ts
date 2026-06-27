@@ -71,20 +71,28 @@ export async function POST(req: NextRequest) {
 
     const interaccion = await insertInteraccion(interaccionData);
 
-    // Al registrar un mensaje saliente, marcar como resueltas las tareas
-    // pendientes anteriores de esta empresa (el vendedor actuó sobre ellas)
-    if (interaccionData.remitente === "vendedor") {
+    // Al registrar cualquier mensaje (vendedor o prospecto):
+    // 1. Marcar tareas pendientes anteriores como resueltas
+    // 2. Reactivar la conversación si estaba pausada
+    {
       const { createClient } = await import("@supabase/supabase-js");
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
-      await supabase
-        .from("interacciones")
-        .update({ resuelta: true })
-        .eq("empresa_id", empresa_id)
-        .eq("resuelta", false)
-        .lt("fecha", new Date().toISOString());
+      await Promise.all([
+        supabase
+          .from("interacciones")
+          .update({ resuelta: true })
+          .eq("empresa_id", empresa_id)
+          .eq("resuelta", false)
+          .lt("fecha", new Date().toISOString()),
+        supabase
+          .from("empresas")
+          .update({ conversacion_pausada_at: null })
+          .eq("id", empresa_id)
+          .not("conversacion_pausada_at", "is", null),
+      ]);
     }
 
     return NextResponse.json({ ok: true, interaccion });

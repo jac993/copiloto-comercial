@@ -236,6 +236,7 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
             interacciones={interacciones}
             empresaId={empresa.id}
             contactos={empresa.contactos as Contacto[]}
+            conversacionPausadaAt={empresa.conversacion_pausada_at ?? null}
           />
         )}
 

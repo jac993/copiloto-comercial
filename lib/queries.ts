@@ -736,6 +736,7 @@ export async function guardarEmpresaDesdeFicha(
     meddic: null,
     razon_perdido: null,
     fecha_reactivacion: null,
+    conversacion_pausada_at: null,
     busqueda_web_raw: busquedaWebRaw ?? null,
     busqueda_web_analisis: null,
   };

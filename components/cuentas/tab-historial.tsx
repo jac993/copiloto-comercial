@@ -122,6 +122,7 @@ interface TabHistorialProps {
   interacciones: Interaccion[];
   empresaId: string;
   contactos: Contacto[];
+  conversacionPausadaAt: string | null;
 }
 
 interface Hilo {
@@ -160,8 +161,9 @@ interface EditMsgState {
 
 // ── Main component ────────────────────────────────────────────
 
-export function TabHistorial({ interacciones: inicial, empresaId, contactos }: TabHistorialProps) {
+export function TabHistorial({ interacciones: inicial, empresaId, contactos, conversacionPausadaAt: pausadaAtInit }: TabHistorialProps) {
   const [lista, setLista] = useState<Interaccion[]>(inicial);
+  const [pausadaAt, setPausadaAt] = useState<string | null>(pausadaAtInit);
   const [confirmandoHilo, setConfirmandoHilo] = useState<{ ids: string[]; count: number } | null>(null);
   const [eliminandoIds, setEliminandoIds] = useState<Set<string>>(new Set());
   const [analizandoId, setAnalizandoId] = useState<string | null>(null);
@@ -429,6 +431,8 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
             analizandoId={analizandoId}
             now={now}
             empresaId={empresaId}
+            pausadaAt={pausadaAt}
+            onPausaToggle={setPausadaAt}
             onEliminar={() => setConfirmandoHilo({ ids: hilo.todosLosIds, count: hilo.todosLosIds.length })}
             onEliminarHiloDirecto={() => void eliminarHiloDirecto(hilo.todosLosIds)}
             onAgregarRespuesta={agregarRespuesta}
@@ -510,6 +514,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos }: T
 
 function TarjetaHilo({
   hilo, contactos, eliminandoIds, analizandoId, now, empresaId,
+  pausadaAt, onPausaToggle,
   onEliminar, onEliminarHiloDirecto, onAgregarRespuesta, onAnalizar,
   onMensajeAgregado, onMensajeEliminado, onInteraccionActualizada,
 }: {
@@ -519,6 +524,8 @@ function TarjetaHilo({
   analizandoId: string | null;
   now: number;
   empresaId: string;
+  pausadaAt: string | null;
+  onPausaToggle: (v: string | null) => void;
   onEliminar: () => void;
   onEliminarHiloDirecto: () => void;
   onAgregarRespuesta: (padre: Interaccion, texto: string, sent: SentimientoInteraccion) => Promise<void>;
@@ -547,6 +554,7 @@ function TarjetaHilo({
   const [recTexto, setRecTexto] = useState("");
   const [guardandoRec, setGuardandoRec] = useState(false);
   const [recGuardado, setRecGuardado] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1166,6 +1174,39 @@ function TarjetaHilo({
               </div>
             )}
           </div>
+          )}
+
+          {/* ── Botón pausar conversación ── */}
+          {hilo.tipo !== "llamada" && (
+            <div className="px-4 py-2 border-t border-border/40">
+              <button
+                onClick={async () => {
+                  setToggling(true);
+                  try {
+                    const pausar = !pausadaAt;
+                    const res = await fetch(`/api/empresas/${empresaId}/pausar`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ pausar }),
+                    });
+                    if (res.ok) onPausaToggle(pausar ? new Date().toISOString() : null);
+                  } finally {
+                    setToggling(false);
+                  }
+                }}
+                disabled={toggling}
+                className={`flex items-center gap-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  pausadaAt
+                    ? "text-amber-600 dark:text-amber-400 hover:text-amber-700"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {toggling
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <span>{pausadaAt ? "▶" : "⏸"}</span>}
+                {pausadaAt ? "Conversación pausada — reactivar" : "Pausar conversación"}
+              </button>
+            </div>
           )}
 
           {/* ── Barra de acciones ── */}

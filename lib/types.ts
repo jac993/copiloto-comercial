@@ -308,6 +308,7 @@ export interface Empresa {
   meddic: MeddicData | null;
   razon_perdido: string | null;
   fecha_reactivacion: string | null;
+  conversacion_pausada_at: string | null; // ISO timestamp — null = activa
   busqueda_web_raw: BusquedaWebRaw | null;
   busqueda_web_analisis: AnalisisWeb | null;
   creado_en: string;

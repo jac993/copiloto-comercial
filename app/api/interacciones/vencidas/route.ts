@@ -19,9 +19,10 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("interacciones")
-    .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id, empresas(nombre)")
+    .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id, empresas(nombre, conversacion_pausada_at)")
     .in("tipo", ["whatsapp", "email", "linkedin"])
     .eq("resuelta", false)
+    .is("empresas.conversacion_pausada_at", null)
     .lt("fecha", limite48h)
     .gt("fecha", limite7d)
     .order("fecha", { ascending: false });
