@@ -102,7 +102,7 @@ export function HoyClient() {
   const [errorPrioridades, setErrorPrioridades] = useState<string | null>(null);
   const [cacheTimestamp, setCacheTimestamp] = useState<string | null>(null);
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
-  const [filtroTareas, setFiltroTareas] = useState<"hoy" | "7d" | "todas">("7d");
+  const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "hoy" | "7d" | "todas">("7d");
   const [dialogReporte, setDialogReporte] = useState(false);
   const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
   const [guardandoReporte, setGuardandoReporte] = useState(false);
@@ -236,12 +236,15 @@ export function HoyClient() {
 
   const hoyStr = new Date().toISOString().split("T")[0];
   const en7dias = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
-  const tareas = (metricas?.tareas_pendientes ?? [])
-    .filter((t) => {
-      if (filtroTareas === "hoy")  return t.proximo_paso_fecha <= hoyStr;
-      if (filtroTareas === "7d")   return t.proximo_paso_fecha <= en7dias;
-      return true;
-    });
+  const todasTareas = metricas?.tareas_pendientes ?? [];
+  const tareas = todasTareas.filter((t) => {
+    if (filtroTareas === "vencidas") return t.proximo_paso_fecha < hoyStr;
+    if (filtroTareas === "hoy")      return t.proximo_paso_fecha === hoyStr;
+    if (filtroTareas === "7d")       return t.proximo_paso_fecha <= en7dias;
+    return true;
+  });
+  const countVencidas = todasTareas.filter((t) => t.proximo_paso_fecha < hoyStr).length;
+  const countHoy      = todasTareas.filter((t) => t.proximo_paso_fecha === hoyStr).length;
 
   const contactos = metricas?.contactos_hoy ?? 0;
   const meta = metricas?.meta ?? 5;
@@ -368,24 +371,62 @@ export function HoyClient() {
               </span>
             </div>
             {/* Selector de filtro */}
-            <div className="flex gap-1.5 mb-3">
-              {(["hoy", "7d", "todas"] as const).map((id) => {
-                const label = id === "hoy" ? "Hoy y vencidas" : id === "7d" ? "7 días" : "Todas";
-                const activo = filtroTareas === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setFiltroTareas(id)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                      activo
-                        ? "bg-primary text-white border-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+            <div className="flex gap-1.5 mb-3 flex-wrap">
+              {/* Vencidas — rojo si hay, gris si no */}
+              <button
+                onClick={() => setFiltroTareas("vencidas")}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  filtroTareas === "vencidas"
+                    ? countVencidas > 0
+                      ? "bg-red-600 text-white border-red-600"
+                      : "bg-primary text-white border-primary"
+                    : countVencidas > 0
+                      ? "bg-red-50 text-red-600 border-red-300 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                Vencidas{countVencidas > 0 ? ` (${countVencidas})` : ""}
+              </button>
+
+              {/* Hoy — verde si hay, gris si no */}
+              <button
+                onClick={() => setFiltroTareas("hoy")}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  filtroTareas === "hoy"
+                    ? countHoy > 0
+                      ? "bg-green-600 text-white border-green-600"
+                      : "bg-primary text-white border-primary"
+                    : countHoy > 0
+                      ? "bg-green-50 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                Hoy{countHoy > 0 ? ` (${countHoy})` : ""}
+              </button>
+
+              {/* 7 días */}
+              <button
+                onClick={() => setFiltroTareas("7d")}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  filtroTareas === "7d"
+                    ? "bg-primary text-white border-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                7 días
+              </button>
+
+              {/* Todas */}
+              <button
+                onClick={() => setFiltroTareas("todas")}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  filtroTareas === "todas"
+                    ? "bg-primary text-white border-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                Todas
+              </button>
             </div>
             <div className="space-y-2">
               {tareas.map((t) => (
