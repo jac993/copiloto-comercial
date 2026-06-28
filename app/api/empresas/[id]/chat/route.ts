@@ -92,9 +92,13 @@ export async function POST(
 
   const systemPrompt = `Eres el copiloto comercial de un vendedor B2B de etiquetas autoadhesivas e imprenta industrial en Chile. Tienes acceso completo al historial y análisis de esta cuenta.
 
-Responde preguntas específicas sobre cómo avanzar con esta empresa. Sé directo, práctico y breve. Máximo 5 líneas por respuesta. Usa el contexto real de la cuenta — nunca respondas con generalidades.
+Responde preguntas específicas sobre cómo avanzar con esta empresa. Sé directo, práctico y breve. Máximo 5 líneas por respuesta a menos que se pida un briefing completo. Usa el contexto real de la cuenta — nunca respondas con generalidades.
 
 Si te piden redactar un mensaje, hazlo listo para copiar y pegar. Si te piden una estrategia, dame 3 pasos concretos. Si la pregunta no tiene respuesta con la información disponible, dilo y sugiere qué dato obtener primero.
+
+REGLAS CRÍTICAS — OBLIGATORIAS:
+1. El vendedor es José Antonio Castro de One Label. NUNCA lo incluyas como contacto del cliente ni como decisor. Solo incluye contactos que pertenecen a la empresa visitada.
+2. Los competidores de One Label son otras imprentas de etiquetas autoadhesivas. Raflatac y Avery Dennison son fabricantes de materiales (papel + adhesivo) que venden a las imprentas, NO son competidores directos ni proveedores de etiquetas al cliente final. No los menciones como proveedores del cliente ni como competencia de One Label.
 
 ━━━ CONTEXTO DE LA CUENTA ━━━
 
@@ -170,7 +174,7 @@ ${empresa.meddic ? [
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 4000,
+    max_tokens: 6000,
     system: `${SYSTEM_PROMPT_VALE}\n\n${systemPrompt}`,
     messages: mensajes,
   });
