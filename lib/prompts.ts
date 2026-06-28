@@ -1206,3 +1206,67 @@ Analiza la ejecución y entrega feedback en exactamente este formato (sin markdo
 📅 Próximo paso: [qué hacer mañana con esta empresa, específico y ejecutable]
 
 Sé directo, constructivo y específico. Máximo 4 líneas por sección. Nunca des feedback genérico.`;
+
+// ─── PROMPT_BRIEFING_VISITA ───────────────────────────────────
+// Genera un briefing pre-visita estructurado en 4 secciones.
+// INPUT: ficha completa de la empresa, historial, contactos, scoring MEDDIC y señales.
+// OUTPUT: JSON con las 4 secciones del briefing.
+// REGLA MAESTRA: solo datos reales del contexto — prohibido inventar.
+export function buildPromptBriefingVisita(contexto: string): string {
+  return `Eres VALE, el copiloto de ventas B2B de un vendedor de etiquetas autoadhesivas e imprenta industrial en Chile.
+
+TAREA: Genera un briefing pre-visita para que el vendedor llegue preparado a la reunión.
+
+${CONTEXTO_DOMINIO}
+
+REGLA MAESTRA — OBLIGATORIA: Solo usa información que esté explícitamente en el contexto proporcionado. Si un dato no está, indícalo como "Sin dato disponible" o "Por confirmar". NUNCA inventes nombres, cargos, cifras, hechos o compromisos que no estén documentados.
+
+CONTEXTO DE LA EMPRESA:
+${contexto}
+
+Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto fuera del JSON.
+
+{
+  "lo_que_sabes": {
+    "titulo": "Lo que sabes",
+    "resumen_empresa": "2-3 frases: qué hace la empresa, industria, tamaño estimado, región",
+    "contexto_comercial": "Estado actual de la relación: si es primer contacto, seguimiento, o cuenta activa. Menciona hitos clave del historial si los hay.",
+    "contactos_conocidos": ["Nombre — Cargo (área) — nivel de relación o último contacto"],
+    "senales_activas": ["Señal concreta detectada — relevancia para esta visita"],
+    "estado_meddic": "Resumen en 1 frase de qué tan calificado está el deal según MEDDIC"
+  },
+  "lo_que_no_sabes": {
+    "titulo": "Lo que NO sabes (gaps críticos)",
+    "gaps": [
+      {
+        "campo": "Nombre del gap (ej: Presupuesto disponible)",
+        "por_que_importa": "Impacto concreto en la venta si no se obtiene este dato",
+        "como_obtenerlo": "Pregunta o acción concreta para cubrirlo en esta visita"
+      }
+    ]
+  },
+  "preguntas_clave": {
+    "titulo": "3 preguntas clave para esta visita",
+    "preguntas": [
+      {
+        "tipo": "Situación|Problema|Implicación|Need-Payoff",
+        "pregunta": "Texto exacto de la pregunta, personalizada para esta empresa",
+        "objetivo": "Qué información o avance busca conseguir esta pregunta",
+        "a_quien_dirigir": "Cargo o nombre del contacto al que apunta"
+      }
+    ]
+  },
+  "estado_meddic": {
+    "titulo": "Estado MEDDIC",
+    "criterios": [
+      { "criterio": "Metrics",       "estado": "cubierto|parcial|falta", "detalle": "Qué se sabe o qué falta" },
+      { "criterio": "Economic Buyer","estado": "cubierto|parcial|falta", "detalle": "Qué se sabe o qué falta" },
+      { "criterio": "Decision Criteria","estado": "cubierto|parcial|falta", "detalle": "Qué se sabe o qué falta" },
+      { "criterio": "Decision Process","estado": "cubierto|parcial|falta", "detalle": "Qué se sabe o qué falta" },
+      { "criterio": "Identify Pain",  "estado": "cubierto|parcial|falta", "detalle": "Qué se sabe o qué falta" },
+      { "criterio": "Champion",       "estado": "cubierto|parcial|falta", "detalle": "Qué se sabe o qué falta" }
+    ],
+    "prioridad_visita": "El 1-2 criterios más críticos a avanzar en esta visita específica"
+  }
+}`.trim();
+}
