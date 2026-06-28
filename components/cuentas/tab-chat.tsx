@@ -11,6 +11,7 @@ import { Send, Trash2, Bot, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChatEmpresa } from "@/lib/types";
+import ReactMarkdown from "react-markdown";
 
 interface TabChatProps {
   empresaId: string;
@@ -254,8 +255,12 @@ function ParMensajes({
               <div className="h-3 bg-muted-foreground/20 rounded-full animate-pulse w-2/3" />
             </div>
           ) : (
-            <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
-              {item.respuesta}
+            <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none
+              prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1
+              prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5
+              prose-table:text-xs prose-td:px-2 prose-td:py-1 prose-th:px-2 prose-th:py-1
+              prose-hr:my-2">
+              <ReactMarkdown>{item.respuesta}</ReactMarkdown>
             </div>
           )}
         </div>
