@@ -11,6 +11,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { getEmpresaCompleta, getHistorialResumido } from "@/lib/queries";
 import { buildPromptBriefingVisita, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
+import { extraerJsonSeguro } from "@/lib/json-parser";
 
 export const maxDuration = 60;
 
@@ -150,13 +151,10 @@ ${historial}
 
   const raw = message.content[0]?.type === "text" ? message.content[0].text : "";
 
-  // Limpiar posible bloque markdown ```json ... ```
-  const jsonStr = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  console.log("[briefing-visita] raw Claude response (primeros 500 chars):", raw.substring(0, 500));
 
-  let briefing: BriefingVisita;
-  try {
-    briefing = JSON.parse(jsonStr) as BriefingVisita;
-  } catch {
+  const briefing = extraerJsonSeguro<BriefingVisita>(raw);
+  if (!briefing) {
     return NextResponse.json(
       { error: "Error al parsear la respuesta de la IA", raw },
       { status: 500 }
