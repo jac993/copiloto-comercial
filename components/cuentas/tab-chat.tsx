@@ -18,11 +18,17 @@ interface TabChatProps {
 }
 
 const PREGUNTAS_RAPIDAS = [
+  "🎯 Prepararme para visita",
   "¿Cuál es mi mejor ángulo de entrada ahora?",
   "¿Vale la pena seguir con esta cuenta?",
   "¿Cómo manejo la objeción de precio?",
   "¿Qué haría diferente en la próxima llamada?",
 ];
+
+const PREGUNTA_MENSAJE: Record<string, string> = {
+  "🎯 Prepararme para visita":
+    "Voy a visitar esta empresa. Dame un briefing completo con: (1) lo que sé de ellos, (2) los gaps de información que tengo, (3) 3 preguntas SPIN concretas para esta visita basadas en su situación real, y (4) qué criterios MEDDIC me faltan cubrir.",
+};
 
 function fechaHora(isoStr: string): string {
   return new Intl.DateTimeFormat("es-CL", {
@@ -283,7 +289,7 @@ function EstadoVacio({
         {PREGUNTAS_RAPIDAS.map((p) => (
           <button
             key={p}
-            onClick={() => onPregunta(p)}
+            onClick={() => onPregunta(PREGUNTA_MENSAJE[p] ?? p)}
             className="w-full text-left text-xs px-3.5 py-2.5 rounded-xl border border-border
               hover:border-primary/40 hover:bg-primary/5 transition-all active:scale-[0.98]"
           >

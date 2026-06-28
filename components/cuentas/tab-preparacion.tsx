@@ -4,7 +4,6 @@ import { useState, useMemo, useRef } from "react";
 import {
   Copy, CheckCheck, HelpCircle, Clock, MessageSquare,
   Zap, Loader2, Mail, ExternalLink, AlertCircle, User, RefreshCw, Phone,
-  Target, ChevronDown, ChevronUp, CheckCircle2, Circle, MinusCircle,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { FichaIA, Interaccion, Compromiso, Contacto, BorradoresGuardados, BorradorCanal } from "@/lib/types";
 import type { CanalBorrador, BorradorCanalResult, TipoBorrador } from "@/app/api/preparacion/route";
-import type { BriefingVisita } from "@/app/api/empresas/[id]/briefing-visita/route";
 
 // ─── Tipos internos ───────────────────────────────────────────
 
@@ -253,29 +251,6 @@ export function TabPreparacion({
   >({});
   const [abiertos, setAbiertos] = useState<Record<string, CanalBorrador | undefined>>({});
 
-  // Estado del briefing pre-visita
-  const [briefing, setBriefing] = useState<BriefingVisita | null>(null);
-  const [cargandoBriefing, setCargandoBriefing] = useState(false);
-  const [errorBriefing, setErrorBriefing] = useState<string | null>(null);
-  const [briefingExpandido, setBriefingExpandido] = useState(true);
-
-  const generarBriefing = async () => {
-    setCargandoBriefing(true);
-    setErrorBriefing(null);
-    setBriefing(null);
-    setBriefingExpandido(true);
-    try {
-      const res = await fetch(`/api/empresas/${empresaId}/briefing-visita`, { method: "POST" });
-      const data = (await res.json()) as { ok: boolean; briefing?: BriefingVisita; error?: string };
-      if (!data.ok || !data.briefing) throw new Error(data.error ?? "Error al generar el briefing");
-      setBriefing(data.briefing);
-    } catch (e) {
-      setErrorBriefing(e instanceof Error ? e.message : "Error desconocido");
-    } finally {
-      setCargandoBriefing(false);
-    }
-  };
-
   // Persiste un borrador en Supabase (fire and forget)
   const guardarEnSupabase = (clave: string, canal: CanalBorrador, canalData: BorradorCanal) => {
     borradoresRef.current = {
@@ -409,169 +384,6 @@ export function TabPreparacion({
 
   return (
     <div className="space-y-4 pb-6">
-      {/* ── Botón y panel de Briefing pre-visita ──────────────── */}
-      <div>
-        <Button
-          onClick={() => void generarBriefing()}
-          disabled={cargandoBriefing}
-          className="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-semibold h-12 text-base rounded-xl gap-2"
-        >
-          {cargandoBriefing ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Preparando briefing...
-            </>
-          ) : (
-            <>
-              <Target className="h-4 w-4" />
-              🎯 Prepararme para visita
-              <span className="ml-1 text-xs bg-white/20 rounded px-1.5 py-0.5 font-normal">⚡ usa IA</span>
-            </>
-          )}
-        </Button>
-
-        {errorBriefing && (
-          <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30">
-            <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-red-700 dark:text-red-400">{errorBriefing}</p>
-              <button
-                onClick={() => void generarBriefing()}
-                className="mt-1 text-xs text-red-600 underline"
-              >
-                Reintentar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {briefing && (
-          <div className="mt-3 rounded-2xl border border-[#7C3AED]/20 bg-[#EDE9FE]/30 dark:bg-violet-900/10 overflow-hidden">
-            {/* Encabezado colapsable */}
-            <button
-              onClick={() => setBriefingExpandido((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left"
-            >
-              <span className="text-sm font-semibold text-[#7C3AED] dark:text-violet-300 flex items-center gap-2">
-                <Target className="h-4 w-4" />
-                Briefing pre-visita
-              </span>
-              {briefingExpandido ? (
-                <ChevronUp className="h-4 w-4 text-[#7C3AED]" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-[#7C3AED]" />
-              )}
-            </button>
-
-            {briefingExpandido && (
-              <div className="px-4 pb-4 space-y-4 border-t border-[#7C3AED]/10">
-
-                {/* Sección 1 — Lo que sabes */}
-                <div className="pt-3">
-                  <p className="text-xs font-semibold text-[#7C3AED] uppercase tracking-wide mb-2">
-                    {briefing.lo_que_sabes.titulo}
-                  </p>
-                  <div className="space-y-1.5 text-sm text-foreground/90">
-                    <p>{briefing.lo_que_sabes.resumen_empresa}</p>
-                    <p className="text-muted-foreground">{briefing.lo_que_sabes.contexto_comercial}</p>
-                    {briefing.lo_que_sabes.contactos_conocidos.length > 0 && (
-                      <ul className="mt-1 space-y-0.5">
-                        {briefing.lo_que_sabes.contactos_conocidos.map((c, i) => (
-                          <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                            <User className="h-3 w-3 shrink-0 mt-0.5 text-[#7C3AED]" />
-                            {c}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {briefing.lo_que_sabes.senales_activas.length > 0 && (
-                      <ul className="mt-1 space-y-0.5">
-                        {briefing.lo_que_sabes.senales_activas.map((s, i) => (
-                          <li key={i} className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
-                            <span className="shrink-0">⚡</span>
-                            {s}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="text-xs text-muted-foreground italic">{briefing.lo_que_sabes.estado_meddic}</p>
-                  </div>
-                </div>
-
-                {/* Sección 2 — Lo que NO sabes */}
-                <div className="pt-1">
-                  <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wide mb-2">
-                    {briefing.lo_que_no_sabes.titulo}
-                  </p>
-                  <div className="space-y-2">
-                    {briefing.lo_que_no_sabes.gaps.map((gap, i) => (
-                      <div key={i} className="rounded-xl border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-900/10 p-3">
-                        <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-0.5">{gap.campo}</p>
-                        <p className="text-xs text-muted-foreground mb-1">{gap.por_que_importa}</p>
-                        <p className="text-xs text-red-600 dark:text-red-400 font-medium">→ {gap.como_obtenerlo}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Sección 3 — 3 preguntas clave */}
-                <div className="pt-1">
-                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-2">
-                    {briefing.preguntas_clave.titulo}
-                  </p>
-                  <div className="space-y-2">
-                    {briefing.preguntas_clave.preguntas.map((p, i) => (
-                      <div key={i} className="rounded-xl border border-amber-200 dark:border-amber-800/30 bg-amber-50/50 dark:bg-amber-900/10 p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full px-2 py-0.5 font-medium">
-                            {p.tipo}
-                          </span>
-                          <span className="text-xs text-muted-foreground">→ {p.a_quien_dirigir}</span>
-                        </div>
-                        <p className="text-sm font-medium text-foreground mb-0.5">&ldquo;{p.pregunta}&rdquo;</p>
-                        <p className="text-xs text-muted-foreground">{p.objetivo}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Sección 4 — Estado MEDDIC */}
-                <div className="pt-1">
-                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide mb-2">
-                    {briefing.estado_meddic.titulo}
-                  </p>
-                  <div className="space-y-1.5">
-                    {briefing.estado_meddic.criterios.map((c, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs">
-                        {c.estado === "cubierto" ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
-                        ) : c.estado === "parcial" ? (
-                          <MinusCircle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-                        ) : (
-                          <Circle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
-                        )}
-                        <div>
-                          <span className="font-semibold text-foreground">{c.criterio}: </span>
-                          <span className="text-muted-foreground">{c.detalle}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {briefing.estado_meddic.prioridad_visita && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30">
-                      <p className="text-xs text-green-700 dark:text-green-400 font-medium">
-                        🎯 Prioridad para esta visita: {briefing.estado_meddic.prioridad_visita}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {/* ── Preguntas SPIN ─────────────────────────────────────── */}
       <div>
         <div className="flex items-center gap-1.5 mb-2 px-1">
