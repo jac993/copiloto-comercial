@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChatEmpresa } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface TabChatProps {
   empresaId: string;
@@ -257,6 +258,7 @@ function ParMensajes({
           ) : (
             <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed">
               <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 components={{
                   h1: ({ children }) => <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">{children}</p>,
                   h2: ({ children }) => <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">{children}</p>,

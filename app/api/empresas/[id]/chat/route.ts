@@ -170,7 +170,7 @@ ${empresa.meddic ? [
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 800,
+    max_tokens: 4000,
     system: `${SYSTEM_PROMPT_VALE}\n\n${systemPrompt}`,
     messages: mensajes,
   });
