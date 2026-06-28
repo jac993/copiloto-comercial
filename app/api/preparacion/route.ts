@@ -140,11 +140,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Canal inválido: ${canal}` }, { status: 400 });
     }
 
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
     // Cargar contexto completo desde Supabase en paralelo
-    const [empresa, historialTexto] = await Promise.all([
+    const [empresa, historialTexto, feedbackRows] = await Promise.all([
       getEmpresaCompleta(empresaId),
       getHistorialResumido(empresaId),
+      // Ejemplos aprobados por el vendedor para este canal — few-shot
+      supabase
+        .from("borradores_feedback")
+        .select("canal, tipo_borrador, borrador_ia, version_vendedor, notas")
+        .eq("evaluacion", "positivo")
+        .eq("canal", canal)
+        .order("creado_en", { ascending: false })
+        .limit(5)
+        .then((r) => r.data ?? []),
     ]);
+
+    // Bloque few-shot: muestra el texto que el vendedor aprobó (su versión editada si existe)
+    const ejemplosAprobados = feedbackRows.length > 0
+      ? `\n\n## Ejemplos de mensajes aprobados por el vendedor\n\nEstos son mensajes reales que el vendedor aprobó para el canal ${canal}. Tómalos como referencia de tono, extensión y estilo:\n\n` +
+        feedbackRows.map((f, i) => {
+          const tipo = f.tipo_borrador ? ` (${f.tipo_borrador})` : "";
+          const texto = (f.version_vendedor?.trim() || f.borrador_ia?.trim()) ?? "";
+          const nota = f.notas?.trim() ? `\n  Nota del vendedor: "${f.notas.trim()}"` : "";
+          return `Ejemplo ${i + 1}${tipo}:\n"${texto}"${nota}`;
+        }).join("\n\n")
+      : "";
 
     // Casos reales relevantes por sector — se cargan después de tener la empresa
     const casosRelevantes = empresa
@@ -224,15 +249,12 @@ ${casosRelevantes.length > 0
       `- Sector: ${c.sector} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Resultado: ${c.resultado}`
     ).join("\n")
   : "Sin casos documentados aún — no inventar referencias."}
+${ejemplosAprobados}
 `.trim();
 
     // DEBUG TEMPORAL — insertar en debug_logs para inspeccionar desde Supabase
     if (canal !== "llamada") {
-      const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
-      await supabaseAdmin.from('debug_logs').insert({
+      await supabase.from('debug_logs').insert({
         endpoint: 'preparacion',
         empresa_id: empresaId,
         datos: {
@@ -266,7 +288,9 @@ ${casosRelevantes.length > 0
       ? `${SYSTEM_PROMPT_VALE}\n\n${buildPromptBorradorCanal("llamada")}`
       : SYSTEM_PROMPT_VALE;
 
-    const userMessage = canal === "llamada" ? contextoLlamada : (promptBorradores ?? "");
+    const userMessage = canal === "llamada"
+      ? contextoLlamada
+      : (promptBorradores ?? "") + ejemplosAprobados;
 
     const client = new Anthropic();
     const response = await client.messages.create({
