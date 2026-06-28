@@ -255,12 +255,22 @@ function ParMensajes({
               <div className="h-3 bg-muted-foreground/20 rounded-full animate-pulse w-2/3" />
             </div>
           ) : (
-            <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none
-              prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1
-              prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5
-              prose-table:text-xs prose-td:px-2 prose-td:py-1 prose-th:px-2 prose-th:py-1
-              prose-hr:my-2">
-              <ReactMarkdown>{item.respuesta}</ReactMarkdown>
+            <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed">
+              <ReactMarkdown
+                components={{
+                  h1: ({ children }) => <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">{children}</p>,
+                  h2: ({ children }) => <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">{children}</p>,
+                  h3: ({ children }) => <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-2 mb-1">{children}</p>,
+                  hr: () => null,
+                  table: ({ children }) => <table className="text-xs w-full border-collapse my-2">{children}</table>,
+                  th: ({ children }) => <th className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-semibold bg-gray-50 dark:bg-gray-800 text-left">{children}</th>,
+                  td: ({ children }) => <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs">{children}</td>,
+                  p: ({ children }) => <p className="my-1">{children}</p>,
+                  ul: ({ children }) => <ul className="my-1 ml-4 list-disc space-y-0.5">{children}</ul>,
+                  ol: ({ children }) => <ol className="my-1 ml-4 list-decimal space-y-0.5">{children}</ol>,
+                  li: ({ children }) => <li className="text-sm">{children}</li>,
+                }}
+              >{item.respuesta}</ReactMarkdown>
             </div>
           )}
         </div>
