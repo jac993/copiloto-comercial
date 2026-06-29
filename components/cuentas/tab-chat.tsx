@@ -7,7 +7,7 @@
 // =============================================================
 
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
-import { Send, Trash2, Bot, User, Loader2 } from "lucide-react";
+import { Send, Bot, User, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChatEmpresa } from "@/lib/types";
@@ -125,30 +125,16 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
     }
   };
 
-  const limpiar = () => {
-    if (!confirm("¿Limpiar la conversación de esta sesión?")) return;
-    setHistorial([]);
-    inputRef.current?.focus();
-  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-280px)] min-h-[400px] pb-4">
       {/* Barra superior */}
-      <div className="flex items-center justify-between mb-3 px-1">
+      <div className="flex items-center mb-3 px-1">
         <p className="text-xs text-muted-foreground">
           Contexto de{" "}
           <span className="font-medium text-foreground">{empresaNombre}</span>{" "}
           cargado · historial guardado
         </p>
-        {historial.length > 0 && (
-          <button
-            onClick={limpiar}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
-          >
-            <Trash2 className="h-3 w-3" />
-            Limpiar chat
-          </button>
-        )}
       </div>
 
       {/* Área de mensajes */}
@@ -161,7 +147,12 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
           <EstadoVacio empresaNombre={empresaNombre} onPregunta={enviar} />
         ) : (
           historial.map((item) => (
-            <ParMensajes key={item.id} item={item} cargando={!item.respuesta && cargando} />
+            <ParMensajes
+              key={item.id}
+              item={item}
+              cargando={!item.respuesta && cargando}
+              onEliminar={() => setHistorial((prev) => prev.filter((m) => m.id !== item.id))}
+            />
           ))
         )}
 
@@ -210,9 +201,11 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
 function ParMensajes({
   item,
   cargando,
+  onEliminar,
 }: {
   item: ChatEmpresa;
   cargando: boolean;
+  onEliminar: () => void;
 }) {
   return (
     <div className="space-y-2">
@@ -236,7 +229,7 @@ function ParMensajes({
         <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
           <Bot className="h-3.5 w-3.5 text-muted-foreground" />
         </div>
-        <div className="max-w-[82%]">
+        <div className="max-w-[82%] relative group">
           {cargando || !item.respuesta ? (
             <div className="bg-muted rounded-2xl rounded-tl-sm px-3.5 py-3 space-y-1.5">
               <div className="h-3 bg-muted-foreground/20 rounded-full animate-pulse w-3/4" />
@@ -244,6 +237,14 @@ function ParMensajes({
               <div className="h-3 bg-muted-foreground/20 rounded-full animate-pulse w-2/3" />
             </div>
           ) : (
+            <>
+              <button
+                onClick={onEliminar}
+                className="absolute -top-2 -right-2 z-10 h-5 w-5 rounded-full bg-muted-foreground/20 hover:bg-muted-foreground/40 text-muted-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Eliminar mensaje"
+              >
+                <X className="h-3 w-3" />
+              </button>
             <div className="bg-muted text-foreground rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -262,6 +263,7 @@ function ParMensajes({
                 }}
               >{item.respuesta}</ReactMarkdown>
             </div>
+            </>
           )}
         </div>
       </div>
