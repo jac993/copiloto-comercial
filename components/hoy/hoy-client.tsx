@@ -12,7 +12,7 @@ import Link from "next/link";
 import {
   Sun, Zap, Target, TrendingUp, RefreshCw,
   ChevronRight, Building2, AlertCircle, CheckCircle2,
-  XCircle, MinusCircle, ClipboardCheck, Loader2,
+  XCircle, MinusCircle, ClipboardCheck, Loader2, Pencil,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -435,6 +435,18 @@ export function HoyClient() {
                   tarea={t}
                   marcando={marcandoId === t.id}
                   onMarcar={() => marcarHecha(t.id)}
+                  onFechaChange={(nuevaFecha) =>
+                    setMetricas((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            tareas_pendientes: prev.tareas_pendientes.map((x) =>
+                              x.id === t.id ? { ...x, proximo_paso_fecha: nuevaFecha } : x
+                            ),
+                          }
+                        : prev
+                    )
+                  }
                 />
               ))}
               {tareas.length === 0 && (
@@ -885,7 +897,6 @@ function formatearVencimiento(fechaIso: string): { texto: string; color: string 
   const hoyStr = new Date().toISOString().split("T")[0];
   const mananaStr = new Date(Date.now() + 86400000).toISOString().split("T")[0];
 
-  // Extraer parte de fecha y hora del valor ISO (puede ser YYYY-MM-DD o YYYY-MM-DDTHH:MM...)
   const soloFecha = fechaIso.split("T")[0];
   const tieneHora = fechaIso.includes("T");
   const horaStr = tieneHora
@@ -896,31 +907,62 @@ function formatearVencimiento(fechaIso: string): { texto: string; color: string 
   const vencida = soloFecha < hoyStr;
   const esHoy = soloFecha === hoyStr;
   const esManana = soloFecha === mananaStr;
-
-  if (vencida) {
-    const label = new Date(soloFecha + "T12:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" });
-    return { texto: `Venció ${label}${sufijo}`, color: "text-red-600 dark:text-red-400" };
-  }
-  if (esHoy) return { texto: `Vence hoy${sufijo}`, color: "text-orange-500 dark:text-orange-400" };
-  if (esManana) return { texto: `Vence mañana${sufijo}`, color: "text-muted-foreground" };
-
   const label = new Date(soloFecha + "T12:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" });
-  return { texto: `Vence ${label}${sufijo}`, color: "text-muted-foreground" };
+
+  if (vencida)  return { texto: `Venció ${label}${sufijo}`,  color: "text-red-600 dark:text-red-400" };
+  if (esHoy)    return { texto: `Vence hoy ${label}${sufijo}`, color: "text-orange-500 dark:text-orange-400" };
+  if (esManana) return { texto: `Vence mañana ${label}${sufijo}`, color: "text-muted-foreground" };
+  return         { texto: `Vence ${label}${sufijo}`,          color: "text-muted-foreground" };
+}
+
+// Convierte ISO o YYYY-MM-DD al formato que acepta <input type="datetime-local">
+function toDatetimeLocal(fechaIso: string): string {
+  const soloFecha = fechaIso.split("T")[0];
+  if (!fechaIso.includes("T")) return `${soloFecha}T00:00`;
+  const d = new Date(fechaIso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${soloFecha}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function TareaCard({
   tarea,
   marcando,
   onMarcar,
+  onFechaChange,
 }: {
   tarea: TareaPendiente;
   marcando: boolean;
   onMarcar: () => void;
+  onFechaChange: (nuevaFecha: string) => void;
 }) {
   const hoy = new Date().toISOString().split("T")[0];
   const vencida = tarea.proximo_paso_fecha < hoy;
   const esHoy = tarea.proximo_paso_fecha.startsWith(hoy);
   const { texto: textoVencimiento, color: colorVencimiento } = formatearVencimiento(tarea.proximo_paso_fecha);
+
+  const [editando, setEditando] = useState(false);
+  const [inputVal, setInputVal] = useState(toDatetimeLocal(tarea.proximo_paso_fecha));
+  const [guardando, setGuardando] = useState(false);
+
+  const confirmarFecha = async () => {
+    if (!inputVal) return;
+    setGuardando(true);
+    try {
+      const iso = new Date(inputVal).toISOString();
+      const res = await fetch(`/api/interacciones/${tarea.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proximo_paso_fecha: iso }),
+      });
+      if (!res.ok) throw new Error("Error al guardar");
+      onFechaChange(iso);
+      setEditando(false);
+    } catch {
+      // mantener modo edición para que el usuario reintente
+    } finally {
+      setGuardando(false);
+    }
+  };
 
   return (
     <div className="rounded-2xl border border-border bg-card px-4 py-3 flex items-start gap-3">
@@ -947,7 +989,44 @@ function TareaCard({
           <p className="text-xs text-muted-foreground">👤 {tarea.contacto_nombre}</p>
         )}
         <p className="text-xs text-muted-foreground leading-snug">{tarea.proximo_paso}</p>
-        <p className={`text-xs mt-1 font-medium ${colorVencimiento}`}>{textoVencimiento}</p>
+
+        {/* Fecha de vencimiento + edición inline */}
+        {editando ? (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <input
+              type="datetime-local"
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void confirmarFecha(); if (e.key === "Escape") setEditando(false); }}
+              className="text-xs border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              autoFocus
+            />
+            <button
+              onClick={() => void confirmarFecha()}
+              disabled={guardando}
+              className="text-xs px-2 py-1 rounded-lg bg-primary text-white font-medium disabled:opacity-50"
+            >
+              {guardando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓"}
+            </button>
+            <button
+              onClick={() => setEditando(false)}
+              className="text-xs px-2 py-1 rounded-lg border border-border text-muted-foreground"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 mt-1">
+            <p className={`text-xs font-medium ${colorVencimiento}`}>{textoVencimiento}</p>
+            <button
+              onClick={() => { setInputVal(toDatetimeLocal(tarea.proximo_paso_fecha)); setEditando(true); }}
+              className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              title="Editar fecha"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
       <button
         onClick={onMarcar}
