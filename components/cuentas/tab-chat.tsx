@@ -46,7 +46,6 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
   const [input, setInput] = useState("");
   const [cargando, setCargando] = useState(false);
   const [cargandoHistorial, setCargandoHistorial] = useState(true);
-  const [limpiando, setLimpiando] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -126,16 +125,10 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
     }
   };
 
-  const limpiar = async () => {
-    if (!confirm("¿Borrar todo el historial de esta cuenta?")) return;
-    setLimpiando(true);
-    try {
-      await fetch(`/api/empresas/${empresaId}/chat`, { method: "DELETE" });
-      setHistorial([]);
-    } finally {
-      setLimpiando(false);
-      inputRef.current?.focus();
-    }
+  const limpiar = () => {
+    if (!confirm("¿Limpiar la conversación de esta sesión?")) return;
+    setHistorial([]);
+    inputRef.current?.focus();
   };
 
   return (
@@ -150,15 +143,10 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
         {historial.length > 0 && (
           <button
             onClick={limpiar}
-            disabled={limpiando}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors"
           >
-            {limpiando ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Trash2 className="h-3 w-3" />
-            )}
-            Limpiar
+            <Trash2 className="h-3 w-3" />
+            Limpiar chat
           </button>
         )}
       </div>
