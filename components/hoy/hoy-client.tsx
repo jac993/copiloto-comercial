@@ -915,6 +915,17 @@ function formatearVencimiento(fechaIso: string): { texto: string; color: string 
   return         { texto: `Vence ${label}${sufijo}`,          color: "text-muted-foreground" };
 }
 
+// Infiere hora sugerida a partir del texto de la tarea (sin IA, sin tildes)
+function inferirHoraSugerida(texto: string): string {
+  const t = texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/whatsapp|mensaje|escribir/.test(t))          return "09:00";
+  if (/llamar|llamada|telefono/.test(t))            return "10:30";
+  if (/correo|email|propuesta/.test(t))             return "12:00";
+  if (/reunion|visita|presencial/.test(t))          return "14:00";
+  if (/seguimiento|revisar|confirmar/.test(t))      return "16:00";
+  return "09:00";
+}
+
 // Convierte ISO o YYYY-MM-DD al formato que acepta <input type="datetime-local">
 function toDatetimeLocal(fechaIso: string): string {
   const soloFecha = fechaIso.split("T")[0];
@@ -1016,15 +1027,18 @@ function TareaCard({
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-1 mt-1">
-            <p className={`text-xs font-medium ${colorVencimiento}`}>{textoVencimiento}</p>
-            <button
-              onClick={() => { setInputVal(toDatetimeLocal(tarea.proximo_paso_fecha)); setEditando(true); }}
-              className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-              title="Editar fecha"
-            >
-              <Pencil className="h-3 w-3" />
-            </button>
+          <div className="mt-1 space-y-0.5">
+            <div className="flex items-center gap-1">
+              <p className={`text-xs font-medium ${colorVencimiento}`}>{textoVencimiento}</p>
+              <button
+                onClick={() => { setInputVal(toDatetimeLocal(tarea.proximo_paso_fecha)); setEditando(true); }}
+                className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                title="Editar fecha"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground/60">⏰ Hora sugerida: {inferirHoraSugerida(tarea.proximo_paso)}</p>
           </div>
         )}
       </div>
