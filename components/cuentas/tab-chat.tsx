@@ -151,7 +151,10 @@ export function TabChat({ empresaId, empresaNombre }: TabChatProps) {
               key={item.id}
               item={item}
               cargando={!item.respuesta && cargando}
-              onEliminar={() => setHistorial((prev) => prev.filter((m) => m.id !== item.id))}
+              onEliminar={() => {
+                setHistorial((prev) => prev.filter((m) => m.id !== item.id));
+                void fetch(`/api/chat-mensaje/${item.id}`, { method: "DELETE" });
+              }}
             />
           ))
         )}
