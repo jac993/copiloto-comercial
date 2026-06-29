@@ -881,6 +881,33 @@ function ResultadoBtn({
 
 // ── Tarjeta de tarea pendiente ───────────────────────────────
 
+function formatearVencimiento(fechaIso: string): { texto: string; color: string } {
+  const hoyStr = new Date().toISOString().split("T")[0];
+  const mananaStr = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+
+  // Extraer parte de fecha y hora del valor ISO (puede ser YYYY-MM-DD o YYYY-MM-DDTHH:MM...)
+  const soloFecha = fechaIso.split("T")[0];
+  const tieneHora = fechaIso.includes("T");
+  const horaStr = tieneHora
+    ? new Date(fechaIso).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : null;
+  const sufijo = horaStr ? ` ${horaStr}` : "";
+
+  const vencida = soloFecha < hoyStr;
+  const esHoy = soloFecha === hoyStr;
+  const esManana = soloFecha === mananaStr;
+
+  if (vencida) {
+    const label = new Date(soloFecha + "T12:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+    return { texto: `Venció ${label}${sufijo}`, color: "text-red-600 dark:text-red-400" };
+  }
+  if (esHoy) return { texto: `Vence hoy${sufijo}`, color: "text-orange-500 dark:text-orange-400" };
+  if (esManana) return { texto: `Vence mañana${sufijo}`, color: "text-muted-foreground" };
+
+  const label = new Date(soloFecha + "T12:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+  return { texto: `Vence ${label}${sufijo}`, color: "text-muted-foreground" };
+}
+
 function TareaCard({
   tarea,
   marcando,
@@ -892,12 +919,8 @@ function TareaCard({
 }) {
   const hoy = new Date().toISOString().split("T")[0];
   const vencida = tarea.proximo_paso_fecha < hoy;
-  const esHoy = tarea.proximo_paso_fecha === hoy;
-
-  const fechaCorta = new Date(tarea.proximo_paso_fecha + "T12:00:00").toLocaleDateString("es-CL", {
-    day: "numeric",
-    month: "short",
-  });
+  const esHoy = tarea.proximo_paso_fecha.startsWith(hoy);
+  const { texto: textoVencimiento, color: colorVencimiento } = formatearVencimiento(tarea.proximo_paso_fecha);
 
   return (
     <div className="rounded-2xl border border-border bg-card px-4 py-3 flex items-start gap-3">
@@ -911,10 +934,10 @@ function TareaCard({
           </Link>
           {vencida && (
             <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400 shrink-0">
-              Vencida · {fechaCorta}
+              Vencida
             </span>
           )}
-          {esHoy && (
+          {esHoy && !vencida && (
             <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 shrink-0">
               Hoy
             </span>
@@ -924,6 +947,7 @@ function TareaCard({
           <p className="text-xs text-muted-foreground">👤 {tarea.contacto_nombre}</p>
         )}
         <p className="text-xs text-muted-foreground leading-snug">{tarea.proximo_paso}</p>
+        <p className={`text-xs mt-1 font-medium ${colorVencimiento}`}>{textoVencimiento}</p>
       </div>
       <button
         onClick={onMarcar}
