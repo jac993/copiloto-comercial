@@ -42,7 +42,7 @@ const TIPO_TITULO: Record<TipoBorrador, string> = {
 };
 
 const TIPO_BADGE: Record<TipoBorrador, string> = {
-  apertura:     "bg-[#EDE9FE] text-[#7C3AED]",
+  apertura:     "bg-[#FFF7ED] text-[#F97316]",
   seguimiento:  "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
   continuacion: "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400",
   reactivacion: "bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400",
@@ -249,6 +249,14 @@ export function TabPreparacion({
   const [errores, setErrores] = useState<
     Record<string, Partial<Record<CanalBorrador, string>>>
   >({});
+  // Errores de validación de datos (no transitorios — requieren ejecutar Investigar primero)
+  const [erroresBloqueados, setErroresBloqueados] = useState<
+    Record<string, Partial<Record<CanalBorrador, { campos_faltantes: string[]; accion_recomendada: string }>>>
+  >({});
+  // Advertencias no bloqueantes (ej: área de contacto inferida, no confirmada)
+  const [advertenciasBorradores, setAdvertenciasBorradores] = useState<
+    Record<string, Partial<Record<CanalBorrador, string[]>>>
+  >({});
   const [abiertos, setAbiertos] = useState<Record<string, CanalBorrador | undefined>>({});
 
   // Persiste un borrador en Supabase (fire and forget)
@@ -285,13 +293,39 @@ export function TabPreparacion({
       console.log("[preparacion] fetch respondió HTTP", res.status);
 
       const data = (await res.json()) as {
-        ok: boolean;
+        ok?: boolean;
         borrador?: BorradorCanalResult;
         error?: string;
+        campos_faltantes?: string[];
+        accion_recomendada?: string;
+        advertencias?: string[];
       };
       console.log("[preparacion] data.ok:", data.ok, "canal borrador:", data.borrador?.canal, "error:", data.error);
 
+      // Error de validación de datos — no transitorio, requiere ejecutar Investigar primero
+      if (data.error === "datos_insuficientes") {
+        setErroresBloqueados((prev) => ({
+          ...prev,
+          [decisor.id]: {
+            ...(prev[decisor.id] ?? {}),
+            [canal]: {
+              campos_faltantes: data.campos_faltantes ?? [],
+              accion_recomendada: data.accion_recomendada ?? "Ejecutar 'Investigar' para esta empresa primero.",
+            },
+          },
+        }));
+        return;
+      }
+
       if (!data.ok || !data.borrador) throw new Error(data.error ?? "Error al generar");
+
+      // Advertencias de baja confianza (área inferida, etc.)
+      if (data.advertencias?.length) {
+        setAdvertenciasBorradores((prev) => ({
+          ...prev,
+          [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: data.advertencias! },
+        }));
+      }
 
       const borrador = data.borrador;
       setCache((prev) => ({
@@ -350,19 +384,27 @@ export function TabPreparacion({
     // Ya cacheado → solo mostrar
     if (cache[decisor.id]?.[canal]) return;
 
+    // Ya bloqueado por falta de datos → mostrar error sin nueva API call
+    if (erroresBloqueados[decisor.id]?.[canal]) return;
+
     // Otro canal ya cargando → esperar
     if (cargando[decisor.id] != null) return;
 
     await cargarBorrador(decisor, canal);
   };
 
-  // Reintentar tras error
+  // Reintentar tras error — limpia ambos tipos de error antes de reintentar
   const handleReintentar = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
     if (cargando[decisor.id] != null) return;
     setErrores((prev) => ({
       ...prev,
       [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: undefined },
     }));
+    setErroresBloqueados((prev) => {
+      const nuevo = { ...(prev[decisor.id] ?? {}) };
+      delete nuevo[canal];
+      return { ...prev, [decisor.id]: nuevo };
+    });
     await cargarBorrador(decisor, canal);
   };
 
@@ -375,6 +417,11 @@ export function TabPreparacion({
       return { ...prev, [decisor.id]: nuevo };
     });
     setFechas((prev) => {
+      const nuevo = { ...(prev[decisor.id] ?? {}) };
+      delete nuevo[canal];
+      return { ...prev, [decisor.id]: nuevo };
+    });
+    setErroresBloqueados((prev) => {
       const nuevo = { ...(prev[decisor.id] ?? {}) };
       delete nuevo[canal];
       return { ...prev, [decisor.id]: nuevo };
@@ -499,6 +546,8 @@ export function TabPreparacion({
               const canalAbierto = abiertos[d.id];
               const borradorActivo = canalAbierto ? cache[d.id]?.[canalAbierto] : undefined;
               const errorActivo = canalAbierto ? errores[d.id]?.[canalAbierto] : undefined;
+              const erroBloqueadoActivo = canalAbierto ? erroresBloqueados[d.id]?.[canalAbierto] : undefined;
+              const advertenciasActivas = canalAbierto ? advertenciasBorradores[d.id]?.[canalAbierto] : undefined;
               const fechaActiva = canalAbierto ? fechas[d.id]?.[canalAbierto] : undefined;
 
               return (
@@ -533,10 +582,10 @@ export function TabPreparacion({
                             className={cn(
                               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all min-h-[36px]",
                               estaAbierto
-                                ? "bg-[#7C3AED] text-white border-[#7C3AED]"
+                                ? "bg-[#F97316] text-white border-[#F97316]"
                                 : cached
-                                ? "border-[#7C3AED]/40 text-[#7C3AED] bg-[#7C3AED]/5 dark:bg-[#7C3AED]/10"
-                                : "border-border text-muted-foreground hover:border-[#7C3AED]/50 hover:text-foreground",
+                                ? "border-[#F97316]/40 text-[#F97316] bg-[#F97316]/5 dark:bg-[#F97316]/10"
+                                : "border-border text-muted-foreground hover:border-[#F97316]/50 hover:text-foreground",
                               otrosCargando && "opacity-40 cursor-not-allowed"
                             )}
                           >
@@ -559,8 +608,39 @@ export function TabPreparacion({
                       <div className="mt-3 border-t border-border pt-3">
                         {cargandoCanal === canalAbierto ? (
                           <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin text-[#7C3AED]" />
+                            <Loader2 className="h-4 w-4 animate-spin text-[#F97316]" />
                             <span>{canalAbierto === "llamada" ? "Preparando pitch telefónico..." : "Redactando con técnica SPIN..."}</span>
+                          </div>
+                        ) : erroBloqueadoActivo ? (
+                          // Error de datos insuficientes — no transitorio, no hay "Reintentar" automático
+                          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-900/10 dark:border-amber-800/30">
+                            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1.5">
+                                Datos insuficientes para generar un borrador confiable
+                              </p>
+                              {erroBloqueadoActivo.campos_faltantes.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {erroBloqueadoActivo.campos_faltantes.map((campo) => (
+                                    <span
+                                      key={campo}
+                                      className="text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-mono"
+                                    >
+                                      {campo}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <p className="text-xs text-amber-700 dark:text-amber-400 mb-2 leading-relaxed">
+                                {erroBloqueadoActivo.accion_recomendada}
+                              </p>
+                              <button
+                                onClick={() => handleReintentar(d, canalAbierto)}
+                                className="text-xs text-amber-700 dark:text-amber-400 underline underline-offset-2 opacity-70 hover:opacity-100 transition-opacity"
+                              >
+                                Reintentar (si ya ejecutaste Investigar)
+                              </button>
+                            </div>
                           </div>
                         ) : errorActivo ? (
                           <div className="flex items-start gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
@@ -571,7 +651,7 @@ export function TabPreparacion({
                               </p>
                               <button
                                 onClick={() => handleReintentar(d, canalAbierto)}
-                                className="text-xs text-[#7C3AED] mt-1.5 underline underline-offset-2"
+                                className="text-xs text-[#F97316] mt-1.5 underline underline-offset-2"
                               >
                                 Reintentar
                               </button>
@@ -580,6 +660,16 @@ export function TabPreparacion({
                         ) : borradorActivo ? (
                           <div>
                             <BorradorContent borrador={borradorActivo} decisor={d} empresaId={empresaId} />
+                            {/* Advertencias de baja confianza (ej: área inferida) */}
+                            {advertenciasActivas?.map((adv, i) => (
+                              <div
+                                key={i}
+                                className="mt-2 flex items-start gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/10 rounded-lg px-2.5 py-1.5 border border-amber-200 dark:border-amber-700/30"
+                              >
+                                <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                                <span>{adv}</span>
+                              </div>
+                            ))}
                             {/* Fecha + botón Generar nuevo */}
                             <div className="mt-3 flex items-center justify-between gap-2">
                               {fechaActiva && (
@@ -590,7 +680,7 @@ export function TabPreparacion({
                               <button
                                 onClick={() => handleRegenerar(d, canalAbierto)}
                                 disabled={cargandoCanal !== null}
-                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#7C3AED] transition-colors ml-auto"
+                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#F97316] transition-colors ml-auto"
                               >
                                 <RefreshCw className="h-3 w-3" />
                                 <Zap className="h-2.5 w-2.5 text-amber-500" />
@@ -705,7 +795,7 @@ const PITCH_SECCIONES: {
   color: string;
   icono: string;
 }[] = [
-  { key: "apertura",    titulo: "Apertura",               duracion: "5-10 seg",  color: "border-[#7C3AED] bg-[#EDE9FE] dark:bg-violet-900/20",                        icono: "📞" },
+  { key: "apertura",    titulo: "Apertura",               duracion: "5-10 seg",  color: "border-[#F97316] bg-[#FFF7ED] dark:bg-orange-900/20",                        icono: "📞" },
   { key: "gancho",      titulo: "Gancho",                 duracion: "10-15 seg", color: "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20",     icono: "🎯" },
   { key: "si_positivo", titulo: "Si responde con interés", duracion: "15-20 seg", color: "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20",     icono: "✅" },
   { key: "si_negativo", titulo: "Si dice que no",          duracion: "10 seg",   color: "border-red-200 bg-red-50/60 dark:border-red-800/40 dark:bg-red-900/15",        icono: "↩️" },
@@ -865,13 +955,13 @@ function FeedbackBorrador({
             onChange={(e) => setVersionVendedor(e.target.value)}
             placeholder="Pega tu versión del mensaje para que la IA aprenda tu estilo..."
             rows={3}
-            className="w-full text-xs rounded-xl border border-border bg-muted/40 px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-[#7C3AED] focus:border-[#7C3AED] placeholder:text-muted-foreground/60"
+            className="w-full text-xs rounded-xl border border-border bg-muted/40 px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-[#F97316] focus:border-[#F97316] placeholder:text-muted-foreground/60"
           />
           <div className="flex gap-2">
             <button
               onClick={() => void guardar("negativo")}
               disabled={guardando}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#7C3AED] text-white font-medium disabled:opacity-50 min-h-[32px]"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#F97316] text-white font-medium disabled:opacity-50 min-h-[32px]"
             >
               {guardando && <Loader2 className="h-3 w-3 animate-spin" />}
               Guardar feedback

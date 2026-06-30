@@ -367,6 +367,7 @@ export interface Interaccion {
   proximo_paso_fecha: string | null;
   badge_estado: BadgeEstado | null;
   decision_sugerida: string | null;
+  resuelta: boolean;
   creado_en: string;
   actualizado_en: string;
 }

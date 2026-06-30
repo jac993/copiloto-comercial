@@ -113,7 +113,7 @@ export async function GET() {
     .from("interacciones")
     .select("id, empresa_id, contacto_id, proximo_paso, proximo_paso_fecha")
     .not("proximo_paso", "is", null)
-    .eq("resuelta", false)
+    .neq("resuelta", true)             // captura false Y null de rows antiguas
     .order("proximo_paso_fecha", { ascending: true })
     .limit(50);
 

@@ -67,7 +67,16 @@ export async function POST(req: NextRequest) {
       badge_estado: tipo === "sin_respuesta" ? "sin_respuesta" : null,
       decision_sugerida: null,
       remitente: remitente ?? "vendedor",
+      resuelta: false,
     };
+
+    console.log('[TAREA_DEBUG]', JSON.stringify({
+      empresa_id: interaccionData.empresa_id,
+      tipo: interaccionData.tipo,
+      proximo_paso: interaccionData.proximo_paso,
+      proximo_paso_fecha: interaccionData.proximo_paso_fecha,
+      resuelta: interaccionData.resuelta,
+    }));
 
     const interaccion = await insertInteraccion(interaccionData);
 
@@ -85,7 +94,7 @@ export async function POST(req: NextRequest) {
           .from("interacciones")
           .update({ resuelta: true })
           .eq("empresa_id", empresa_id)
-          .eq("resuelta", false)
+          .neq("resuelta", true)           // captura false Y null heredados
           .lt("fecha", new Date().toISOString()),
         supabase
           .from("empresas")
@@ -98,6 +107,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, interaccion });
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : "Error desconocido";
+    console.error('[INTERACCION_CREAR_ERROR]', mensaje, err);
     return NextResponse.json({ error: mensaje }, { status: 500 });
   }
 }

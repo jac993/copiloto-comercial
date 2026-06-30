@@ -206,6 +206,7 @@ ${encabezadoEmail}${texto.trim()}
       badge_estado: resultado.badge_estado ?? null,
       decision_sugerida: resultado.decision_sugerida ?? null,
       remitente: "vendedor",
+      resuelta: false,
     };
 
     const interaccion = await insertInteraccion(interaccionData);
@@ -218,6 +219,7 @@ ${encabezadoEmail}${texto.trim()}
 
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : "Error desconocido";
+    console.error('[ANALIZAR_INTERACCION_ERROR]', mensaje, err);
     return NextResponse.json({ error: mensaje }, { status: 500 });
   }
 }

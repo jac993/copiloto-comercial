@@ -13,6 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector } from "@/lib/queries";
 import { buildPromptBorradorCanal, buildPromptBorradores, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
+import { validarDatosParaGeneracion } from "@/lib/validar-borrador";
 import { registrarUso } from "@/lib/registrarUso";
 
 export const maxDuration = 60;
@@ -178,6 +179,33 @@ export async function POST(req: NextRequest) {
 
     if (!empresa) {
       return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+    }
+
+    // ── Gate de calidad de datos ──────────────────────────────
+    // Si faltan los tres campos de research, Claude solo tiene el nombre
+    // de la empresa y rellena con generalidades. Bloquear antes de gastar créditos.
+    const validacion = validarDatosParaGeneracion(empresa, decisorCargo);
+    if (!validacion.ok) {
+      return NextResponse.json(validacion, { status: 422 });
+    }
+
+    // Si el área fue inferida desde el cargo, persistirla en background
+    if (validacion.actualizarContacto) {
+      const { id: cId, area, agregarNota } = validacion.actualizarContacto;
+      void (async () => {
+        try {
+          const { data: cData } = await supabase
+            .from("contactos")
+            .select("notas_ia")
+            .eq("id", cId)
+            .single();
+          const notasActuales = (cData as { notas_ia?: string } | null)?.notas_ia ?? "";
+          const nuevasNotas = notasActuales ? `${notasActuales}\n\n${agregarNota}` : agregarNota;
+          await supabase.from("contactos").update({ area, notas_ia: nuevasNotas }).eq("id", cId);
+        } catch (e) {
+          console.error("[preparacion] error actualizando área inferida:", e);
+        }
+      })();
     }
 
     const tipo: TipoBorrador = tipoRaw ?? "apertura";
@@ -389,7 +417,12 @@ ${ejemplosAprobados}
       }
     }
 
-    return NextResponse.json({ ok: true, borrador });
+    return NextResponse.json({
+      ok: true,
+      borrador,
+      // Advertencias no bloqueantes (ej: área inferida) — el frontend las muestra
+      advertencias: validacion.advertencias.length > 0 ? validacion.advertencias : undefined,
+    });
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : "Error desconocido";
     console.error("[preparacion] error:", mensaje);
