@@ -168,7 +168,7 @@ export function NuevaInteraccionSheet({
       onCreada(data.interaccion_id
         // El endpoint devuelve interaccion_id, no el objeto completo.
         // Construimos un objeto mínimo para actualizar la lista.
-        ? { ...data.resultado, id: data.interaccion_id, empresa_id: empresaId, tipo, fecha: new Date().toISOString(), contacto_id: contactoId || null, parent_id: null, remitente: "vendedor", audio_url: null, transcripcion: tipo === "llamada" ? texto : null, resumen_ia: data.resultado?.resumen ?? null, compromisos: null, sentimiento: data.resultado?.sentimiento_prospecto ?? null, tecnica_usada: data.resultado?.tecnica_recomendada ?? null, coaching_ia: JSON.stringify(data.resultado), proximo_paso: data.resultado?.proximo_paso ?? null, proximo_paso_fecha: null, badge_estado: data.resultado?.badge_estado ?? null, decision_sugerida: data.resultado?.decision_sugerida ?? null, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() } as Interaccion
+        ? { ...data.resultado, id: data.interaccion_id, empresa_id: empresaId, tipo, fecha: new Date().toISOString(), contacto_id: contactoId || null, parent_id: null, remitente: "vendedor", audio_url: null, transcripcion: tipo === "llamada" ? texto : null, resumen_ia: data.resultado?.resumen ?? null, compromisos: null, sentimiento: data.resultado?.sentimiento_prospecto ?? null, tecnica_usada: data.resultado?.tecnica_recomendada ?? null, coaching_ia: JSON.stringify(data.resultado), proximo_paso: data.resultado?.proximo_paso ?? null, proximo_paso_fecha: null, badge_estado: data.resultado?.badge_estado ?? null, decision_sugerida: data.resultado?.decision_sugerida ?? null, resuelta: false, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() } as Interaccion
         : data.interaccion
       );
       setFase("ok");
@@ -274,6 +274,7 @@ export function NuevaInteraccionSheet({
         badge_estado: dataA.resultado?.badge_estado ?? null,
         decision_sugerida: dataA.resultado?.decision_sugerida ?? null,
         remitente: "vendedor",
+        resuelta: false,
         creado_en: new Date().toISOString(),
         actualizado_en: new Date().toISOString(),
       };
@@ -347,19 +348,19 @@ export function NuevaInteraccionSheet({
                   className={[
                     "w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all active:scale-[0.98]",
                     noContesto
-                      ? "border-[#7C3AED] bg-[#7C3AED]/8"
+                      ? "border-[#F97316] bg-[#F97316]/8"
                       : "border-border hover:border-primary/40",
                   ].join(" ")}
                 >
-                  <PhoneOff className={["w-4 h-4 shrink-0", noContesto ? "text-[#7C3AED]" : "text-muted-foreground"].join(" ")} />
+                  <PhoneOff className={["w-4 h-4 shrink-0", noContesto ? "text-[#F97316]" : "text-muted-foreground"].join(" ")} />
                   <div className="flex-1 text-left">
-                    <p className={["text-sm font-semibold", noContesto ? "text-[#7C3AED]" : "text-foreground"].join(" ")}>
+                    <p className={["text-sm font-semibold", noContesto ? "text-[#F97316]" : "text-foreground"].join(" ")}>
                       No contestó
                     </p>
                     <p className="text-xs text-muted-foreground">Registrar sin audio ni análisis</p>
                   </div>
                   {/* Toggle pill */}
-                  <div className={["w-10 h-6 rounded-full transition-colors relative shrink-0", noContesto ? "bg-[#7C3AED]" : "bg-muted"].join(" ")}>
+                  <div className={["w-10 h-6 rounded-full transition-colors relative shrink-0", noContesto ? "bg-[#F97316]" : "bg-muted"].join(" ")}>
                     <div className={["absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all", noContesto ? "left-5" : "left-1"].join(" ")} />
                   </div>
                 </button>
@@ -530,7 +531,7 @@ export function NuevaInteraccionSheet({
               <div className="flex gap-2 pt-1">
                 {tipo === "llamada" && noContesto && (
                   <Button
-                    className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-11 rounded-xl text-sm"
+                    className="flex-1 bg-[#F97316] hover:bg-[#EA580C] text-white h-11 rounded-xl text-sm"
                     onClick={guardarNoContesto}
                     disabled={cargando}
                   >
@@ -541,7 +542,7 @@ export function NuevaInteraccionSheet({
 
                 {tipo === "llamada" && !noContesto && (
                   <Button
-                    className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-11 rounded-xl text-sm"
+                    className="flex-1 bg-[#F97316] hover:bg-[#EA580C] text-white h-11 rounded-xl text-sm"
                     onClick={subirYAnalizar}
                     disabled={cargando || !archivo}
                   >
@@ -572,7 +573,7 @@ export function NuevaInteraccionSheet({
                       Guardar
                     </Button>
                     <Button
-                      className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-11 rounded-xl text-sm"
+                      className="flex-1 bg-[#F97316] hover:bg-[#EA580C] text-white h-11 rounded-xl text-sm"
                       onClick={guardarYAnalizar}
                       disabled={cargando}
                     >
@@ -589,8 +590,8 @@ export function NuevaInteraccionSheet({
         {/* ── FASE: Transcribiendo/Analizando (llamada larga) ── */}
         {fase === "transcribiendo" && (
           <div className="px-5 py-12 flex flex-col items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-[#EDE9FE] flex items-center justify-center">
-              <Loader2 className="w-7 h-7 text-[#7C3AED] animate-spin" />
+            <div className="w-14 h-14 rounded-2xl bg-[#FFF7ED] flex items-center justify-center">
+              <Loader2 className="w-7 h-7 text-[#F97316] animate-spin" />
             </div>
             <div className="text-center space-y-1">
               <p className="font-semibold text-sm">{mensajeCarga || "Procesando…"}</p>

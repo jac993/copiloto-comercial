@@ -372,7 +372,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
           fecha: new Date().toISOString(),
           audio_url: null, transcripcion: texto, resumen_ia: null, compromisos: null,
           sentimiento, tecnica_usada: null, coaching_ia: null, proximo_paso: null,
-          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null,
+          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null, resuelta: false,
           creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString(),
         };
         setLista((prev) => [...prev, nueva]);
@@ -405,7 +405,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
           <button
             onClick={analizarTodo}
             disabled={analizandoTodo}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED] hover:text-[#6D28D9] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors disabled:opacity-50"
           >
             {analizandoTodo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             ⚡ Analizar conversación
@@ -664,7 +664,7 @@ function TarjetaHilo({
           audio_url: null, transcripcion: texto, resumen_ia: null, compromisos: null,
           sentimiento: inputBar.remitente === "prospecto" ? "neutro" : null,
           tecnica_usada: null, coaching_ia: null, proximo_paso: null,
-          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null,
+          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null, resuelta: false,
           creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString(),
         };
         onMensajeAgregado(nueva);
@@ -788,8 +788,8 @@ function TarjetaHilo({
         onClick={() => setExpandido(!expandido)}
         className="w-full text-left px-4 pt-3.5 pb-3 flex items-start gap-3 hover:bg-muted/30 active:bg-muted/50 transition-colors"
       >
-        <div className="w-9 h-9 rounded-full bg-[#EDE9FE] dark:bg-[#1E1B4B]/50 flex items-center justify-center shrink-0 mt-0.5">
-          <tipoConf.Icon className="w-4 h-4 text-[#7C3AED]" />
+        <div className="w-9 h-9 rounded-full bg-[#FFF7ED] dark:bg-[#431407]/50 flex items-center justify-center shrink-0 mt-0.5">
+          <tipoConf.Icon className="w-4 h-4 text-[#F97316]" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -884,7 +884,7 @@ function TarjetaHilo({
                 const esPos = resInfo ? resInfo.positivo : msg.sentimiento === "positivo";
                 return (
                   <div key={msg.id} className="space-y-0.5">
-                    <p className="text-[10px] font-medium text-[#7C3AED] ml-8">
+                    <p className="text-[10px] font-medium text-[#F97316] ml-8">
                       {contacto?.nombre ?? "Prospecto"}
                     </p>
                     <div className="flex justify-start items-end gap-2 group">
@@ -961,7 +961,7 @@ function TarjetaHilo({
                         : <Trash2 className="h-3 w-3 text-destructive/70" />
                       }
                     </button>
-                    <div className="max-w-[84%] bg-[#7C3AED] text-white rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-sm">
+                    <div className="max-w-[84%] bg-[#F97316] text-white rounded-2xl rounded-tr-sm px-3.5 py-2.5 shadow-sm">
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">
                         {texto ?? (msg.tipo === "llamada" ? "Llamada registrada" : "Interacción registrada")}
                       </p>
@@ -1067,7 +1067,7 @@ function TarjetaHilo({
                         <button
                           onClick={() => handleGuardar(msg)}
                           disabled={form.guardando}
-                          className="flex-1 h-9 rounded-xl bg-[#7C3AED] text-white text-xs font-semibold hover:bg-[#6D28D9] transition-colors disabled:opacity-50"
+                          className="flex-1 h-9 rounded-xl bg-[#F97316] text-white text-xs font-semibold hover:bg-[#EA580C] transition-colors disabled:opacity-50"
                         >
                           {form.guardando ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "Guardar"}
                         </button>
@@ -1086,7 +1086,7 @@ function TarjetaHilo({
                 <button
                   onClick={() => setInputBar((prev) => ({ ...prev, remitente: "vendedor" }))}
                   className={`px-2.5 py-1.5 transition-colors ${
-                    inputBar.remitente === "vendedor" ? "bg-[#7C3AED] text-white" : "text-muted-foreground hover:bg-muted"
+                    inputBar.remitente === "vendedor" ? "bg-[#F97316] text-white" : "text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   Yo
@@ -1116,7 +1116,7 @@ function TarjetaHilo({
                 disabled={inputBar.enviando || !inputBar.texto.trim()}
                 className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 transition-colors disabled:opacity-40 ${
                   inputBar.remitente === "vendedor"
-                    ? "bg-[#7C3AED] hover:bg-[#6D28D9] text-white"
+                    ? "bg-[#F97316] hover:bg-[#EA580C] text-white"
                     : "bg-gray-600 hover:bg-gray-700 dark:bg-gray-500 dark:hover:bg-gray-400 text-white"
                 }`}
               >
@@ -1223,7 +1223,7 @@ function TarjetaHilo({
               <button
                 onClick={() => onAnalizar(ultimoMsj.id)}
                 disabled={analizandoId === ultimoMsj.id}
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED] hover:text-[#6D28D9] transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors disabled:opacity-50"
               >
                 {analizandoId === ultimoMsj.id
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1275,8 +1275,8 @@ function TarjetaHilo({
                 </div>
               )}
               {coaching.borrador_respuesta && (
-                <div className="bg-[#F5F3FF] dark:bg-[#1E1B4B]/30 border border-violet-200 dark:border-violet-800/40 rounded-xl p-3">
-                  <p className="text-xs font-semibold text-[#7C3AED] mb-1.5">✉️ Borrador de respuesta</p>
+                <div className="bg-[#FFF7ED] dark:bg-[#431407]/30 border border-orange-200 dark:border-orange-800/40 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-[#F97316] mb-1.5">✉️ Borrador de respuesta</p>
                   <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{coaching.borrador_respuesta}</p>
                 </div>
               )}
@@ -1377,7 +1377,7 @@ function TarjetaHilo({
                   <button
                     onClick={() => void guardarFechaHilo()}
                     disabled={guardandoHiloFecha}
-                    className="flex-1 h-10 rounded-xl bg-[#7C3AED] text-white text-sm font-semibold hover:bg-[#6D28D9] transition-colors disabled:opacity-50"
+                    className="flex-1 h-10 rounded-xl bg-[#F97316] text-white text-sm font-semibold hover:bg-[#EA580C] transition-colors disabled:opacity-50"
                   >
                     {guardandoHiloFecha ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Guardar"}
                   </button>
@@ -1435,7 +1435,7 @@ function FormEdicion({
         <button
           onClick={() => void onGuardar()}
           disabled={editandoMsg.guardando}
-          className="flex-1 h-9 rounded-xl bg-[#7C3AED] text-white text-xs font-semibold hover:bg-[#6D28D9] transition-colors disabled:opacity-50"
+          className="flex-1 h-9 rounded-xl bg-[#F97316] text-white text-xs font-semibold hover:bg-[#EA580C] transition-colors disabled:opacity-50"
         >
           {editandoMsg.guardando ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" /> : "Guardar"}
         </button>
@@ -1462,16 +1462,16 @@ function AnalisisTodoView({ analisis }: { analisis: AnalisisConversacion }) {
         </span>
       </div>
       <section>
-        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Evolución de la relación</p>
+        <p className="text-xs font-extrabold text-[#F97316] uppercase tracking-wide mb-1.5">Evolución de la relación</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.evolucion}</p>
       </section>
       <section>
-        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Justificación</p>
+        <p className="text-xs font-extrabold text-[#F97316] uppercase tracking-wide mb-1.5">Justificación</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.justificacion_probabilidad}</p>
       </section>
       {analisis.momentos_clave.length > 0 && (
         <section>
-          <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-2">Momentos clave</p>
+          <p className="text-xs font-extrabold text-[#F97316] uppercase tracking-wide mb-2">Momentos clave</p>
           <div className="space-y-2">
             {analisis.momentos_clave.map((m, i) => (
               <div key={i} className={`rounded-xl p-3 flex items-start gap-2.5 ${m.impacto === "positivo" ? "bg-green-50 dark:bg-green-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
@@ -1486,23 +1486,23 @@ function AnalisisTodoView({ analisis }: { analisis: AnalisisConversacion }) {
         </section>
       )}
       <section>
-        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Patrón del prospecto</p>
+        <p className="text-xs font-extrabold text-[#F97316] uppercase tracking-wide mb-1.5">Patrón del prospecto</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.patron_prospecto}</p>
       </section>
       <section>
-        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Estado actual real</p>
+        <p className="text-xs font-extrabold text-[#F97316] uppercase tracking-wide mb-1.5">Estado actual real</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.estado_actual_real}</p>
       </section>
       <section>
-        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-1.5">Estrategia recomendada</p>
+        <p className="text-xs font-extrabold text-[#F97316] uppercase tracking-wide mb-1.5">Estrategia recomendada</p>
         <p className="text-sm text-foreground/80 leading-relaxed">{analisis.estrategia_recomendada}</p>
       </section>
       <section>
-        <p className="text-xs font-extrabold text-[#7C3AED] uppercase tracking-wide mb-2">Próximos 3 pasos</p>
+        <p className="text-xs font-extrabold text-[#F97316] uppercase tracking-wide mb-2">Próximos 3 pasos</p>
         <div className="space-y-2">
           {analisis.proximos_3_pasos.map((paso, i) => (
-            <div key={i} className="flex items-start gap-2.5 bg-[#F5F3FF] dark:bg-[#1E1B4B]/30 rounded-xl p-3">
-              <span className="text-xs font-extrabold text-[#7C3AED] shrink-0 mt-0.5">{i + 1}</span>
+            <div key={i} className="flex items-start gap-2.5 bg-[#FFF7ED] dark:bg-[#431407]/30 rounded-xl p-3">
+              <span className="text-xs font-extrabold text-[#F97316] shrink-0 mt-0.5">{i + 1}</span>
               <p className="text-sm text-foreground/80">{paso}</p>
             </div>
           ))}
