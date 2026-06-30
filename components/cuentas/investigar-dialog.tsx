@@ -188,7 +188,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-sm mx-4 rounded-2xl">
+      <DialogContent className="max-w-sm mx-4 rounded-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -227,7 +227,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && url.trim() && investigar()}
-                    className="w-full h-12 pl-10 pr-4 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm font-medium placeholder:text-gray-400 placeholder:font-normal focus:outline-none focus:border-[#7C3AED] transition-colors"
+                    className="w-full h-12 pl-10 pr-4 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm font-medium placeholder:text-gray-400 placeholder:font-normal focus:outline-none focus:border-[#F97316] transition-colors"
                     autoFocus
                   />
                 </div>
@@ -251,7 +251,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                   onChange={(e) => setContexto(e.target.value)}
                   placeholder={`Ej: Sé que fabrican potes para el sector lácteo.\nEl jefe de planta se llama Rodrigo y tiene presión por cumplimiento normativo.\nQuiero entrar por Calidad usando el lanzamiento de su nuevo envase como excusa.`}
                   rows={3}
-                  className="w-full min-h-[80px] px-3.5 py-3 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm resize-none placeholder:text-gray-400 focus:outline-none focus:border-[#7C3AED] transition-colors"
+                  className="w-full min-h-[80px] px-3.5 py-3 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm resize-none placeholder:text-gray-400 focus:outline-none focus:border-[#F97316] transition-colors"
                 />
                 <p className="text-xs text-gray-400 leading-relaxed">
                   Escribe lo que sabes de la empresa y tu estrategia de entrada. La IA usará esto para personalizar el ángulo de entrada y los borradores.
@@ -263,7 +263,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                 <button
                   type="button"
                   onClick={() => setMostrarExtra(!mostrarExtra)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-[#7C3AED] hover:text-[#6D28D9] transition-colors w-full py-1"
+                  className="flex items-center gap-1.5 text-xs font-medium text-[#F97316] hover:text-[#EA580C] transition-colors w-full py-1"
                 >
                   {mostrarExtra
                     ? <ChevronUp className="h-3.5 w-3.5" />
@@ -287,7 +287,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                         placeholder="Ej: Essity, Coexpan, Soprole"
                         value={nombreComercial}
                         onChange={(e) => setNombreComercial(e.target.value)}
-                        className="w-full h-12 px-3.5 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#7C3AED] transition-colors"
+                        className="w-full h-12 px-3.5 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#F97316] transition-colors"
                       />
                       <p className="text-xs text-gray-400 pl-0.5">
                         Como aparece en el mercado, no la razón social legal
@@ -304,7 +304,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                         placeholder="Ej: Essity Chile S.A."
                         value={razonSocial}
                         onChange={(e) => setRazonSocial(e.target.value)}
-                        className="w-full h-12 px-3.5 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#7C3AED] transition-colors"
+                        className="w-full h-12 px-3.5 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#F97316] transition-colors"
                       />
                     </div>
 
@@ -318,7 +318,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                         placeholder="76.123.456-7"
                         value={rut}
                         onChange={(e) => setRut(e.target.value)}
-                        className="w-full h-12 px-3.5 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#7C3AED] transition-colors"
+                        className="w-full h-12 px-3.5 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#F97316] transition-colors"
                       />
                     </div>
 
@@ -333,7 +333,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                           placeholder="Santiago, RM"
                           value={ciudad}
                           onChange={(e) => setCiudad(e.target.value)}
-                          className="w-full h-12 px-3 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#7C3AED] transition-colors"
+                          className="w-full h-12 px-3 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#F97316] transition-colors"
                         />
                       </div>
                       <div className="space-y-1">
@@ -345,7 +345,7 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                           placeholder="alimentos, químicos"
                           value={rubro}
                           onChange={(e) => setRubro(e.target.value)}
-                          className="w-full h-12 px-3 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#7C3AED] transition-colors"
+                          className="w-full h-12 px-3 rounded-xl border-2 border-gray-200 bg-white dark:bg-gray-950 dark:border-gray-700 text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#F97316] transition-colors"
                         />
                       </div>
                     </div>
