@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
         badge_estado: "sin_respuesta",
         decision_sugerida: null,
         remitente: "vendedor",
+        resuelta: false,
       });
 
       return NextResponse.json({ ok: true, interaccion_id: interaccion.id, resultado: null });
