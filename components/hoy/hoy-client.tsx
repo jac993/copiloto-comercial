@@ -959,7 +959,7 @@ function TareaCard({
 
   // Fecha corta para vista colapsada: "1 jul", "31 dic"
   const fechaCorta = (() => {
-    const [anio, mes, dia] = tarea.proximo_paso_fecha.split("-");
+    const [, mes, dia] = tarea.proximo_paso_fecha.split("-");
     const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
     return `${parseInt(dia)} ${meses[parseInt(mes) - 1]}`;
   })();
