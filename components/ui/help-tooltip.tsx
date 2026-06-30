@@ -25,7 +25,7 @@ export function HelpTooltip({ titulo, explicacion, ejemplo }: HelpTooltipProps) 
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setOpen(true); } }}
         aria-label={`Ayuda: ${titulo}`}
-        className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-200 text-orange-600 text-[11px] font-bold cursor-pointer hover:bg-orange-300 transition-colors shrink-0"
+        className="w-4 h-4 rounded-full bg-orange-200 text-orange-600 text-[10px] font-bold inline-flex items-center justify-center cursor-pointer ml-1.5 hover:bg-orange-300 flex-shrink-0"
       >
         ?
       </span>
