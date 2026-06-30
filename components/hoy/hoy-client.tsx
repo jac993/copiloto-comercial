@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Sun, Zap, Target, TrendingUp, RefreshCw,
-  ChevronRight, Building2, AlertCircle, CheckCircle2,
+  ChevronRight, ChevronDown, Building2, AlertCircle, CheckCircle2,
   XCircle, MinusCircle, ClipboardCheck, Loader2, Pencil,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -849,10 +849,10 @@ function CoachingCard({ feedback }: { feedback: FeedbackItem }) {
   return (
     <div
       className="rounded-2xl p-4 space-y-2.5"
-      style={{ background: "#F5F3FF", border: "1px solid rgba(124,58,237,0.15)" }}
+      style={{ background: "#FFF7ED", border: "1px solid rgba(124,58,237,0.15)" }}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="font-semibold text-sm text-[#7C3AED]">{feedback.nombre_empresa}</p>
+        <p className="font-semibold text-sm text-[#F97316]">{feedback.nombre_empresa}</p>
         <span className="text-[11px] text-muted-foreground shrink-0">
           {RESULTADO_LABEL[feedback.resultado]}
         </span>
@@ -950,10 +950,19 @@ function TareaCard({
   const vencida = tarea.proximo_paso_fecha < hoy;
   const esHoy = tarea.proximo_paso_fecha.startsWith(hoy);
   const { texto: textoVencimiento, color: colorVencimiento } = formatearVencimiento(tarea.proximo_paso_fecha);
+  const horaSugerida = inferirHoraSugerida(tarea.proximo_paso);
 
+  const [expandida, setExpandida] = useState(false);
   const [editando, setEditando] = useState(false);
   const [inputVal, setInputVal] = useState(toDatetimeLocal(tarea.proximo_paso_fecha));
   const [guardando, setGuardando] = useState(false);
+
+  // Fecha corta para vista colapsada: "1 jul", "31 dic"
+  const fechaCorta = (() => {
+    const [anio, mes, dia] = tarea.proximo_paso_fecha.split("-");
+    const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+    return `${parseInt(dia)} ${meses[parseInt(mes) - 1]}`;
+  })();
 
   const confirmarFecha = async () => {
     if (!inputVal) return;
@@ -976,79 +985,111 @@ function TareaCard({
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card px-4 py-3 flex items-start gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-          <Link
-            href={`/cuentas/${tarea.empresa_id}`}
-            className="text-sm font-semibold hover:text-primary transition-colors truncate"
-          >
-            {tarea.empresa_nombre}
-          </Link>
-          {vencida && (
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400 shrink-0">
-              Vencida
-            </span>
-          )}
-          {esHoy && !vencida && (
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 shrink-0">
-              Hoy
-            </span>
-          )}
-        </div>
-        {tarea.contacto_nombre && (
-          <p className="text-xs text-muted-foreground">👤 {tarea.contacto_nombre}</p>
-        )}
-        <p className="text-xs text-muted-foreground leading-snug">{tarea.proximo_paso}</p>
+    <div className={`rounded-2xl border bg-card transition-colors ${vencida ? "border-red-200 dark:border-red-900/40" : "border-border"}`}>
 
-        {/* Fecha de vencimiento + edición inline */}
-        {editando ? (
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <input
-              type="datetime-local"
-              value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") void confirmarFecha(); if (e.key === "Escape") setEditando(false); }}
-              className="text-xs border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-              autoFocus
-            />
-            <button
-              onClick={() => void confirmarFecha()}
-              disabled={guardando}
-              className="text-xs px-2 py-1 rounded-lg bg-primary text-white font-medium disabled:opacity-50"
-            >
-              {guardando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓"}
-            </button>
-            <button
-              onClick={() => setEditando(false)}
-              className="text-xs px-2 py-1 rounded-lg border border-border text-muted-foreground"
-            >
-              ✕
-            </button>
-          </div>
-        ) : (
-          <div className="mt-1 space-y-0.5">
-            <div className="flex items-center gap-1">
-              <p className={`text-xs font-medium ${colorVencimiento}`}>{textoVencimiento}</p>
+      {/* ── Fila colapsada (siempre visible) ── */}
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        {/* Chevron toggle */}
+        <button
+          onClick={() => setExpandida((v) => !v)}
+          className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          aria-label={expandida ? "Colapsar" : "Expandir"}
+        >
+          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${expandida ? "rotate-180" : ""}`} />
+        </button>
+
+        {/* Nombre empresa — clickable para expandir */}
+        <button
+          onClick={() => setExpandida((v) => !v)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <span className="text-sm font-semibold truncate block leading-tight">
+            {tarea.empresa_nombre}
+          </span>
+        </button>
+
+        {/* Fecha corta + hora */}
+        <div className="shrink-0 flex items-center gap-1.5 text-xs">
+          {vencida ? (
+            <span className="font-semibold text-red-600 dark:text-red-400">{fechaCorta}</span>
+          ) : esHoy ? (
+            <span className="font-semibold text-amber-600 dark:text-amber-400">{fechaCorta}</span>
+          ) : (
+            <span className="text-muted-foreground">{fechaCorta}</span>
+          )}
+          <span className="text-muted-foreground/50">·</span>
+          <span className="text-muted-foreground/70">{horaSugerida}</span>
+        </div>
+
+        {/* Botón Hecho — siempre visible */}
+        <button
+          onClick={onMarcar}
+          disabled={marcando}
+          className="shrink-0 h-7 px-2.5 rounded-xl border border-green-300 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 flex items-center gap-1 ml-1"
+        >
+          {marcando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓ Hecho"}
+        </button>
+      </div>
+
+      {/* ── Detalle expandido ── */}
+      <div className={`overflow-hidden transition-all duration-200 ${expandida ? "max-h-64" : "max-h-0"}`}>
+        <div className="px-4 pb-3 pt-0 border-t border-border/50 space-y-2">
+
+          {/* Contacto */}
+          {tarea.contacto_nombre && (
+            <p className="text-xs text-muted-foreground pt-2">👤 {tarea.contacto_nombre}</p>
+          )}
+
+          {/* Descripción de la tarea */}
+          <p className="text-xs text-muted-foreground leading-snug">{tarea.proximo_paso}</p>
+
+          {/* Fecha + edición inline */}
+          {editando ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="datetime-local"
+                value={inputVal}
+                onChange={(e) => setInputVal(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void confirmarFecha(); if (e.key === "Escape") setEditando(false); }}
+                className="text-xs border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                autoFocus
+              />
               <button
-                onClick={() => { setInputVal(toDatetimeLocal(tarea.proximo_paso_fecha)); setEditando(true); }}
-                className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                title="Editar fecha"
+                onClick={() => void confirmarFecha()}
+                disabled={guardando}
+                className="text-xs px-2 py-1 rounded-lg bg-primary text-white font-medium disabled:opacity-50"
               >
-                <Pencil className="h-3 w-3" />
+                {guardando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓"}
+              </button>
+              <button
+                onClick={() => setEditando(false)}
+                className="text-xs px-2 py-1 rounded-lg border border-border text-muted-foreground"
+              >
+                ✕
               </button>
             </div>
-            <p className="text-xs text-muted-foreground/60">⏰ Hora sugerida: {inferirHoraSugerida(tarea.proximo_paso)}</p>
-          </div>
-        )}
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <p className={`text-xs font-medium ${colorVencimiento}`}>{textoVencimiento}</p>
+                <button
+                  onClick={() => { setInputVal(toDatetimeLocal(tarea.proximo_paso_fecha)); setEditando(true); }}
+                  className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                  title="Editar fecha"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              </div>
+              <Link
+                href={`/cuentas/${tarea.empresa_id}`}
+                className="text-xs text-primary hover:underline"
+              >
+                Ver empresa →
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
-      <button
-        onClick={onMarcar}
-        disabled={marcando}
-        className="shrink-0 h-8 px-3 rounded-xl border border-green-300 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 flex items-center gap-1"
-      >
-        {marcando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓ Hecho"}
-      </button>
     </div>
   );
 }
@@ -1071,7 +1112,7 @@ async function dispararConfeti() {
       particleCount: 100,
       spread: 70,
       origin: { y: 0.6 },
-      colors: ["#7C3AED", "#22C55E", "#F59E0B", "#F97316"],
+      colors: ["#F97316", "#22C55E", "#F59E0B", "#F97316"],
     });
   } catch {
     // canvas-confetti no disponible — no interrumpir
