@@ -7,12 +7,14 @@
 import { createClient } from "@supabase/supabase-js";
 import { unstable_noStore as noStore } from "next/cache";
 
-// Crea un cliente fresco en cada llamada para evitar que Next.js cachee los fetch internos de Supabase
+// Crea un cliente fresco con service role key para evitar bloqueos de RLS en inserts/updates.
+// queries.ts solo se ejecuta en el servidor (API routes); la service role key nunca llega al browser.
 function getSupabase() {
   noStore();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    key,
     { global: { fetch: (url, init) => fetch(url, { ...init, cache: "no-store" }) } }
   );
 }
@@ -742,32 +744,45 @@ export async function guardarEmpresaDesdeFicha(
   };
 
   // Buscar si ya existe una empresa con esta URL
-  const { data: existente } = await getSupabase()
+  console.log('[GUARDAR_PASO_1] Buscando empresa existente con url:', url);
+  const { data: existente, error: errorBusqueda } = await getSupabase()
     .from("empresas")
     .select("id")
     .eq("url", url)
     .maybeSingle();
+  if (errorBusqueda) console.error('[GUARDAR_PASO_1_ERROR]', errorBusqueda.message);
+  console.log('[GUARDAR_PASO_1_RESULT] existente:', existente?.id ?? 'ninguna');
 
   let empresa;
   if (existente?.id) {
     // Actualizar la existente
+    console.log('[GUARDAR_PASO_2] Actualizando empresa id:', existente.id);
     const { data, error } = await getSupabase()
       .from("empresas")
       .update(empresaData as unknown as Record<string, unknown>)
       .eq("id", existente.id)
       .select()
       .single();
-    if (error) throw new Error(`guardarEmpresa: ${error.message}`);
+    if (error) {
+      console.error('[GUARDAR_PASO_2_ERROR]', error.message, error.code, error.details);
+      throw new Error(`guardarEmpresa update: ${error.message}`);
+    }
     empresa = data;
+    console.log('[GUARDAR_PASO_2_OK] empresa actualizada:', empresa.id);
   } else {
     // Insertar nueva
+    console.log('[GUARDAR_PASO_2] Insertando nueva empresa:', empresaData.nombre);
     const { data, error } = await getSupabase()
       .from("empresas")
       .insert(empresaData as unknown as Record<string, unknown>)
       .select()
       .single();
-    if (error) throw new Error(`guardarEmpresa: ${error.message}`);
+    if (error) {
+      console.error('[GUARDAR_PASO_2_ERROR]', error.message, error.code, error.details);
+      throw new Error(`guardarEmpresa insert: ${error.message}`);
+    }
     empresa = data;
+    console.log('[GUARDAR_PASO_2_OK] empresa insertada:', empresa.id);
   }
 
   // Insertar decisores como contactos (ignorar si ya existen por nombre + empresa)
@@ -781,10 +796,16 @@ export async function guardarEmpresaDesdeFicha(
       es_decisor: true,
     }));
 
-    await getSupabase().from("contactos").upsert(contactos, {
+    console.log('[GUARDAR_PASO_3] Upsert', contactos.length, 'contactos para empresa:', empresa.id);
+    const { error: errorContactos } = await getSupabase().from("contactos").upsert(contactos, {
       onConflict: "empresa_id,cargo",
       ignoreDuplicates: true,
     });
+    if (errorContactos) {
+      console.error('[GUARDAR_PASO_3_ERROR]', errorContactos.message, errorContactos.code);
+    } else {
+      console.log('[GUARDAR_PASO_3_OK] contactos guardados');
+    }
   }
 
   // Insertar señales de oportunidad detectadas
@@ -797,9 +818,16 @@ export async function guardarEmpresaDesdeFicha(
       usada: false,
     }));
 
-    await getSupabase().from("senales").insert(senales);
+    console.log('[GUARDAR_PASO_4] Insertando', senales.length, 'señales para empresa:', empresa.id);
+    const { error: errorSenales } = await getSupabase().from("senales").insert(senales);
+    if (errorSenales) {
+      console.error('[GUARDAR_PASO_4_ERROR]', errorSenales.message, errorSenales.code);
+    } else {
+      console.log('[GUARDAR_PASO_4_OK] señales guardadas');
+    }
   }
 
+  console.log('[GUARDAR_COMPLETO] empresa guardada exitosamente:', empresa.id, empresa.nombre);
   return empresa;
 }
 
