@@ -123,9 +123,9 @@ export function Sidebar() {
   const alertas = useBadgeVencidas();
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:left-0 md:z-50 border-r border-border bg-background">
+    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:left-0 md:z-50 border-r border-[#2a2a2a] bg-[#1A1A1A]">
       {/* Logo / nombre de la app */}
-      <div className="flex h-28 items-center justify-center pt-2 border-b border-border">
+      <div className="flex h-28 items-center justify-center pt-2 border-b border-[#2a2a2a]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png.png" alt="Copiloto Comercial" style={{ height: 96, width: "auto" }} />
       </div>
@@ -142,17 +142,17 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all",
+                "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all border-l-2",
                 isActive
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-orange-500/20 text-orange-400 border-orange-500"
+                  : "text-gray-400 hover:bg-white/5 hover:text-gray-200 border-transparent"
               )}
             >
               <Icon className="h-5 w-5 shrink-0" strokeWidth={isActive ? 2.5 : 1.8} />
               <div className="flex flex-col">
                 <span>{item.label}</span>
                 {!isActive && (
-                  <span className="text-xs opacity-70">{item.description}</span>
+                  <span className="text-xs opacity-50">{item.description}</span>
                 )}
               </div>
             </Link>
@@ -164,10 +164,10 @@ export function Sidebar() {
           <Link
             href="/alertas"
             className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all mt-1",
+              "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all mt-1 border-l-2",
               pathname.startsWith("/alertas")
-                ? "bg-red-500 text-white shadow-sm"
-                : "bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+                ? "bg-red-500/20 text-red-400 border-red-500"
+                : "bg-red-500/10 text-red-400 hover:bg-red-500/20 border-transparent"
             )}
           >
             <div className="relative">
@@ -184,8 +184,8 @@ export function Sidebar() {
       </nav>
 
       {/* Footer del sidebar */}
-      <div className="p-3 border-t border-border">
-        <p className="text-xs text-muted-foreground text-center px-2">
+      <div className="p-3 border-t border-[#2a2a2a]">
+        <p className="text-xs text-gray-600 text-center px-2">
           Solo para tu uso personal
         </p>
       </div>

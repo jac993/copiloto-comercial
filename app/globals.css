@@ -11,42 +11,42 @@
     --card-foreground: 0 0% 7%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 7%;
-    --primary: 262 84% 58%;        /* #7C3AED violeta eléctrico */
+    --primary: 25 95% 53%;         /* #F97316 naranja energía */
     --primary-foreground: 0 0% 100%;
-    --secondary: 262 30% 95%;
-    --secondary-foreground: 262 84% 40%;
+    --secondary: 25 40% 95%;
+    --secondary-foreground: 25 95% 35%;
     --muted: 0 0% 94%;
     --muted-foreground: 0 0% 45%;
-    --accent: 262 30% 95%;
-    --accent-foreground: 262 84% 40%;
+    --accent: 25 40% 95%;
+    --accent-foreground: 25 95% 35%;
     --destructive: 0 84% 51%;      /* #DC2626 rojo alertas */
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 262 84% 58%;
+    --ring: 25 95% 53%;
     --radius: 0.75rem;             /* 12px base — tarjetas redondeadas */
   }
 
   .dark {
-    --background: 262 20% 8%;
-    --foreground: 0 0% 95%;
-    --card: 262 20% 11%;
-    --card-foreground: 0 0% 95%;
-    --popover: 262 20% 11%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 262 84% 65%;
+    --background: 0 0% 6%;         /* #0F0F0F */
+    --foreground: 0 0% 96%;        /* #F5F5F5 */
+    --card: 0 0% 14%;              /* #242424 */
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 10%;           /* #1A1A1A */
+    --popover-foreground: 0 0% 96%;
+    --primary: 25 95% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 262 20% 18%;
-    --secondary-foreground: 262 60% 85%;
-    --muted: 262 20% 15%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 262 20% 18%;
-    --accent-foreground: 262 60% 85%;
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 0 0% 80%;
+    --muted: 0 0% 17%;
+    --muted-foreground: 0 0% 58%;
+    --accent: 0 0% 17%;
+    --accent-foreground: 0 0% 80%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 262 20% 18%;
-    --input: 262 20% 18%;
-    --ring: 262 84% 65%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 25 95% 60%;
   }
 }
 
@@ -66,7 +66,7 @@
 
 /* Gradiente de encabezado — solo para pantalla Hoy y celebraciones */
 .gradient-hoy {
-  background: linear-gradient(135deg, #7C3AED 0%, #C026D3 100%);
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
 }
 
 /* Skeleton loader con shimmer */
