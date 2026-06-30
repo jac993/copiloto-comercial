@@ -315,7 +315,7 @@ export function HoyClient() {
       <div className="flex-1 px-4 py-4 space-y-4">
 
         {/* Racha de días */}
-        <Card className="border-0 bg-gradient-to-r from-brand-50 to-purple-50 dark:from-brand-900/20 dark:to-purple-900/10">
+        <Card className="border-0 bg-gradient-to-r from-brand-50 to-orange-50 dark:from-brand-900/20 dark:to-orange-900/10">
           <CardContent className="pt-3 pb-3 flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-primary/15 flex items-center justify-center text-xl">
               🔥

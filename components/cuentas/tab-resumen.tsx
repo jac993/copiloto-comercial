@@ -22,7 +22,7 @@ import type { FichaIA, VerificacionContexto, InteligenciaComercial, BusquedaWebR
 
 const TECNICA_COLOR: Record<string, string> = {
   SPIN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  consultiva: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  consultiva: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   relacional: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   challenger: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
 };
@@ -302,7 +302,7 @@ export function TabResumen({
               onChange={(e) => setNotasLocal(e.target.value)}
               rows={3}
               placeholder="Ej: hablé con Andrés González en septiembre, me dijo que avisaría cuando tuvieran requerimiento..."
-              className="text-sm resize-none focus-visible:ring-[#7C3AED]"
+              className="text-sm resize-none focus-visible:ring-[#F97316]"
               disabled={guardandoNotas || actualizandoEstrategia}
             />
             <div className="flex gap-2">
@@ -310,7 +310,7 @@ export function TabResumen({
                 size="sm"
                 onClick={guardarYActualizar}
                 disabled={guardandoNotas || actualizandoEstrategia}
-                className="bg-[#7C3AED] hover:bg-[#6d28d9] text-white h-8 text-xs gap-1.5"
+                className="bg-[#F97316] hover:bg-[#EA580C] text-white h-8 text-xs gap-1.5"
               >
                 {guardandoNotas ? (
                   <><Loader2 className="h-3 w-3 animate-spin" />Guardando...</>
@@ -479,13 +479,13 @@ function TerminoConTooltip({ termino }: { termino: string }) {
         onClick={() => setAbierto((v) => !v)}
         onMouseEnter={() => setAbierto(true)}
         onMouseLeave={() => setAbierto(false)}
-        className="border-b border-dotted border-[#7C3AED] text-[#7C3AED] font-semibold cursor-help bg-transparent p-0 text-[length:inherit] leading-[inherit]"
+        className="border-b border-dotted border-[#F97316] text-[#F97316] font-semibold cursor-help bg-transparent p-0 text-[length:inherit] leading-[inherit]"
       >
         {termino}
       </button>
       {abierto && (
         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 rounded-xl bg-popover text-popover-foreground text-xs px-3 py-2.5 shadow-md border border-border pointer-events-none">
-          <strong className="block text-[#7C3AED] font-semibold mb-1">{termino}</strong>
+          <strong className="block text-[#F97316] font-semibold mb-1">{termino}</strong>
           {METODOLOGIAS[termino]}
         </span>
       )}
@@ -523,7 +523,7 @@ function parsearSecciones(texto: string): { titulo: string; contenido: string }[
 }
 
 const PROSE_CLS =
-  "prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-table:text-sm prose-table:border prose-td:border prose-td:px-2 prose-td:py-1 prose-th:border prose-th:px-2 prose-th:py-1 prose-p:my-1.5 prose-li:my-0.5 prose-a:text-[#7C3AED]";
+  "prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-table:text-sm prose-table:border prose-td:border prose-td:px-2 prose-td:py-1 prose-th:border prose-th:px-2 prose-th:py-1 prose-p:my-1.5 prose-li:my-0.5 prose-a:text-[#F97316]";
 
 // Sección individual del acordeón con contenido Markdown + tooltips
 // destacado=true → fondo violeta para "Cómo posicionar tu oferta"
@@ -547,13 +547,13 @@ function SeccionAcordeon({
         onClick={onToggle}
         className={`w-full flex items-center justify-between py-3 px-4 text-left transition-colors ${
           destacado
-            ? "bg-[#EDE9FE] dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30"
+            ? "bg-[#FFF7ED] dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30"
             : "bg-gray-50 dark:bg-muted/30 hover:bg-gray-100 dark:hover:bg-muted/50"
         }`}
       >
         <span
           className={`font-semibold text-sm ${
-            destacado ? "text-[#5B21B6] dark:text-violet-300" : "text-[#1F2937] dark:text-foreground"
+            destacado ? "text-[#C2410C] dark:text-orange-300" : "text-[#1F2937] dark:text-foreground"
           }`}
         >
           {titulo}
@@ -561,7 +561,7 @@ function SeccionAcordeon({
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
             abierto ? "rotate-180" : ""
-          } ${destacado ? "text-[#5B21B6] dark:text-violet-300" : "text-[#7C3AED]"}`}
+          } ${destacado ? "text-[#C2410C] dark:text-orange-300" : "text-[#F97316]"}`}
         />
       </button>
 
@@ -998,7 +998,7 @@ function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: Me
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-[#7C3AED]">{item.letra}</span>
+                        <span className="text-xs font-bold text-[#F97316]">{item.letra}</span>
                         <p className="text-xs font-semibold text-foreground">{item.titulo}</p>
                       </div>
                       <p className="text-[11px] text-muted-foreground/70 leading-snug mt-0.5">
@@ -1013,7 +1013,7 @@ function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: Me
                             onChange={(e) => setTextoLocal(e.target.value)}
                             rows={2}
                             autoFocus
-                            className="text-xs resize-none focus-visible:ring-[#7C3AED]"
+                            className="text-xs resize-none focus-visible:ring-[#F97316]"
                             placeholder={`Notas sobre ${item.titulo.toLowerCase()}...`}
                           />
                           <div className="flex gap-2">
@@ -1023,7 +1023,7 @@ function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: Me
                                 onComponenteChange(item.campo, { texto: textoLocal.trim() || null });
                                 setEditandoTexto(null);
                               }}
-                              className="text-xs font-semibold text-[#7C3AED] hover:underline"
+                              className="text-xs font-semibold text-[#F97316] hover:underline"
                             >
                               Guardar
                             </button>
@@ -1080,7 +1080,7 @@ function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: Me
                     onValorChange("valor_estimado", val);
                   }}
                   placeholder="0"
-                  className="w-full h-10 pl-7 pr-4 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/60"
+                  className="w-full h-10 pl-7 pr-4 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/60"
                 />
               </div>
               {meddic.valor_estimado != null && (
@@ -1109,7 +1109,7 @@ function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: Me
                 step={5}
                 value={meddic.probabilidad ?? sugerirProbabilidad(meddic.score)}
                 onChange={(e) => onValorChange("probabilidad", parseInt(e.target.value, 10))}
-                className="w-full h-2 rounded-full appearance-none bg-muted cursor-pointer accent-[#7C3AED]"
+                className="w-full h-2 rounded-full appearance-none bg-muted cursor-pointer accent-[#F97316]"
               />
               <p className="text-[10px] text-muted-foreground/60">
                 Sugerido por MEDDIC: {sugerirProbabilidad(meddic.score)}% · Puedes ajustarlo

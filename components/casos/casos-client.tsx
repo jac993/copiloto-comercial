@@ -289,7 +289,7 @@ function CasoCard({ caso, expandido, onToggle, onEditar, onEliminar, eliminando 
             {caso.objecion_vencida && <DetalleFila label="Objeción vencida" valor={caso.objecion_vencida} />}
             <div className="flex flex-wrap gap-2 pt-1">
               {caso.canal_entrada && <Tag label={caso.canal_entrada} color="blue" />}
-              {caso.tecnica_venta && <Tag label={caso.tecnica_venta} color="purple" />}
+              {caso.tecnica_venta && <Tag label={caso.tecnica_venta} color="orange" />}
               {caso.tiempo_cierre && <Tag label={`Cierre: ${caso.tiempo_cierre}`} color="amber" />}
             </div>
 
@@ -329,10 +329,10 @@ function DetalleFila({ label, valor }: { label: string; valor: string }) {
   );
 }
 
-function Tag({ label, color }: { label: string; color: "blue" | "purple" | "amber" }) {
+function Tag({ label, color }: { label: string; color: "blue" | "orange" | "amber" }) {
   const cls = {
     blue:   "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    purple: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    orange: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
     amber:  "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   }[color];
   return (
@@ -583,7 +583,7 @@ function CasoSheet({ form, editando, guardando, onClose, onGuardar, setField }: 
           <Button
             onClick={onGuardar}
             disabled={guardando}
-            className="flex-1 bg-[#7C3AED] hover:bg-[#6d28d9] text-white gap-2"
+            className="flex-1 bg-[#F97316] hover:bg-[#EA580C] text-white gap-2"
           >
             {guardando ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</>
@@ -600,10 +600,10 @@ function CasoSheet({ form, editando, guardando, onClose, onGuardar, setField }: 
 // ─── Helpers de estilo ────────────────────────────────────────
 
 const INPUT_CLS =
-  "w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/60";
+  "w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/60";
 
 const TEXTAREA_CLS =
-  "w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/60";
+  "w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#F97316]/60";
 
 function Campo({
   label,

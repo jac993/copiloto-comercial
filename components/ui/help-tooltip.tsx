@@ -19,38 +19,26 @@ export function HelpTooltip({ titulo, explicacion, ejemplo }: HelpTooltipProps) 
 
   return (
     <>
-      <button
-        type="button"
+      <span
+        role="button"
+        tabIndex={0}
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-        style={{
-          background: "none",
-          border: "none",
-          padding: 0,
-          color: "#7C3AED",
-          fontSize: 16,
-          fontWeight: 900,
-          lineHeight: 1,
-          cursor: "pointer",
-          flexShrink: 0,
-          userSelect: "none",
-          transition: "color 200ms",
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = "#5B21B6"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = "#7C3AED"; }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setOpen(true); } }}
         aria-label={`Ayuda: ${titulo}`}
+        className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-200 text-orange-600 text-[11px] font-bold cursor-pointer hover:bg-orange-300 transition-colors shrink-0"
       >
         ?
-      </button>
+      </span>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           className="max-w-sm"
-          style={{ borderTop: "3px solid #7C3AED", borderRadius: "0.75rem" }}
+          style={{ borderTop: "3px solid #F97316", borderRadius: "0.75rem" }}
         >
           <DialogHeader>
             <DialogTitle
               className="text-base"
-              style={{ color: "#7C3AED", fontWeight: 700 }}
+              style={{ color: "#F97316", fontWeight: 700 }}
             >
               {titulo}
             </DialogTitle>
@@ -63,13 +51,13 @@ export function HelpTooltip({ titulo, explicacion, ejemplo }: HelpTooltipProps) 
           {ejemplo && (
             <div
               style={{
-                background: "#EDE9FE",
-                borderLeft: "3px solid #7C3AED",
+                background: "#FFF7ED",
+                borderLeft: "3px solid #F97316",
                 borderRadius: "0 0.5rem 0.5rem 0",
                 padding: "0.75rem 1rem",
               }}
             >
-              <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: "#5B21B6" }}>
+              <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: "#C2410C" }}>
                 {ejemplo}
               </p>
             </div>

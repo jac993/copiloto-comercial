@@ -25,7 +25,7 @@ const AREA_COLOR: Record<string, string> = {
   operaciones:   "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   adquisiciones: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   compras:       "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  gerencia:      "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  gerencia:      "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   otro:          "bg-muted text-muted-foreground",
 };
 
@@ -96,7 +96,7 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
               {contactos.length > 0 ? "Buscar también" : "Decisores clave"}
             </p>
             {personasIdentificadas > 0 && (
-              <span className="text-xs text-[#7C3AED] font-semibold">
+              <span className="text-xs text-[#F97316] font-semibold">
                 [{personasIdentificadas}/{decisoresLocales.length} identificados]
               </span>
             )}
@@ -272,7 +272,7 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
           {error && <p className="text-xs text-destructive">{error}</p>}
           <Button
             size="sm"
-            className="w-full bg-[#7C3AED] hover:bg-violet-700"
+            className="w-full bg-[#F97316] hover:bg-orange-700"
             onClick={guardarEdicion}
             disabled={!form.nombre.trim() || guardando}
           >
@@ -322,7 +322,7 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
               <div className="flex items-center gap-0.5 shrink-0">
                 <button
                   onClick={() => setEditando(true)}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-[#7C3AED] hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-[#F97316] hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
                   aria-label="Editar contacto"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -498,9 +498,9 @@ function DecisorSugeridoCard({
 
         {/* Persona encontrada */}
         {tienePersona && persona ? (
-          <div className="bg-violet-50 dark:bg-violet-900/10 rounded-lg p-3 mb-3 space-y-2">
+          <div className="bg-orange-50 dark:bg-orange-900/10 rounded-lg p-3 mb-3 space-y-2">
             <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-full bg-[#7C3AED]/15 flex items-center justify-center text-xs font-bold text-[#7C3AED] shrink-0">
+              <div className="h-9 w-9 rounded-full bg-[#F97316]/15 flex items-center justify-center text-xs font-bold text-[#F97316] shrink-0">
                 {(persona.nombre ?? "?").split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
@@ -517,7 +517,7 @@ function DecisorSugeridoCard({
                 href={persona.linkedin_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs text-[#7C3AED] hover:underline"
+                className="flex items-center gap-1.5 text-xs text-[#F97316] hover:underline"
               >
                 <ExternalLink className="h-3 w-3" />
                 Ver perfil LinkedIn
@@ -628,7 +628,7 @@ function DecisorSugeridoCard({
             {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
             <Button
               size="sm"
-              className="w-full bg-[#7C3AED] hover:bg-violet-700"
+              className="w-full bg-[#F97316] hover:bg-orange-700"
               onClick={guardar}
               disabled={!nombre.trim() || guardando}
             >
