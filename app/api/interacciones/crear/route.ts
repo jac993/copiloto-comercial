@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
           .update({ resuelta: true })
           .eq("empresa_id", empresa_id)
           .neq("resuelta", true)           // captura false Y null heredados
+          .neq("id", interaccion.id)       // excluir la recién creada
           .lt("fecha", new Date().toISOString()),
         supabase
           .from("empresas")
