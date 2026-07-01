@@ -295,7 +295,7 @@ export function NuevaInteraccionSheet({
 
   return (
     <Dialog open={abierto} onOpenChange={(open) => { if (!open) cerrar(); }}>
-      <DialogContent className="max-w-md rounded-2xl p-0 overflow-hidden gap-0">
+      <DialogContent className="max-w-md rounded-2xl p-0 overflow-hidden gap-0 flex flex-col max-h-[90vh]">
 
         {/* ── FASE: Selección de tipo ── */}
         {fase === "tipos" && (
@@ -304,7 +304,7 @@ export function NuevaInteraccionSheet({
               <DialogTitle className="text-base font-extrabold">Nueva interacción</DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">¿Qué tipo de contacto fue?</p>
             </DialogHeader>
-            <div className="px-4 pb-5 space-y-2">
+            <div className="px-4 pb-5 space-y-2 overflow-y-auto flex-1">
               {TIPOS.map(({ id, emoji, label, ia }) => (
                 <button
                   key={id}
@@ -339,7 +339,7 @@ export function NuevaInteraccionSheet({
               </DialogTitle>
             </DialogHeader>
 
-            <div className="px-5 py-4 space-y-4">
+            <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
               {/* Toggle "No contestó" — solo para llamadas, primer elemento visible */}
               {tipo === "llamada" && (
                 <button
