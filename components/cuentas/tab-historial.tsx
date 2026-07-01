@@ -13,7 +13,6 @@ import {
   TrendingUp, Minus, Brain, AlertCircle, Clock,
   CheckCircle2, XCircle, AlertTriangle, User, Send, Pencil, CalendarPlus,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -401,16 +400,25 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
 
       <div className="flex items-center justify-between px-0.5">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Historial</p>
-        {hilos.length >= 2 && (
+        <div className="flex items-center gap-3">
+          {hilos.length >= 2 && (
+            <button
+              onClick={analizarTodo}
+              disabled={analizandoTodo}
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors disabled:opacity-50"
+            >
+              {analizandoTodo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+              ⚡ Analizar conversación
+            </button>
+          )}
           <button
-            onClick={analizarTodo}
-            disabled={analizandoTodo}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors disabled:opacity-50"
+            onClick={() => setSheetAbierto(true)}
+            className="flex items-center gap-1 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors"
           >
-            {analizandoTodo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            ⚡ Analizar conversación
+            <Plus className="w-3.5 h-3.5" />
+            Nueva
           </button>
-        )}
+        </div>
       </div>
 
       {hilos.length === 0 && (
@@ -496,16 +504,6 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
         onCreada={(nueva) => setLista((prev) => [nueva, ...prev])}
       />
 
-      <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
-        <Button
-          size="lg"
-          className="rounded-2xl shadow-xl shadow-primary/30 gap-2 pr-5 h-14"
-          onClick={() => setSheetAbierto(true)}
-        >
-          <Plus className="h-5 w-5" />
-          Nueva interacción
-        </Button>
-      </div>
     </div>
   );
 }
@@ -972,7 +970,7 @@ function TarjetaHilo({
                   {/* Formulario edición inline — vendedor */}
                   {estaEditando && <FormEdicion editandoMsg={editandoMsg!} setEditandoMsg={setEditandoMsg} onGuardar={guardarEdicionMensaje} />}
 
-                  {countdown && (
+                  {countdown && !pausadaAt && (
                     <div className="flex justify-end">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${COUNTDOWN_STYLE[countdown.estado]}`}>
                         {countdown.texto}
@@ -980,7 +978,7 @@ function TarjetaHilo({
                     </div>
                   )}
 
-                  {isLastVendor && showResponseButtons && !form.open && !estaEditando && (
+                  {isLastVendor && showResponseButtons && !form.open && !estaEditando && !pausadaAt && (
                     <div className="flex justify-end">
                       {estaVencida ? (
                         <div className="flex gap-1.5 flex-wrap justify-end">
