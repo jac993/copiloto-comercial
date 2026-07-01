@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
           .eq("empresa_id", empresa_id)
           .neq("resuelta", true)           // captura false Y null heredados
           .neq("id", interaccion.id)       // excluir la recién creada
+          .is("proximo_paso", null)        // NUNCA auto-resolver tareas con seguimiento; solo mensajes de espera
           .lt("fecha", new Date().toISOString()),
         supabase
           .from("empresas")
