@@ -234,8 +234,11 @@ export function HoyClient() {
     }
   };
 
-  const hoyStr = new Date().toISOString().split("T")[0];
-  const en7dias = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+  // Fecha en zona horaria de Chile — evita que el día cambie antes de medianoche local
+  const hoyStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
+  const en7diasDate = new Date(hoyStr + "T12:00:00");
+  en7diasDate.setDate(en7diasDate.getDate() + 7);
+  const en7dias = en7diasDate.toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
   const todasTareas = metricas?.tareas_pendientes ?? [];
   const tareas = todasTareas.filter((t) => {
     if (filtroTareas === "vencidas") return t.proximo_paso_fecha < hoyStr;
