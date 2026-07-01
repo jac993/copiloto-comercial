@@ -82,6 +82,8 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
                 key={contacto.id}
                 contacto={contacto}
                 onEliminar={() => handleContactoEliminado(contacto.id)}
+                empresaId={empresaId}
+                onContactoAgregado={handleContactoAgregado}
               />
             ))}
           </div>
@@ -137,7 +139,17 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
 
 // ── ContactoCard — muestra un contacto guardado, con edición inline ──────────
 
-function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar?: () => void }) {
+function ContactoCard({
+  contacto,
+  onEliminar,
+  empresaId,
+  onContactoAgregado,
+}: {
+  contacto: Contacto;
+  onEliminar?: () => void;
+  empresaId?: string;
+  onContactoAgregado?: (c: Contacto) => void;
+}) {
   const [datos, setDatos] = useState<Contacto>(contacto);
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({
@@ -152,6 +164,38 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
   const [eliminando, setEliminando] = useState(false);
   const [verificando, setVerificando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agregandoOtro, setAgregandoOtro] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [guardandoOtro, setGuardandoOtro] = useState(false);
+  const [errorOtro, setErrorOtro] = useState<string | null>(null);
+
+  const guardarOtro = async () => {
+    if (!nuevoNombre.trim() || !empresaId) return;
+    setGuardandoOtro(true);
+    setErrorOtro(null);
+    try {
+      const res = await fetch("/api/contactos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id:  empresaId,
+          nombre:      nuevoNombre.trim(),
+          cargo:       datos.cargo,
+          area:        datos.area,
+          es_decisor:  datos.es_decisor,
+        }),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar");
+      const nuevo = (await res.json()) as Contacto;
+      onContactoAgregado?.(nuevo);
+      setNuevoNombre("");
+      setAgregandoOtro(false);
+    } catch {
+      setErrorOtro("Error al guardar. Intenta de nuevo.");
+    } finally {
+      setGuardandoOtro(false);
+    }
+  };
 
   const areaColor = AREA_COLOR[datos.area ?? "otro"] ?? AREA_COLOR.otro;
   const iniciales = datos.nombre
@@ -390,6 +434,50 @@ function ContactoCard({ contacto, onEliminar }: { contacto: Contacto; onEliminar
             )}
             {verificando ? "Confirmando..." : "Confirmar que esta persona es real"}
           </Button>
+        )}
+
+        {/* Botón + Agregar otro con el mismo cargo */}
+        {empresaId && onContactoAgregado && (
+          agregandoOtro ? (
+            <div className="mt-2 space-y-2 border-t border-dashed border-border pt-2">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nombre de la otra persona *"
+                  value={nuevoNombre}
+                  onChange={(e) => setNuevoNombre(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void guardarOtro();
+                    if (e.key === "Escape") { setAgregandoOtro(false); setNuevoNombre(""); setErrorOtro(null); }
+                  }}
+                  className="flex-1 h-8 px-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  autoFocus
+                />
+                <button
+                  onClick={() => void guardarOtro()}
+                  disabled={!nuevoNombre.trim() || guardandoOtro}
+                  className="h-8 px-3 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-50 flex items-center"
+                >
+                  {guardandoOtro ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓"}
+                </button>
+                <button
+                  onClick={() => { setAgregandoOtro(false); setNuevoNombre(""); setErrorOtro(null); }}
+                  className="h-8 px-2 rounded-lg border border-border text-muted-foreground text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              {errorOtro && <p className="text-xs text-red-500">{errorOtro}</p>}
+            </div>
+          ) : (
+            <button
+              onClick={() => setAgregandoOtro(true)}
+              className="w-full mt-2 text-xs text-muted-foreground hover:text-primary flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-border hover:border-primary transition-colors"
+            >
+              <UserPlus className="h-3 w-3" />
+              + Agregar otro con este cargo
+            </button>
+          )
         )}
       </CardContent>
     </Card>
