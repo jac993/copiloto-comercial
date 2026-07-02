@@ -741,7 +741,7 @@ function TarjetaHilo({
       await fetch(`/api/interacciones/${hilo.rootId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proximo_paso: recTexto, proximo_paso_fecha: recFecha }),
+        body: JSON.stringify({ proximo_paso: recTexto, proximo_paso_fecha: recFecha, resuelta: false }),
       });
       setRecGuardado(true);
       setTimeout(() => { setRecordatorioAbierto(false); setRecGuardado(false); }, 2000);

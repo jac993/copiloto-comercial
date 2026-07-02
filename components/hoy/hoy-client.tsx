@@ -975,7 +975,7 @@ function TareaCard({
       const res = await fetch(`/api/interacciones/${tarea.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proximo_paso_fecha: iso }),
+        body: JSON.stringify({ proximo_paso_fecha: iso, resuelta: false }),
       });
       if (!res.ok) throw new Error("Error al guardar");
       onFechaChange(iso);
