@@ -148,10 +148,10 @@ export async function POST(req: NextRequest) {
     );
 
     // Cargar contexto completo desde Supabase en paralelo
-    const [empresa, historialTexto, feedbackRows] = await Promise.all([
+    const [empresa, historialTexto, feedbackRows, rechazadosRows] = await Promise.all([
       getEmpresaCompleta(empresaId),
       getHistorialResumido(empresaId, contactoId),
-      // Ejemplos aprobados por el vendedor para este canal — few-shot
+      // Ejemplos aprobados por el vendedor para este canal — few-shot de estilo
       supabase
         .from("borradores_feedback")
         .select("canal, tipo_borrador, borrador_ia, version_vendedor, notas")
@@ -160,9 +160,31 @@ export async function POST(req: NextRequest) {
         .order("creado_en", { ascending: false })
         .limit(5)
         .then((r) => r.data ?? []),
+      // Últimos 3 borradores rechazados de este contacto — para no repetir errores
+      (() => {
+        let q = supabase
+          .from("borradores")
+          .select("feedback_rechazo")
+          .eq("empresa_id", empresaId)
+          .eq("canal", canal)
+          .not("feedback_rechazo", "is", null)
+          .order("creado_en", { ascending: false })
+          .limit(3);
+        if (contactoId) q = q.eq("contacto_id", contactoId);
+        return q.then((r) => r.data ?? []);
+      })(),
     ]);
 
     // Bloque few-shot: muestra el texto que el vendedor aprobó (su versión editada si existe)
+    // Borradores rechazados: se inyectan para que Claude evite repetir los mismos errores
+    const rechazadosTexto = rechazadosRows.length > 0
+      ? `\n\nBORRADORES ANTERIORES RECHAZADOS:\n` +
+        rechazadosRows
+          .map((r) => `${canal} - Razón: ${(r as { feedback_rechazo: string }).feedback_rechazo}`)
+          .join("\n") +
+        "\nEvita cometer los mismos errores."
+      : "";
+
     const ejemplosAprobados = feedbackRows.length > 0
       ? `\n\n## Ejemplos de mensajes aprobados por el vendedor\n\nEstos son mensajes reales que el vendedor aprobó para el canal ${canal}. Tómalos como referencia de tono, extensión y estilo:\n\n` +
         feedbackRows.map((f, i) => {
@@ -318,8 +340,8 @@ ${ejemplosAprobados}
       : SYSTEM_PROMPT_VALE;
 
     const userMessage = canal === "llamada"
-      ? contextoLlamada
-      : (promptBorradores ?? "") + ejemplosAprobados;
+      ? contextoLlamada + rechazadosTexto
+      : (promptBorradores ?? "") + ejemplosAprobados + rechazadosTexto;
 
     const client = new Anthropic();
     const response = await client.messages.create({

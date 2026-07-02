@@ -719,7 +719,13 @@ export function TabPreparacion({
                           </div>
                         ) : borradorActivo ? (
                           <div>
-                            <BorradorContent borrador={borradorActivo} decisor={d} empresaId={empresaId} />
+                            <BorradorContent
+                              borrador={borradorActivo}
+                              decisor={d}
+                              empresaId={empresaId}
+                              borradorId={borradorIds[d.id]?.[canalAbierto] ?? null}
+                              onRegenerar={() => handleRegenerar(d, canalAbierto!)}
+                            />
                             {/* Advertencias de baja confianza (ej: área inferida) */}
                             {advertenciasActivas?.map((adv, i) => (
                               <div
@@ -784,10 +790,14 @@ function BorradorContent({
   borrador,
   decisor,
   empresaId,
+  borradorId,
+  onRegenerar,
 }: {
   borrador: BorradorCanalResult;
   decisor: DecisorDisplay;
   empresaId: string;
+  borradorId?: string | null;
+  onRegenerar?: () => void;
 }) {
   // Canal llamada tiene su propio componente de visualización
   if (borrador.canal === "llamada") {
@@ -804,6 +814,8 @@ function BorradorContent({
         decisor={decisor}
         empresaId={empresaId}
         borradorIa={borradorIaLlamada}
+        borradorId={borradorId}
+        onRegenerar={onRegenerar}
       />
     );
   }
@@ -818,8 +830,6 @@ function BorradorContent({
     borrador.canal === "correo"
       ? `Asunto: ${borrador.asunto}\n\n${borrador.cuerpo}`
       : borrador.texto;
-
-  console.log("[FeedbackBorrador] montando para canal:", borrador.canal, "empresaId:", empresaId);
 
   return (
     <div>
@@ -854,6 +864,8 @@ function BorradorContent({
           canal={borrador.canal}
           tipo={decisor.tipo}
           borradorIa={borradorIa}
+          borradorId={borradorId}
+          onRegenerar={onRegenerar}
         />
       </div>
 
@@ -883,11 +895,15 @@ function PitchLlamadaContent({
   decisor,
   empresaId,
   borradorIa,
+  borradorId,
+  onRegenerar,
 }: {
   borrador: Extract<BorradorCanalResult, { canal: "llamada" }>;
   decisor: DecisorDisplay;
   empresaId: string;
   borradorIa: string;
+  borradorId?: string | null;
+  onRegenerar?: () => void;
 }) {
   const textoCompleto = [
     `APERTURA:\n${borrador.apertura}`,
@@ -936,6 +952,8 @@ function PitchLlamadaContent({
           canal="llamada"
           tipo={decisor.tipo}
           borradorIa={borradorIa}
+          borradorId={borradorId}
+          onRegenerar={onRegenerar}
         />
       </div>
     </div>
@@ -952,20 +970,25 @@ function FeedbackBorrador({
   canal,
   tipo,
   borradorIa,
+  borradorId,
+  onRegenerar,
 }: {
   empresaId: string;
   contactoId: string | null;
   canal: CanalBorrador;
   tipo: TipoBorrador;
   borradorIa: string;
+  borradorId?: string | null;
+  onRegenerar?: () => void;
 }) {
   const [estado, setEstado] = useState<FeedbackEstado>("idle");
-  const [versionVendedor, setVersionVendedor] = useState("");
+  const [motivoRechazo, setMotivoRechazo] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   const guardar = async (evaluacion: "positivo" | "negativo") => {
     setGuardando(true);
     try {
+      // Registrar en borradores_feedback para el aprendizaje de estilo
       await fetch("/api/borradores-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -976,10 +999,24 @@ function FeedbackBorrador({
           tipo_borrador: tipo,
           borrador_ia: borradorIa,
           evaluacion,
-          version_vendedor: evaluacion === "negativo" ? (versionVendedor.trim() || null) : null,
+          version_vendedor: evaluacion === "negativo" ? (motivoRechazo.trim() || null) : null,
         }),
       });
-      setEstado(evaluacion === "positivo" ? "positivo_ok" : "guardado");
+
+      if (evaluacion === "negativo") {
+        // Guardar motivo de rechazo en el borrador para que Claude no repita errores
+        if (borradorId && motivoRechazo.trim()) {
+          await fetch(`/api/borradores/${borradorId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ feedback_rechazo: motivoRechazo.trim() }),
+          });
+        }
+        // Regenerar automáticamente con el feedback como contexto
+        onRegenerar?.();
+      } else {
+        setEstado("positivo_ok");
+      }
     } catch (e) {
       console.error("[feedback] error guardando:", e);
     } finally {
@@ -992,15 +1029,6 @@ function FeedbackBorrador({
       <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
         <CheckCheck className="h-3.5 w-3.5" />
         <span>Guardado — la IA aprenderá tu estilo</span>
-      </div>
-    );
-  }
-
-  if (estado === "guardado") {
-    return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <CheckCheck className="h-3.5 w-3.5" />
-        <span>Feedback guardado</span>
       </div>
     );
   }
@@ -1027,20 +1055,22 @@ function FeedbackBorrador({
       {estado === "negativo_form" && (
         <div className="space-y-2">
           <textarea
-            value={versionVendedor}
-            onChange={(e) => setVersionVendedor(e.target.value)}
-            placeholder="Pega tu versión del mensaje para que la IA aprenda tu estilo..."
-            rows={3}
+            value={motivoRechazo}
+            onChange={(e) => setMotivoRechazo(e.target.value.slice(0, 100))}
+            placeholder="¿Por qué no te sirve? Ej: muy largo, tono equivocado, ya envié algo similar"
+            rows={2}
+            maxLength={100}
             className="w-full text-xs rounded-xl border border-border bg-muted/40 px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-[#F97316] focus:border-[#F97316] placeholder:text-muted-foreground/60"
           />
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => void guardar("negativo")}
               disabled={guardando}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#F97316] text-white font-medium disabled:opacity-50 min-h-[32px]"
             >
               {guardando && <Loader2 className="h-3 w-3 animate-spin" />}
-              Guardar feedback
+              <Zap className="h-3 w-3" />
+              Enviar feedback y regenerar
             </button>
             <button
               onClick={() => setEstado("idle")}
@@ -1048,6 +1078,7 @@ function FeedbackBorrador({
             >
               Cancelar
             </button>
+            <span className="text-[10px] text-muted-foreground ml-auto">{motivoRechazo.length}/100</span>
           </div>
         </div>
       )}

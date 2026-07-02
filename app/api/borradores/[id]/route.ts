@@ -1,7 +1,7 @@
 // =============================================================
 // PATCH /api/borradores/[id]
-// Marca un borrador como usado (usado: true).
-// Se llama desde tab-preparacion al presionar "Marcar como usado".
+// Actualiza un borrador: marca como usado y/o guarda el motivo
+// de rechazo para que Claude no repita los mismos errores.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -12,10 +12,16 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   const { id } = params;
-  const body = await req.json() as { usado?: boolean };
+  const body = await req.json() as { usado?: boolean; feedback_rechazo?: string };
 
-  if (typeof body.usado !== "boolean") {
-    return NextResponse.json({ error: "Se requiere campo 'usado' (boolean)" }, { status: 400 });
+  const cambios: Record<string, unknown> = {};
+  if (typeof body.usado === "boolean") cambios.usado = body.usado;
+  if (typeof body.feedback_rechazo === "string") {
+    cambios.feedback_rechazo = body.feedback_rechazo.trim() || null;
+  }
+
+  if (Object.keys(cambios).length === 0) {
+    return NextResponse.json({ error: "Sin cambios válidos (usado o feedback_rechazo)" }, { status: 400 });
   }
 
   const supabase = createClient(
@@ -25,7 +31,7 @@ export async function PATCH(
 
   const { error } = await supabase
     .from("borradores")
-    .update({ usado: body.usado })
+    .update(cambios)
     .eq("id", id);
 
   if (error) {
