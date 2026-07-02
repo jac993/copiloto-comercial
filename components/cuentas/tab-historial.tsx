@@ -1125,7 +1125,6 @@ function TarjetaHilo({
           </div>
 
           {/* ── Recordatorio ── */}
-          {hilo.tipo !== "llamada" && (
           <div className="px-4 py-2.5 border-t border-border/40">
             {!recordatorioAbierto ? (
               <button
@@ -1172,7 +1171,6 @@ function TarjetaHilo({
               </div>
             )}
           </div>
-          )}
 
           {/* ── Botón pausar conversación ── */}
           {hilo.tipo !== "llamada" && (
