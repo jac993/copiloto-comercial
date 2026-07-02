@@ -38,6 +38,7 @@ interface PrepararBody {
   decisorNombre?: string | null;
   decisorCargo: string;
   decisorArea?: string | null;
+  contactoId?: string | null;
 }
 
 // Instrucción explícita por tipo para que Claude no meta la pata
@@ -127,7 +128,7 @@ Incorrecto: "Seguimiento pendiente", "¿Pudiste revisar mi mensaje?"`,
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as PrepararBody;
-    const { empresaId, canal, tipo: tipoRaw, decisorNombre, decisorCargo, decisorArea } = body;
+    const { empresaId, canal, tipo: tipoRaw, decisorNombre, decisorCargo, decisorArea, contactoId } = body;
 
     if (!empresaId || !canal || !decisorCargo) {
       return NextResponse.json(
@@ -149,7 +150,7 @@ export async function POST(req: NextRequest) {
     // Cargar contexto completo desde Supabase en paralelo
     const [empresa, historialTexto, feedbackRows] = await Promise.all([
       getEmpresaCompleta(empresaId),
-      getHistorialResumido(empresaId),
+      getHistorialResumido(empresaId, contactoId),
       // Ejemplos aprobados por el vendedor para este canal — few-shot
       supabase
         .from("borradores_feedback")
@@ -417,9 +418,29 @@ ${ejemplosAprobados}
       }
     }
 
+    // Persistir en tabla borradores para carga en sesiones futuras y tracking de uso
+    let borradorId: string | null = null;
+    try {
+      const { data: saved } = await supabase
+        .from("borradores")
+        .insert({
+          empresa_id: empresaId,
+          contacto_id: contactoId ?? null,
+          canal,
+          contenido: JSON.stringify(borrador),
+          tipo,
+        })
+        .select("id")
+        .single();
+      borradorId = (saved as { id: string } | null)?.id ?? null;
+    } catch (e) {
+      console.error("[preparacion] error guardando en tabla borradores:", e);
+    }
+
     return NextResponse.json({
       ok: true,
       borrador,
+      borradorId,
       // Advertencias no bloqueantes (ej: área inferida) — el frontend las muestra
       advertencias: validacion.advertencias.length > 0 ? validacion.advertencias : undefined,
     });

@@ -258,6 +258,8 @@ export function TabPreparacion({
     Record<string, Partial<Record<CanalBorrador, string[]>>>
   >({});
   const [abiertos, setAbiertos] = useState<Record<string, CanalBorrador | undefined>>({});
+  const [borradorIds, setBorradorIds] = useState<Record<string, Partial<Record<CanalBorrador, string>>>>({});
+  const [marcando, setMarcando] = useState<Record<string, CanalBorrador | null>>({});
 
   // Persiste un borrador en Supabase (fire and forget)
   const guardarEnSupabase = (clave: string, canal: CanalBorrador, canalData: BorradorCanal) => {
@@ -272,12 +274,36 @@ export function TabPreparacion({
     }).catch((e) => console.error("[preparacion] error guardando borrador:", e));
   };
 
-  // Llama a la API y guarda el resultado en cache + Supabase
-  const cargarBorrador = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
-    console.log("[preparacion] cargarBorrador — decisor:", decisor.id, "canal:", canal, "tipo:", decisor.tipo);
+  // Llama a la API y guarda el resultado en cache + Supabase.
+  // forzarNuevo=true salta la verificación de borrador guardado y siempre genera uno nuevo.
+  const cargarBorrador = async (decisor: DecisorDisplay, canal: CanalBorrador, forzarNuevo = false) => {
+    console.log("[preparacion] cargarBorrador — decisor:", decisor.id, "canal:", canal, "tipo:", decisor.tipo, "forzarNuevo:", forzarNuevo);
     setCargando((prev) => ({ ...prev, [decisor.id]: canal }));
 
     try {
+      // Verificar si hay un borrador guardado en tabla (solo si tiene contactoId real y no se fuerza nuevo)
+      if (!forzarNuevo && decisor.contactoId) {
+        try {
+          const params = new URLSearchParams({ empresaId, canal, contactoId: decisor.contactoId });
+          const savedRes = await fetch(`/api/borradores?${params}`);
+          if (savedRes.ok) {
+            const savedData = await savedRes.json() as {
+              id?: string;
+              borrador?: BorradorCanalResult;
+              creado_en?: string;
+            };
+            if (savedData.borrador && savedData.id) {
+              setCache((prev) => ({ ...prev, [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: savedData.borrador! } }));
+              setFechas((prev) => ({ ...prev, [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: savedData.creado_en ?? new Date().toISOString() } }));
+              setBorradorIds((prev) => ({ ...prev, [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: savedData.id! } }));
+              return;
+            }
+          }
+        } catch {
+          // GET falló — continuar con generación normal
+        }
+      }
+
       const res = await fetch("/api/preparacion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -288,6 +314,7 @@ export function TabPreparacion({
           decisorNombre: decisor.nombre,
           decisorCargo: decisor.cargo,
           decisorArea: decisor.area,
+          contactoId: decisor.contactoId,
         }),
       });
       console.log("[preparacion] fetch respondió HTTP", res.status);
@@ -295,6 +322,7 @@ export function TabPreparacion({
       const data = (await res.json()) as {
         ok?: boolean;
         borrador?: BorradorCanalResult;
+        borradorId?: string;
         error?: string;
         campos_faltantes?: string[];
         accion_recomendada?: string;
@@ -338,6 +366,13 @@ export function TabPreparacion({
         ...prev,
         [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: now },
       }));
+
+      if (data.borradorId) {
+        setBorradorIds((prev) => ({
+          ...prev,
+          [decisor.id]: { ...(prev[decisor.id] ?? {}), [canal]: data.borradorId! },
+        }));
+      }
 
       // Construir el objeto para Supabase según el canal
       let canalData: BorradorCanal;
@@ -408,7 +443,7 @@ export function TabPreparacion({
     await cargarBorrador(decisor, canal);
   };
 
-  // Regenerar: borra cache del canal y genera uno nuevo
+  // Regenerar: borra cache del canal y genera uno nuevo (forzando nueva llamada a IA)
   const handleRegenerar = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
     if (cargando[decisor.id] != null) return;
     setCache((prev) => {
@@ -421,12 +456,37 @@ export function TabPreparacion({
       delete nuevo[canal];
       return { ...prev, [decisor.id]: nuevo };
     });
+    setBorradorIds((prev) => {
+      const nuevo = { ...(prev[decisor.id] ?? {}) };
+      delete nuevo[canal];
+      return { ...prev, [decisor.id]: nuevo };
+    });
     setErroresBloqueados((prev) => {
       const nuevo = { ...(prev[decisor.id] ?? {}) };
       delete nuevo[canal];
       return { ...prev, [decisor.id]: nuevo };
     });
-    await cargarBorrador(decisor, canal);
+    await cargarBorrador(decisor, canal, true);
+  };
+
+  // Marcar borrador como usado y generar uno nuevo automáticamente
+  const handleMarcarUsado = async (decisor: DecisorDisplay, canal: CanalBorrador) => {
+    const borradorId = borradorIds[decisor.id]?.[canal];
+    if (!borradorId || cargando[decisor.id] != null) return;
+    setMarcando((prev) => ({ ...prev, [decisor.id]: canal }));
+    try {
+      await fetch(`/api/borradores/${borradorId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usado: true }),
+      });
+      setCache((prev) => { const n = { ...(prev[decisor.id] ?? {}) }; delete n[canal]; return { ...prev, [decisor.id]: n }; });
+      setBorradorIds((prev) => { const n = { ...(prev[decisor.id] ?? {}) }; delete n[canal]; return { ...prev, [decisor.id]: n }; });
+      setFechas((prev) => { const n = { ...(prev[decisor.id] ?? {}) }; delete n[canal]; return { ...prev, [decisor.id]: n }; });
+      await cargarBorrador(decisor, canal, true);
+    } finally {
+      setMarcando((prev) => ({ ...prev, [decisor.id]: null }));
+    }
   };
 
   return (
@@ -670,22 +730,38 @@ export function TabPreparacion({
                                 <span>{adv}</span>
                               </div>
                             ))}
-                            {/* Fecha + botón Generar nuevo */}
-                            <div className="mt-3 flex items-center justify-between gap-2">
+                            {/* Fecha + acciones del borrador */}
+                            <div className="mt-3 flex items-center gap-2 flex-wrap">
                               {fechaActiva && (
-                                <p className="text-[10px] text-muted-foreground">
+                                <p className="text-[10px] text-muted-foreground shrink-0">
                                   Generado el {formatFecha(fechaActiva)}
                                 </p>
                               )}
-                              <button
-                                onClick={() => handleRegenerar(d, canalAbierto)}
-                                disabled={cargandoCanal !== null}
-                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#F97316] transition-colors ml-auto"
-                              >
-                                <RefreshCw className="h-3 w-3" />
-                                <Zap className="h-2.5 w-2.5 text-amber-500" />
-                                Generar nuevo
-                              </button>
+                              <div className="flex items-center gap-2 ml-auto">
+                                {borradorIds[d.id]?.[canalAbierto] && (
+                                  <button
+                                    onClick={() => void handleMarcarUsado(d, canalAbierto)}
+                                    disabled={cargandoCanal !== null || marcando[d.id] === canalAbierto}
+                                    className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors disabled:opacity-50"
+                                  >
+                                    {marcando[d.id] === canalAbierto ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <CheckCheck className="h-3 w-3" />
+                                    )}
+                                    Marcar usado y generar nuevo
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleRegenerar(d, canalAbierto)}
+                                  disabled={cargandoCanal !== null}
+                                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-[#F97316] transition-colors"
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                  <Zap className="h-2.5 w-2.5 text-amber-500" />
+                                  Generar nuevo
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ) : null}

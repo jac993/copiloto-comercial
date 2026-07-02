@@ -615,11 +615,14 @@ const TEXTOS_RESOLUCION_HISTORIAL = new Set([
 ]);
 const TIPOS_COUNTDOWN_HISTORIAL = new Set(["whatsapp", "email", "linkedin"]);
 
-export async function getHistorialResumido(empresaId: string): Promise<string> {
-  const { data, error } = await getSupabase()
+export async function getHistorialResumido(empresaId: string, contactoId?: string | null): Promise<string> {
+  // Filtrar por contacto si se especifica — para borradores coherentes con esa persona
+  let q = getSupabase()
     .from("interacciones")
     .select("tipo, fecha, resumen_ia, transcripcion, sentimiento, proximo_paso")
-    .eq("empresa_id", empresaId)
+    .eq("empresa_id", empresaId);
+  if (contactoId) q = q.eq("contacto_id", contactoId);
+  const { data, error } = await q
     .order("fecha", { ascending: false })
     .limit(12); // más registros para poder parear original+resolución
 

@@ -641,6 +641,21 @@ export interface BorradorFeedbackInsert {
   notas?: string | null;
 }
 
+// ─── TABLA: borradores ────────────────────────────────────────
+// Persiste borradores generados por canal+contacto para no regenerar
+// en cada apertura. El campo usado=true indica que ya fue enviado.
+
+export interface BorradorGuardado {
+  id: string;
+  empresa_id: string;
+  contacto_id: string | null;
+  canal: string;
+  contenido: string;
+  tipo: string;
+  usado: boolean;
+  creado_en: string;
+}
+
 // ─── TABLA: correos_detectados ────────────────────────────────
 
 export interface CorreoDetectado {
