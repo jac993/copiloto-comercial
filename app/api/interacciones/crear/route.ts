@@ -7,6 +7,7 @@
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { insertInteraccion } from "@/lib/queries";
 import type { TipoInteraccion, InteraccionInsert } from "@/lib/types";
 
@@ -20,6 +21,13 @@ function sumarDiasHabiles(n: number): string {
     if (dia !== 0 && dia !== 6) contados++;
   }
   return fecha.toISOString().split("T")[0];
+}
+
+// Avanza un día calendario desde una fecha YYYY-MM-DD
+function avanzarUnDia(fechaStr: string): string {
+  const d = new Date(fechaStr + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split("T")[0];
 }
 
 export async function POST(req: NextRequest) {
@@ -80,30 +88,89 @@ export async function POST(req: NextRequest) {
 
     const interaccion = await insertInteraccion(interaccionData);
 
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
     // Al registrar cualquier mensaje (vendedor o prospecto):
-    // 1. Marcar tareas pendientes anteriores como resueltas
+    // 1. Marcar mensajes anteriores sin tarea como resueltos
     // 2. Reactivar la conversación si estaba pausada
-    {
-      const { createClient } = await import("@supabase/supabase-js");
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    await Promise.all([
+      supabase
+        .from("interacciones")
+        .update({ resuelta: true })
+        .eq("empresa_id", empresa_id)
+        .neq("resuelta", true)           // captura false Y null heredados
+        .neq("id", interaccion.id)       // excluir la recién creada
+        .is("proximo_paso", null)        // NUNCA auto-resolver tareas con seguimiento; solo mensajes de espera
+        .lt("fecha", new Date().toISOString()),
+      supabase
+        .from("empresas")
+        .update({ conversacion_pausada_at: null })
+        .eq("id", empresa_id)
+        .not("conversacion_pausada_at", "is", null),
+    ]);
+
+    // Tarea de seguimiento automática:
+    // Solo si: vendedor envió el mensaje, hay texto, y el cliente NO llenó proximo_paso manualmente.
+    const transcripcionTrimmed = interaccionData.transcripcion?.trim() ?? "";
+    const debeAutoTarea =
+      (remitente ?? "vendedor") === "vendedor" &&
+      transcripcionTrimmed.length > 0 &&
+      !proximo_paso?.trim() &&
+      !proximo_paso_fecha &&
+      tipo !== "sin_respuesta"; // sin_respuesta ya genera su propia tarea arriba
+
+    if (debeAutoTarea) {
+      // Obtener fechas ya ocupadas por tareas pendientes (global, todos los clientes)
+      const { data: tareasExistentes } = await supabase
+        .from("interacciones")
+        .select("proximo_paso_fecha")
+        .eq("resuelta", false)
+        .not("proximo_paso", "is", null);
+
+      const fechasOcupadas = new Set(
+        (tareasExistentes ?? [])
+          .map((t) => t.proximo_paso_fecha as string | null)
+          .filter((f): f is string => !!f)
       );
-      await Promise.all([
-        supabase
-          .from("interacciones")
-          .update({ resuelta: true })
-          .eq("empresa_id", empresa_id)
-          .neq("resuelta", true)           // captura false Y null heredados
-          .neq("id", interaccion.id)       // excluir la recién creada
-          .is("proximo_paso", null)        // NUNCA auto-resolver tareas con seguimiento; solo mensajes de espera
-          .lt("fecha", new Date().toISOString()),
-        supabase
-          .from("empresas")
-          .update({ conversacion_pausada_at: null })
-          .eq("id", empresa_id)
-          .not("conversacion_pausada_at", "is", null),
-      ]);
+
+      // Buscar primer día libre desde hoy + 3 días hábiles, máx 14 días calendario
+      const hoy = new Date().toISOString().split("T")[0];
+      const limiteDate = new Date(hoy + "T12:00:00");
+      limiteDate.setDate(limiteDate.getDate() + 14);
+      const limite = limiteDate.toISOString().split("T")[0];
+
+      let fechaSeguimiento = sumarDiasHabiles(3);
+      while (fechasOcupadas.has(fechaSeguimiento) && fechaSeguimiento < limite) {
+        fechaSeguimiento = avanzarUnDia(fechaSeguimiento);
+      }
+
+      // Resolver nombre del contacto si hay contacto_id
+      let contactoNombre = "prospecto";
+      if (contacto_id) {
+        const { data: contacto } = await supabase
+          .from("contactos")
+          .select("nombre")
+          .eq("id", contacto_id)
+          .maybeSingle();
+        if (contacto?.nombre) contactoNombre = contacto.nombre as string;
+      }
+
+      const resumenCorto = transcripcionTrimmed.slice(0, 80);
+      const proximoPasoAuto = `Seguimiento a ${contactoNombre} — ${resumenCorto}`;
+
+      await supabase
+        .from("interacciones")
+        .update({
+          proximo_paso: proximoPasoAuto,
+          proximo_paso_fecha: fechaSeguimiento,
+          resuelta: false,
+        })
+        .eq("id", interaccion.id);
+
+      console.log('[AUTO_TAREA]', { id: interaccion.id, fecha: fechaSeguimiento, texto: proximoPasoAuto });
     }
 
     return NextResponse.json({ ok: true, interaccion });
