@@ -7,6 +7,7 @@
 // =============================================================
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
   Trash2, ChevronDown, Loader2, Plus, Zap,
@@ -532,6 +533,7 @@ function TarjetaHilo({
   onMensajeEliminado: (id: string) => void;
   onInteraccionActualizada: (i: Interaccion) => void;
 }) {
+  const router = useRouter();
   const [expandido, setExpandido] = useState(false);
   const [forms, setForms] = useState<Record<string, FormRespuesta>>({});
   const [enVuelo, setEnVuelo] = useState<Set<string>>(new Set());
@@ -744,6 +746,7 @@ function TarjetaHilo({
         body: JSON.stringify({ proximo_paso: recTexto, proximo_paso_fecha: recFecha, resuelta: false }),
       });
       setRecGuardado(true);
+      router.refresh();
       setTimeout(() => { setRecordatorioAbierto(false); setRecGuardado(false); }, 2000);
     } finally {
       setGuardandoRec(false);
