@@ -285,7 +285,7 @@ export function TabPreparacion({
       if (!forzarNuevo && decisor.contactoId) {
         try {
           const params = new URLSearchParams({ empresaId, canal, contactoId: decisor.contactoId });
-          const savedRes = await fetch(`/api/borradores?${params}`);
+          const savedRes = await fetch(`/api/borradores?${params}`, { cache: "no-store" });
           if (savedRes.ok) {
             const savedData = await savedRes.json() as {
               id?: string;
@@ -306,6 +306,7 @@ export function TabPreparacion({
 
       const res = await fetch("/api/preparacion", {
         method: "POST",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           empresaId,
@@ -1004,15 +1005,18 @@ function FeedbackBorrador({
       });
 
       if (evaluacion === "negativo") {
-        // Guardar motivo de rechazo en el borrador para que Claude no repita errores
-        if (borradorId && motivoRechazo.trim()) {
+        // Marcar siempre como usado=true para que el GET no devuelva este borrador
+        // al regenerar. También guarda el motivo si se proporcionó.
+        if (borradorId) {
+          const patchBody: Record<string, unknown> = { usado: true };
+          if (motivoRechazo.trim()) patchBody.feedback_rechazo = motivoRechazo.trim();
           await fetch(`/api/borradores/${borradorId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ feedback_rechazo: motivoRechazo.trim() }),
+            body: JSON.stringify(patchBody),
           });
         }
-        // Regenerar automáticamente con el feedback como contexto
+        // Regenerar con el feedback inyectado en el contexto de Claude
         onRegenerar?.();
       } else {
         setEstado("positivo_ok");

@@ -177,6 +177,8 @@ export async function POST(req: NextRequest) {
 
     // Bloque few-shot: muestra el texto que el vendedor aprobó (su versión editada si existe)
     // Borradores rechazados: se inyectan para que Claude evite repetir los mismos errores
+    console.log("[preparacion] rechazados encontrados:", rechazadosRows.length, rechazadosRows.map((r) => (r as { feedback_rechazo: string }).feedback_rechazo?.slice(0, 60)));
+
     const rechazadosTexto = rechazadosRows.length > 0
       ? `\n\nBORRADORES ANTERIORES RECHAZADOS:\n` +
         rechazadosRows
@@ -339,6 +341,8 @@ ${ejemplosAprobados}
       ? `${SYSTEM_PROMPT_VALE}\n\n${buildPromptBorradorCanal("llamada")}`
       : SYSTEM_PROMPT_VALE;
 
+    console.log("[preparacion] prompt incluye rechazados:", rechazadosTexto.includes("RECHAZADOS"));
+
     const userMessage = canal === "llamada"
       ? contextoLlamada + rechazadosTexto
       : (promptBorradores ?? "") + ejemplosAprobados + rechazadosTexto;
@@ -438,6 +442,25 @@ ${ejemplosAprobados}
         }
         borrador = { canal: "linkedin", texto: parsed.linkedin };
       }
+    }
+
+    // Invalidar borradores anteriores no usados antes de insertar el nuevo.
+    // Evita que el GET de /api/borradores devuelva uno viejo en la próxima apertura.
+    try {
+      let invQ = supabase
+        .from("borradores")
+        .update({ usado: true })
+        .eq("empresa_id", empresaId)
+        .eq("canal", canal)
+        .eq("usado", false);
+      if (contactoId) {
+        invQ = invQ.eq("contacto_id", contactoId);
+      } else {
+        invQ = invQ.is("contacto_id", null);
+      }
+      await invQ;
+    } catch (e) {
+      console.error("[preparacion] error invalidando borradores anteriores:", e);
     }
 
     // Persistir en tabla borradores para carga en sesiones futuras y tracking de uso
