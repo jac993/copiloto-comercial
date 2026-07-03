@@ -163,6 +163,7 @@ export async function POST(request: Request) {
         };
 
         // ── Scraping + Perplexity en paralelo ─────────────────
+        const t0 = Date.now();
         send("progreso", { mensaje: "Leyendo el sitio web..." });
 
         const [scrapeResult, perplexityResult] = await Promise.all([
@@ -183,6 +184,7 @@ export async function POST(request: Request) {
         ]);
 
         const { texto, nombreDetectado } = scrapeResult;
+        console.log('[INVESTIGAR_TIMING] scrape+perplexity:', Date.now() - t0, 'ms');
 
         if (!texto || texto.length < 50) {
           console.warn('[SCRAPE_FALLBACK] Scraping insuficiente, continuando solo con Perplexity:', url);
@@ -223,24 +225,40 @@ export async function POST(request: Request) {
           `--- TEXTO DEL SITIO WEB ---\n${textoWeb}` +
           perplexityBloque;
 
-        const mensaje = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
-          max_tokens: 6000,
-          system: "Eres un analizador de empresas B2B chilenas. Respondes ÚNICAMENTE con un objeto JSON válido. Nunca escribes texto fuera del JSON. Nunca te disculpas ni explicas. Solo JSON.",
-          messages: [{ role: "user", content: prompt }],
-        });
-
-        const textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
-        console.log('[CLAUDE_RAW]', textoRespuesta.substring(0, 800));
-        registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: mensaje.usage.input_tokens, output_tokens: mensaje.usage.output_tokens });
-        if (perplexityResult.input_tokens > 0 || perplexityResult.output_tokens > 0) {
-          registrarUso({ api: "perplexity", endpoint: "sonar", input_tokens: perplexityResult.input_tokens, output_tokens: perplexityResult.output_tokens });
+        // Timeout explícito de 90s: si Claude tarda más, preferimos guardar una ficha
+        // fallback a que Vercel mate la función en maxDuration (180s) sin guardar nada.
+        // Un SIGKILL de plataforma no ejecuta catch/finally — la investigación se perdería
+        // en silencio, sin log y sin fila en Supabase. Este es el origen del bug recurrente
+        // "empresa investigada pero no guardada": el guardado ocurre al final del pipeline.
+        const t1 = Date.now();
+        let textoRespuesta = "";
+        try {
+          const mensaje = await anthropic.messages.create(
+            {
+              model: "claude-sonnet-4-6",
+              max_tokens: 6000,
+              system: "Eres un analizador de empresas B2B chilenas. Respondes ÚNICAMENTE con un objeto JSON válido. Nunca escribes texto fuera del JSON. Nunca te disculpas ni explicas. Solo JSON.",
+              messages: [{ role: "user", content: prompt }],
+            },
+            { timeout: 90_000 }
+          );
+          textoRespuesta = mensaje.content[0]?.type === "text" ? mensaje.content[0].text : "";
+          console.log('[CLAUDE_RAW]', textoRespuesta.substring(0, 800));
+          registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: mensaje.usage.input_tokens, output_tokens: mensaje.usage.output_tokens });
+          if (perplexityResult.input_tokens > 0 || perplexityResult.output_tokens > 0) {
+            registrarUso({ api: "perplexity", endpoint: "sonar", input_tokens: perplexityResult.input_tokens, output_tokens: perplexityResult.output_tokens });
+          }
+        } catch (claudeErr) {
+          // No relanzar: guardamos igual una ficha fallback para que la empresa
+          // quede registrada. El vendedor puede regenerar la ficha después.
+          console.error('[INVESTIGAR_CLAUDE_TIMEOUT_O_ERROR]', claudeErr instanceof Error ? claudeErr.message : claudeErr);
         }
+        console.log('[INVESTIGAR_TIMING] claude:', Date.now() - t1, 'ms');
 
         // ── Parsear y completar decisores con LinkedIn URL ─────
         send("progreso", { mensaje: "Guardando ficha..." });
 
-        const fichaParseada = extraerJsonSeguro<FichaIA>(textoRespuesta);
+        const fichaParseada = textoRespuesta ? extraerJsonSeguro<FichaIA>(textoRespuesta) : null;
         const fichaBase = fichaParseada ?? fichaFallback(nombreDetectado, urlLimpia);
 
         // Decisores hardcodeados — no dependen del JSON de Claude para evitar truncación
@@ -259,6 +277,7 @@ export async function POST(request: Request) {
             }
           : null;
 
+        const t2 = Date.now();
         const empresa = await guardarEmpresaDesdeFicha(
           ficha,
           urlLimpia,
@@ -266,11 +285,13 @@ export async function POST(request: Request) {
           busquedaWebRaw,
           { razonSocial: razon_social?.trim(), nombreComercial: nombre_comercial?.trim(), rut: rut?.trim() }
         );
+        console.log('[INVESTIGAR_TIMING] guardar:', Date.now() - t2, 'ms', '| total:', Date.now() - t0, 'ms', '| empresa_id:', empresa.id);
 
         send("resultado", { empresaId: empresa.id, nombre: empresa.nombre });
         send("done", {});
       } catch (error) {
         const mensaje = error instanceof Error ? error.message : "Error desconocido";
+        console.error('[INVESTIGAR_ERROR]', mensaje, error);
         send("error", { mensaje });
         send("done", {});
       } finally {

@@ -9,9 +9,14 @@ import { unstable_noStore as noStore } from "next/cache";
 
 // Crea un cliente fresco con service role key para evitar bloqueos de RLS en inserts/updates.
 // queries.ts solo se ejecuta en el servidor (API routes); la service role key nunca llega al browser.
+// NUNCA caer silenciosamente a la clave anon: mejor fallar ruidosamente que escribir con
+// permisos equivocados sin que nadie se entere.
 function getSupabase() {
   noStore();
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY no está configurada — no se puede escribir en Supabase.");
+  }
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     key,
@@ -788,26 +793,43 @@ export async function guardarEmpresaDesdeFicha(
     console.log('[GUARDAR_PASO_2_OK] empresa insertada:', empresa.id);
   }
 
-  // Insertar decisores como contactos (ignorar si ya existen por nombre + empresa)
+  // Insertar decisores como contactos (ignorar si ya existen por cargo + empresa).
+  // NOTA: no existe constraint única (empresa_id, cargo) en la tabla, así que un
+  // upsert con onConflict fallaba silenciosamente (42P10) en TODAS las investigaciones
+  // desde que los decisores se hardcodearon — ningún contacto llegaba a guardarse.
+  // Fix: filtrar en memoria los cargos ya existentes antes de insertar.
   if (ficha.decisores.length > 0) {
-    const contactos = ficha.decisores.map((d) => ({
-      empresa_id: empresa.id,
-      nombre: d.cargo, // nombre provisional hasta que el vendedor lo encuentre en LinkedIn
-      cargo: d.cargo,
-      area: d.area as "adquisiciones" | "calidad" | "operaciones" | "gerencia" | "otro",
-      notas_ia: `${d.por_que_es_clave}\n\nDolor específico: ${d.dolor_especifico}\n\nBuscar en LinkedIn: ${d.query_linkedin}`,
-      es_decisor: true,
-    }));
+    console.log('[GUARDAR_PASO_3] Verificando contactos existentes para empresa:', empresa.id);
+    const { data: existentes, error: errorExistentes } = await getSupabase()
+      .from("contactos")
+      .select("cargo")
+      .eq("empresa_id", empresa.id);
+    if (errorExistentes) {
+      console.error('[GUARDAR_PASO_3_CHECK_ERROR]', errorExistentes.message, errorExistentes.code);
+    }
+    const cargosExistentes = new Set((existentes ?? []).map((c) => c.cargo));
 
-    console.log('[GUARDAR_PASO_3] Upsert', contactos.length, 'contactos para empresa:', empresa.id);
-    const { error: errorContactos } = await getSupabase().from("contactos").upsert(contactos, {
-      onConflict: "empresa_id,cargo",
-      ignoreDuplicates: true,
-    });
-    if (errorContactos) {
-      console.error('[GUARDAR_PASO_3_ERROR]', errorContactos.message, errorContactos.code);
+    const contactos = ficha.decisores
+      .filter((d) => !cargosExistentes.has(d.cargo))
+      .map((d) => ({
+        empresa_id: empresa.id,
+        nombre: d.cargo, // nombre provisional hasta que el vendedor lo encuentre en LinkedIn
+        cargo: d.cargo,
+        area: d.area as "adquisiciones" | "calidad" | "operaciones" | "gerencia" | "otro",
+        notas_ia: `${d.por_que_es_clave}\n\nDolor específico: ${d.dolor_especifico}\n\nBuscar en LinkedIn: ${d.query_linkedin}`,
+        es_decisor: true,
+      }));
+
+    if (contactos.length === 0) {
+      console.log('[GUARDAR_PASO_3_OK] sin contactos nuevos que insertar (ya existían)');
     } else {
-      console.log('[GUARDAR_PASO_3_OK] contactos guardados');
+      console.log('[GUARDAR_PASO_3] Insertando', contactos.length, 'contactos nuevos para empresa:', empresa.id);
+      const { error: errorContactos } = await getSupabase().from("contactos").insert(contactos);
+      if (errorContactos) {
+        console.error('[GUARDAR_PASO_3_ERROR]', errorContactos.message, errorContactos.code);
+      } else {
+        console.log('[GUARDAR_PASO_3_OK] contactos guardados');
+      }
     }
   }
 
