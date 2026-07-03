@@ -17,7 +17,7 @@ function useBadgeVencidas() {
         .catch(() => {/* silent */});
     }
     fetch_();
-    const id = setInterval(fetch_, 5 * 60 * 1000); // refresca cada 5 min
+    const id = setInterval(fetch_, 60 * 1000); // refresca cada 60 seg
     return () => clearInterval(id);
   }, []);
   return total;

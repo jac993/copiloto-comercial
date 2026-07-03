@@ -354,6 +354,14 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
     const data = await res.json() as { ok: boolean; interaccion?: Interaccion | null; error?: string };
     if (!data.ok) throw new Error(data.error ?? "Error al registrar respuesta");
 
+    // Fix 3: PATCH explícito sobre el padre para garantizar resuelta=true
+    // aunque tenga proximo_paso asignado (el bulk update del endpoint lo excluiría).
+    void fetch(`/api/interacciones/${padre.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resuelta: true }),
+    });
+
     if (data.interaccion) {
       setLista((prev) => [...prev, data.interaccion!]);
     } else {

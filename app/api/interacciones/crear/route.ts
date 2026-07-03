@@ -112,6 +112,17 @@ export async function POST(req: NextRequest) {
         .not("conversacion_pausada_at", "is", null),
     ]);
 
+    // Fix 1: si es respuesta a un mensaje específico, resolver el padre siempre.
+    // El bulk update anterior lo omite cuando tiene proximo_paso asignado (auto-tarea),
+    // lo que dejaba la interacción original como resuelta=false en el badge de alertas.
+    if (parent_id) {
+      await supabase
+        .from("interacciones")
+        .update({ resuelta: true })
+        .eq("id", parent_id)
+        .neq("resuelta", true);
+    }
+
     // Tarea de seguimiento automática:
     // Solo si: vendedor envió el mensaje, hay texto, y el cliente NO llenó proximo_paso manualmente.
     const transcripcionTrimmed = interaccionData.transcripcion?.trim() ?? "";
