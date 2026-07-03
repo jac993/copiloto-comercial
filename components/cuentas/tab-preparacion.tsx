@@ -193,54 +193,16 @@ export function TabPreparacion({
     }));
   }, [contactos, ficha, interacciones]);
 
-  // Cache inicializado desde borradores guardados en Supabase
+  // Cache vacío al arrancar — la tabla `borradores` es la fuente de verdad.
+  // NO inicializar desde el JSONB de empresas: si el cache se llena sin pasar
+  // por cargarBorrador, borradorIds nunca se popula y el PATCH de feedback falla.
   const [cache, setCache] = useState<
     Record<string, Partial<Record<CanalBorrador, BorradorCanalResult>>>
-  >(() => {
-    if (!borradores) return {};
-    const inicial: Record<string, Partial<Record<CanalBorrador, BorradorCanalResult>>> = {};
-    for (const d of decisores) {
-      const saved = borradores[claveDecisor(d)];
-      if (!saved) continue;
-      const cached: Partial<Record<CanalBorrador, BorradorCanalResult>> = {};
-      if (saved.whatsapp?.texto) cached.whatsapp = { canal: "whatsapp", texto: saved.whatsapp.texto };
-      if (saved.correo?.asunto && saved.correo?.cuerpo) {
-        cached.correo = { canal: "correo", asunto: saved.correo.asunto, cuerpo: saved.correo.cuerpo };
-      }
-      if (saved.linkedin?.texto) cached.linkedin = { canal: "linkedin", texto: saved.linkedin.texto };
-      if (saved.llamada?.apertura && saved.llamada?.gancho && saved.llamada?.si_positivo && saved.llamada?.si_negativo && saved.llamada?.cierre) {
-        cached.llamada = {
-          canal: "llamada",
-          apertura:    saved.llamada.apertura,
-          gancho:      saved.llamada.gancho,
-          si_positivo: saved.llamada.si_positivo,
-          si_negativo: saved.llamada.si_negativo,
-          cierre:      saved.llamada.cierre,
-        };
-      }
-      if (Object.keys(cached).length > 0) inicial[d.id] = cached;
-    }
-    return inicial;
-  });
+  >({});
 
-  // Fechas de generación para mostrar "Generado el [fecha]"
   const [fechas, setFechas] = useState<
     Record<string, Partial<Record<CanalBorrador, string>>>
-  >(() => {
-    if (!borradores) return {};
-    const inicial: Record<string, Partial<Record<CanalBorrador, string>>> = {};
-    for (const d of decisores) {
-      const saved = borradores[claveDecisor(d)];
-      if (!saved) continue;
-      const df: Partial<Record<CanalBorrador, string>> = {};
-      if (saved.whatsapp?.generado_at) df.whatsapp = saved.whatsapp.generado_at;
-      if (saved.correo?.generado_at)   df.correo   = saved.correo.generado_at;
-      if (saved.linkedin?.generado_at) df.linkedin = saved.linkedin.generado_at;
-      if (saved.llamada?.generado_at)  df.llamada  = saved.llamada.generado_at;
-      if (Object.keys(df).length > 0) inicial[d.id] = df;
-    }
-    return inicial;
-  });
+  >({});
 
   // Ref para mantener los borradores actuales sin stale closures al acumular saves
   const borradoresRef = useRef<BorradoresGuardados>(borradores ?? {});
@@ -284,7 +246,7 @@ export function TabPreparacion({
       // Verificar si hay un borrador guardado en tabla (solo si tiene contactoId real y no se fuerza nuevo)
       if (!forzarNuevo && decisor.contactoId) {
         try {
-          const params = new URLSearchParams({ empresaId, canal, contactoId: decisor.contactoId });
+          const params = new URLSearchParams({ empresaId, canal, contactoId: decisor.contactoId, ts: Date.now().toString() });
           const savedRes = await fetch(`/api/borradores?${params}`, { cache: "no-store" });
           if (savedRes.ok) {
             const savedData = await savedRes.json() as {
