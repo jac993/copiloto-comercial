@@ -108,7 +108,34 @@ export function HoyClient() {
   const [guardandoReporte, setGuardandoReporte] = useState(false);
   const [reporteGuardado, setReporteGuardado] = useState(false);
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
+  // Distingue el skeleton de la primera generación automática del día
+  // (mensaje "Preparando tu día...") del recálculo manual (mensajes rotativos).
+  const [autoPreparando, setAutoPreparando] = useState(false);
   const prevContactosRef = useRef(0);
+  // Evita disparar la generación automática más de una vez por sesión —
+  // cargarMetricas se vuelve a llamar en cada focus de ventana.
+  const autoTriggeredRef = useRef(false);
+
+  // Identidad estable (deps vacías) para que cargarMetricas no cambie de
+  // referencia en cada render y el useEffect de montaje no se re-dispare.
+  const actualizarPrioridades = useCallback(async (opts?: { auto?: boolean }) => {
+    if (opts?.auto) setAutoPreparando(true);
+    setCargandoPrioridades(true);
+    setErrorPrioridades(null);
+    try {
+      const res = await fetch("/api/priorizar", { method: "POST" });
+      if (!res.ok) throw new Error("Error al calcular prioridades");
+      const data: RespuestaPriorizar = await res.json();
+      setPrioridades(data.prioridades);
+      setResumenDia(data.resumen_dia);
+      setCacheTimestamp(new Date().toISOString());
+    } catch {
+      setErrorPrioridades("No se pudieron calcular las prioridades. Intenta de nuevo.");
+    } finally {
+      setCargandoPrioridades(false);
+      setAutoPreparando(false);
+    }
+  }, []);
 
   const cargarMetricas = useCallback(async () => {
     try {
@@ -126,8 +153,15 @@ export function HoyClient() {
       prevContactosRef.current = data.contactos_hoy;
       setMetricas(data);
 
-      // Hidratar prioridades desde el caché del día (evita llamar a la IA al abrir)
-      if (data.prioridades_cache && data.prioridades_cache.length > 0) {
+      // ¿Las prioridades cacheadas son de HOY? Mismo campo que ya usa
+      // GET /api/metricas/hoy: prioridades_generadas_en. Comparación en
+      // huso horario de Chile para no cruzar el día antes de medianoche local.
+      const hoyClStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
+      const generadasHoy = !!data.prioridades_generadas_en &&
+        new Date(data.prioridades_generadas_en).toLocaleDateString("en-CA", { timeZone: "America/Santiago" }) === hoyClStr;
+
+      if (data.prioridades_cache && data.prioridades_cache.length > 0 && generadasHoy) {
+        // Hidratar desde caché — no gasta créditos de nuevo
         const fromCache: PrioridadIA[] = data.prioridades_cache.map((item) => ({
           empresa_id: item.empresa_id,
           score: item.score,
@@ -139,13 +173,17 @@ export function HoyClient() {
         setPrioridades(fromCache);
         if (data.resumen_dia_cache) setResumenDia(data.resumen_dia_cache);
         if (data.prioridades_generadas_en) setCacheTimestamp(data.prioridades_generadas_en);
+      } else if (!autoTriggeredRef.current) {
+        // Sin prioridades de hoy — generar automáticamente, una sola vez por sesión.
+        autoTriggeredRef.current = true;
+        void actualizarPrioridades({ auto: true });
       }
     } catch {
       // No interrumpir la pantalla si falla
     } finally {
       setCargandoMetricas(false);
     }
-  }, []);
+  }, [actualizarPrioridades]);
 
   // Cargar al montar
   useEffect(() => {
@@ -180,23 +218,6 @@ export function HoyClient() {
       setMarcandoId(null);
     }
   }
-
-  const actualizarPrioridades = async () => {
-    setCargandoPrioridades(true);
-    setErrorPrioridades(null);
-    try {
-      const res = await fetch("/api/priorizar", { method: "POST" });
-      if (!res.ok) throw new Error("Error al calcular prioridades");
-      const data: RespuestaPriorizar = await res.json();
-      setPrioridades(data.prioridades);
-      setResumenDia(data.resumen_dia);
-      setCacheTimestamp(new Date().toISOString());
-    } catch {
-      setErrorPrioridades("No se pudieron calcular las prioridades. Intenta de nuevo.");
-    } finally {
-      setCargandoPrioridades(false);
-    }
-  };
 
   const abrirDialogReporte = () => {
     const init: Record<string, ResultadoMision> = {};
@@ -253,6 +274,14 @@ export function HoyClient() {
   const meta = metricas?.meta ?? 5;
   const porcentaje = Math.min(Math.round((contactos / meta) * 100), 100);
   const racha = metricas?.racha_actual ?? 0;
+
+  // "Tu día recién comienza" reemplaza los ceros fríos antes de las 14:00
+  // en huso horario de Chile, cuando aún no hay ninguna interacción registrada.
+  const horaCl = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/Santiago", hour: "numeric", hour12: false }).format(new Date())
+  );
+  const diaRecienComienza =
+    !cargandoMetricas && contactos === 0 && (metricas?.llamadas_hoy ?? 0) === 0 && horaCl < 14;
 
   const hoy = new Intl.DateTimeFormat("es-CL", {
     weekday: "long",
@@ -336,7 +365,7 @@ export function HoyClient() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {racha === 0
-                  ? "Completa tu meta hoy para empezar tu racha"
+                  ? "Tu racha empieza hoy 🔥"
                   : racha < 5
                   ? "¡Vas bien! Mantén el ritmo"
                   : `¡${racha} días seguidos! Excelente constancia`}
@@ -480,7 +509,9 @@ export function HoyClient() {
             </Badge>
           </div>
 
-          {prioridades.length === 0 && !cargandoPrioridades ? (
+          {cargandoPrioridades ? (
+            <SkeletonPrioridades mensaje={autoPreparando ? "Preparando tu día..." : undefined} />
+          ) : prioridades.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="pt-8 pb-8 flex flex-col items-center text-center gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center">
@@ -499,19 +530,15 @@ export function HoyClient() {
                     {errorPrioridades}
                   </div>
                 )}
-                <Button
-                  size="lg"
-                  className="mt-2 w-full max-w-xs gap-2"
-                  onClick={actualizarPrioridades}
-                  disabled={cargandoPrioridades}
+                <button
+                  onClick={() => void actualizarPrioridades()}
+                  className="mt-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
                 >
-                  <Zap className="h-4 w-4" />
-                  Actualizar prioridades
-                </Button>
+                  <RefreshCw className="h-3 w-3" />
+                  ↻ Recalcular
+                </button>
               </CardContent>
             </Card>
-          ) : cargandoPrioridades ? (
-            <SkeletonPrioridades />
           ) : (
             <div className="space-y-3">
               {prioridades.map((p, i) => (
@@ -522,7 +549,7 @@ export function HoyClient() {
                   variant="outline"
                   size="sm"
                   className="flex-1 gap-1.5"
-                  onClick={actualizarPrioridades}
+                  onClick={() => void actualizarPrioridades()}
                   disabled={cargandoPrioridades}
                 >
                   <Zap className="h-3.5 w-3.5" />
@@ -550,23 +577,33 @@ export function HoyClient() {
             <Sun className="h-4 w-4 text-[#F59E0B]" />
             Resumen del día
           </h2>
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard
-              label="Contactos"
-              value={cargandoMetricas ? "—" : String(contactos)}
-              color="text-primary"
-            />
-            <StatCard
-              label="Llamadas"
-              value={cargandoMetricas ? "—" : String(metricas?.llamadas_hoy ?? 0)}
-              color="text-[#22C55E]"
-            />
-            <StatCard
-              label="Ganados"
-              value={cargandoMetricas ? "—" : String(metricas?.ganados_mes ?? 0)}
-              color="text-[#F59E0B]"
-            />
-          </div>
+          {diaRecienComienza ? (
+            <Card className="border-dashed">
+              <CardContent className="py-6 text-center">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Tu día recién comienza
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              <StatCard
+                label="Contactos"
+                value={cargandoMetricas ? "—" : String(contactos)}
+                color="text-primary"
+              />
+              <StatCard
+                label="Llamadas"
+                value={cargandoMetricas ? "—" : String(metricas?.llamadas_hoy ?? 0)}
+                color="text-[#22C55E]"
+              />
+              <StatCard
+                label="Ganados"
+                value={cargandoMetricas ? "—" : String(metricas?.ganados_mes ?? 0)}
+                color="text-[#F59E0B]"
+              />
+            </div>
+          )}
         </section>
       </div>
 
@@ -788,7 +825,7 @@ function ReactivacionCard({ empresa }: { empresa: Empresa }) {
 
 // ── Skeleton de prioridades (mientras carga) ─────────────────
 
-function SkeletonPrioridades() {
+function SkeletonPrioridades({ mensaje }: { mensaje?: string } = {}) {
   const MENSAJES = [
     "Analizando el pipeline...",
     "Leyendo señales de oportunidad...",
@@ -813,7 +850,7 @@ function SkeletonPrioridades() {
         </Card>
       ))}
       <p className="text-xs text-muted-foreground text-center animate-pulse pt-1">
-        {MENSAJES[Math.floor(Date.now() / 3000) % MENSAJES.length]}
+        {mensaje ?? MENSAJES[Math.floor(Date.now() / 3000) % MENSAJES.length]}
       </p>
     </div>
   );

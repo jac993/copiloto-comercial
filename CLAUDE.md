@@ -66,9 +66,21 @@ conscientemente. Reglas específicas:
 
   sin pagar el costo del análisis.
 
-- Priorizar cuentas del día: botón manual "Actualizar prioridades". No se
+- Priorizar cuentas del día: botón manual "Actualizar prioridades" para forzar
 
-  recalcula sola al abrir la app.
+  un recálculo en cualquier momento (aparece como "↻ Recalcular").
+
+  EXCEPCIÓN puntual: en la pantalla Hoy, si al abrir la app las prioridades
+
+  cacheadas no son del día de hoy (comparando prioridades_generadas_en), se
+
+  dispara UNA sola vez automáticamente al montar — como máximo una llamada
+
+  a la IA por día, nunca más de una vez por sesión de un mismo día. Se
+
+  muestra el skeleton "Preparando tu día..." mientras corre. Si ya existen
+
+  prioridades de hoy, se muestran desde caché sin gastar créditos de nuevo.
 
 - Motor de aprendizaje: el único proceso que corre en segundo plano, pero
 
