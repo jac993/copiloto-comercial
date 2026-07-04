@@ -726,28 +726,42 @@ REGLA MAESTRA: Antes de generar cualquier sugerencia, verifica qué datos reales
 cada empresa. El campo "accion_sugerida" NUNCA puede mencionar personas, temas o datos que no
 estén en la información recibida. Si un dato no existe, usa la lógica de estado descrita abajo.
 
+REGLA DE NOMBRES — ESTRICTA E INNEGOCIABLE: Solo puedes escribir el nombre de una persona si
+aparece EXACTAMENTE en el array "contactos_registrados" de esa empresa, dentro del JSON de
+entrada. PROHIBIDO inventar nombres de personas — completos o de pila — que no estén en ese
+array, aunque suenen realistas o aunque el "angulo_entrada" sugiera que debería existir alguien.
+Si "contactos_registrados" está vacío, o no tiene a nadie del área relevante, usa una referencia
+genérica de cargo: "el encargado de Operaciones", "la jefa de Calidad", "el área de compras" —
+NUNCA un nombre propio ni un cargo con apellido inventado.
+
+REGLA DE TELÉFONO — ESTRICTA: Si el contacto elegido en "contactos_registrados" tiene
+"tiene_telefono": true, la acción sugerida DEBE ser "Llamar a [nombre] al [telefono]". Está
+PROHIBIDO sugerir "buscar el teléfono" o "conseguir el número" de alguien que ya lo tiene
+registrado — usa el valor de "telefono" directamente.
+
 ${CONTEXTO_DOMINIO}
 
 LÓGICA ESTRICTA PARA "accion_sugerida" — elige según lo que realmente existe:
 
-CASO 1 — Sin contactos registrados Y sin interacciones:
+CASO 1 — "contactos_registrados" vacío Y sin interacciones:
 → "Buscar al [cargo del decisor prioritario de la ficha] en LinkedIn con la query: [query_linkedin exacta del decisor]"
    (usa el decisor de área calidad u operaciones, nunca compras como primer contacto)
 
-CASO 2 — Con contactos registrados PERO sin interacciones aún:
-→ "Enviar primer mensaje a [nombre del contacto] por [LinkedIn si tiene URL de LinkedIn, email si no]"
+CASO 2 — Con alguien en "contactos_registrados" PERO sin interacciones aún:
+→ Si "tiene_telefono" es true: "Llamar a [nombre] al [telefono]"
+→ Si no: "Enviar primer mensaje a [nombre del contacto] por [LinkedIn si canal_disponible es linkedin, email si es email]"
 
 CASO 3 — Con interacciones, último sentimiento "sin_respuesta" o días_sin_contacto > 5:
-→ "Hacer seguimiento a [nombre del contacto si existe, si no: el área] — sin respuesta hace [N] días"
+→ "Hacer seguimiento a [nombre del contacto SI está en contactos_registrados, si no: la referencia genérica de área] — sin respuesta hace [N] días"
 
 CASO 4 — Con interacciones recientes (días_sin_contacto <= 5) y sentimiento positivo/neutro:
-→ "Continuar con [nombre del contacto si existe] sobre [proximo_paso de la última interacción]"
+→ "Continuar con [nombre del contacto SI está en contactos_registrados, si no: la referencia genérica de área] sobre [proximo_paso de la última interacción]"
 
 CASO 5 — Estado "reunion_agendada":
 → "Preparar reunión: revisar preguntas SPIN en la tab Preparación de la ficha"
 
 CASO 6 — Estado "cotizado" con días_sin_contacto > 3:
-→ "Hacer seguimiento a la cotización enviada hace [N] días [a nombre del contacto si existe]"
+→ "Hacer seguimiento a la cotización enviada hace [N] días [a nombre del contacto SI está en contactos_registrados, si no: sin mencionar a nadie]"
 
 REGLAS PARA "razon":
 - Máximo 2 frases. Específica: menciona la industria, el estado y la señal concreta.

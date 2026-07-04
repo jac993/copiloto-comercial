@@ -71,6 +71,14 @@ export async function POST() {
         .eq("usada", false)
         .limit(2);
 
+      // Contactos reales de esta empresa — única fuente de verdad para nombres.
+      // Sin esto, el prompt pide "[nombre del contacto]" sin darle ningún dato,
+      // y el modelo termina inventando nombres plausibles.
+      const { data: contactos } = await supabase
+        .from("contactos")
+        .select("nombre, cargo, area, telefono, email, linkedin_url")
+        .eq("empresa_id", e.id);
+
       return {
         id: e.id,
         nombre: e.nombre,
@@ -88,6 +96,14 @@ export async function POST() {
           : null,
         senales_sin_usar: (senales ?? []).map((s) => s.descripcion),
         angulo_entrada: e.ficha_ia?.angulo_entrada ?? null,
+        contactos_registrados: (contactos ?? []).map((c) => ({
+          nombre: c.nombre,
+          cargo: c.cargo,
+          area: c.area,
+          telefono: c.telefono,
+          tiene_telefono: !!c.telefono,
+          canal_disponible: c.linkedin_url ? "linkedin" : c.email ? "email" : null,
+        })),
       };
     })
   );

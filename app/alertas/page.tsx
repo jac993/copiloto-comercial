@@ -33,6 +33,7 @@ export default function AlertasPage() {
   const [cargando, setCargando] = useState(true);
   const [resueltosIds, setResueltosIds] = useState<Set<string>>(new Set());
   const [resolviendoId, setResolviendoId] = useState<string | null>(null);
+  const [errorResolver, setErrorResolver] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/interacciones/vencidas")
@@ -48,13 +49,18 @@ export default function AlertasPage() {
     sentimiento: "positivo" | "negativo"
   ) {
     setResolviendoId(v.id);
+    setErrorResolver(null);
     try {
-      await fetch(`/api/interacciones/${v.id}`, {
+      const resPatch = await fetch(`/api/interacciones/${v.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resuelta: true }),
       });
-      await fetch("/api/interacciones/crear", {
+      if (!resPatch.ok) {
+        const body = await resPatch.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "No se pudo marcar como resuelta");
+      }
+      const resCrear = await fetch("/api/interacciones/crear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -66,9 +72,16 @@ export default function AlertasPage() {
           fecha: new Date().toISOString(),
         }),
       });
+      if (!resCrear.ok) {
+        const body = await resCrear.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "No se pudo registrar el seguimiento");
+      }
       setResueltosIds((prev) => new Set(Array.from(prev).concat(v.id)));
-    } catch {
-      // silent — si falla, el botón vuelve a estar disponible
+      // Refresca el badge de la campanita de inmediato, sin esperar el poll de 60s.
+      window.dispatchEvent(new Event("vencidas:refresh"));
+      router.refresh();
+    } catch (e) {
+      setErrorResolver(e instanceof Error ? e.message : "Error al marcar la respuesta. Intenta de nuevo.");
     } finally {
       setResolviendoId(null);
     }
@@ -103,6 +116,12 @@ export default function AlertasPage() {
           </p>
         </div>
       </div>
+
+      {errorResolver && (
+        <div className="mb-4 flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2.5">
+          {errorResolver}
+        </div>
+      )}
 
       {cargando && (
         <div className="flex justify-center py-12">

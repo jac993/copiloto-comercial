@@ -7,6 +7,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { InteraccionVencida } from "@/lib/types";
 
+// Sin esto, Next.js puede tratar este GET() sin parámetros como estático
+// y cachear la respuesta en el Full Route Cache — el badge de alertas
+// quedaría congelado en producción aunque el cliente reintente el poll.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

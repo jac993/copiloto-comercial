@@ -11,14 +11,20 @@ function useBadgeVencidas() {
   const [total, setTotal] = useState(0);
   useEffect(() => {
     function fetch_() {
-      fetch("/api/interacciones/vencidas")
+      fetch("/api/interacciones/vencidas", { cache: "no-store" })
         .then((r) => r.json())
         .then((d: { total?: number }) => setTotal(d.total ?? 0))
         .catch(() => {/* silent */});
     }
     fetch_();
     const id = setInterval(fetch_, 60 * 1000); // refresca cada 60 seg
-    return () => clearInterval(id);
+    // Refresco inmediato cuando otra pantalla (ej: /alertas) marca una respuesta —
+    // evita esperar hasta 60s para que la campanita baje el conteo.
+    window.addEventListener("vencidas:refresh", fetch_);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("vencidas:refresh", fetch_);
+    };
   }, []);
   return total;
 }

@@ -746,7 +746,14 @@ function PrioridadCard({
           {/* Score */}
           <div className="shrink-0 text-right">
             <p className="text-lg font-bold text-primary">{prioridad.score}</p>
-            <p className="text-xs text-muted-foreground -mt-0.5">score</p>
+            <div className="flex items-center justify-end -mt-0.5">
+              <p className="text-xs text-muted-foreground">score</p>
+              <HelpTooltip
+                titulo="Score de prioridad"
+                explicacion="Qué tan urgente es hablar con esta empresa hoy, del 0 al 100, según señales de la IA."
+                ejemplo=""
+              />
+            </div>
           </div>
         </div>
 
