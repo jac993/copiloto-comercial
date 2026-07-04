@@ -734,6 +734,16 @@ Si "contactos_registrados" está vacío, o no tiene a nadie del área relevante,
 genérica de cargo: "el encargado de Operaciones", "la jefa de Calidad", "el área de compras" —
 NUNCA un nombre propio ni un cargo con apellido inventado.
 
+REGLA CRÍTICA SOBRE NOMBRES:
+- Si "contactos_registrados" es un array vacío [], NUNCA inventes un nombre de persona. Usa
+  siempre el cargo genérico.
+  CORRECTO: "Contactar al Jefe de Calidad"
+  INCORRECTO: "Llamar a Marcos Aravena"
+- Solo puedes mencionar un nombre si aparece EXACTAMENTE en el array "contactos_registrados"
+  que se te entrega.
+- Si no hay contactos, la acción sugerida debe empezar con el cargo: "Contactar al/la
+  [cargo]..." o "Escribir al encargado de [área]..."
+
 REGLA DE TELÉFONO — ESTRICTA: Si el contacto elegido en "contactos_registrados" tiene
 "tiene_telefono": true, la acción sugerida DEBE ser "Llamar a [nombre] al [telefono]". Está
 PROHIBIDO sugerir "buscar el teléfono" o "conseguir el número" de alguien que ya lo tiene

@@ -104,6 +104,11 @@ export async function POST() {
           tiene_telefono: !!c.telefono,
           canal_disponible: c.linkedin_url ? "linkedin" : c.email ? "email" : null,
         })),
+        // Refuerzo explícito para el modelo — no basta con un array vacío,
+        // Claude seguía inventando nombres cuando no había contactos reales.
+        ...((contactos ?? []).length === 0
+          ? { nota_contactos: "Esta empresa no tiene contactos registrados. No inventes nombres." }
+          : {}),
       };
     })
   );
