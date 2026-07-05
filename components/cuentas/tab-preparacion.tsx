@@ -4,6 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import {
   Copy, CheckCheck, HelpCircle, Clock, MessageSquare,
   Zap, Loader2, Mail, ExternalLink, AlertCircle, User, RefreshCw, Phone,
+  ChevronRight, ArrowLeft,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
@@ -222,6 +223,10 @@ export function TabPreparacion({
   const [abiertos, setAbiertos] = useState<Record<string, CanalBorrador | undefined>>({});
   const [borradorIds, setBorradorIds] = useState<Record<string, Partial<Record<CanalBorrador, string>>>>({});
   const [marcando, setMarcando] = useState<Record<string, CanalBorrador | null>>({});
+
+  // Flujo guiado de 2 pasos: null = PASO 1 (lista de decisores);
+  // con valor = PASO 2 (panel de canales + borrador del decisor elegido).
+  const [decisorSeleccionadoId, setDecisorSeleccionadoId] = useState<string | null>(null);
 
   // Persiste un borrador en Supabase (fire and forget)
   const guardarEnSupabase = (clave: string, canal: CanalBorrador, canalData: BorradorCanal) => {
@@ -452,6 +457,10 @@ export function TabPreparacion({
     }
   };
 
+  // Decisor activo del PASO 2. Si el id ya no existe (lista recalculada),
+  // find devuelve undefined → volvemos al PASO 1 de forma segura.
+  const decisorSeleccionado = decisores.find((d) => d.id === decisorSeleccionadoId) ?? null;
+
   return (
     <div className="space-y-4 pb-6">
       {/* ── Preguntas SPIN ─────────────────────────────────────── */}
@@ -562,18 +571,58 @@ export function TabPreparacion({
               </p>
             </CardContent>
           </Card>
+        ) : decisorSeleccionado == null ? (
+          /* ── PASO 1: elegir a quién ─────────────────────────── */
+          <div className="space-y-2">
+            {decisores.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => setDecisorSeleccionadoId(d.id)}
+                className="w-full flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left transition-colors hover:border-[#F97316]/50 hover:bg-[#F97316]/5"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold leading-tight">{d.cargo}</p>
+                    <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap", TIPO_BADGE[d.tipo])}>
+                      {TIPO_TITULO[d.tipo]}
+                    </span>
+                  </div>
+                  {d.nombre ? (
+                    <p className="text-xs text-muted-foreground mt-0.5">{d.nombre}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+                      <User className="h-3 w-3 shrink-0" />
+                      Sin contacto identificado — mensaje genérico al cargo
+                    </p>
+                  )}
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+            ))}
+          </div>
         ) : (
-          <div className="space-y-3">
-            {decisores.map((d) => {
-              const cargandoCanal = cargando[d.id] ?? null;
-              const canalAbierto = abiertos[d.id];
-              const borradorActivo = canalAbierto ? cache[d.id]?.[canalAbierto] : undefined;
-              const errorActivo = canalAbierto ? errores[d.id]?.[canalAbierto] : undefined;
-              const erroBloqueadoActivo = canalAbierto ? erroresBloqueados[d.id]?.[canalAbierto] : undefined;
-              const advertenciasActivas = canalAbierto ? advertenciasBorradores[d.id]?.[canalAbierto] : undefined;
-              const fechaActiva = canalAbierto ? fechas[d.id]?.[canalAbierto] : undefined;
+          /* ── PASO 2: elegir canal y ver el borrador ─────────── */
+          (() => {
+            const d = decisorSeleccionado;
+            const cargandoCanal = cargando[d.id] ?? null;
+            const canalAbierto = abiertos[d.id];
+            const borradorActivo = canalAbierto ? cache[d.id]?.[canalAbierto] : undefined;
+            const errorActivo = canalAbierto ? errores[d.id]?.[canalAbierto] : undefined;
+            const erroBloqueadoActivo = canalAbierto ? erroresBloqueados[d.id]?.[canalAbierto] : undefined;
+            const advertenciasActivas = canalAbierto ? advertenciasBorradores[d.id]?.[canalAbierto] : undefined;
+            const fechaActiva = canalAbierto ? fechas[d.id]?.[canalAbierto] : undefined;
 
-              return (
+            return (
+              <div className="space-y-3">
+                {/* Volver a elegir decisor */}
+                <button
+                  onClick={() => setDecisorSeleccionadoId(null)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-[#F97316] transition-colors"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Elegir otro decisor
+                </button>
+
                 <Card key={d.id}>
                   <CardContent className="pt-4 pb-4">
                     {/* Encabezado del decisor */}
@@ -584,8 +633,13 @@ export function TabPreparacion({
                           {TIPO_TITULO[d.tipo]}
                         </span>
                       </div>
-                      {d.nombre && (
+                      {d.nombre ? (
                         <p className="text-xs text-muted-foreground mt-0.5">{d.nombre}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+                          <User className="h-3 w-3 shrink-0" />
+                          Sin contacto identificado — el borrador irá dirigido al cargo
+                        </p>
                       )}
                     </div>
 
@@ -738,9 +792,9 @@ export function TabPreparacion({
                     )}
                   </CardContent>
                 </Card>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })()
         )}
       </div>
     </div>
