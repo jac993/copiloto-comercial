@@ -71,6 +71,15 @@ interface RespuestaPriorizar {
   resumen_dia: string;
 }
 
+// El vendedor solo trabaja de lunes a viernes — evita gastar créditos
+// en auto-generación de prioridades sábado y domingo.
+function esFinDeSemanaCl(): boolean {
+  const diaSemanaCl = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "America/Santiago" })
+  ).getDay();
+  return diaSemanaCl === 0 || diaSemanaCl === 6;
+}
+
 // ── Colores de urgencia ──────────────────────────────────────
 
 const URGENCIA_CONFIG = {
@@ -174,9 +183,14 @@ export function HoyClient() {
         if (data.resumen_dia_cache) setResumenDia(data.resumen_dia_cache);
         if (data.prioridades_generadas_en) setCacheTimestamp(data.prioridades_generadas_en);
       } else if (!autoTriggeredRef.current) {
-        // Sin prioridades de hoy — generar automáticamente, una sola vez por sesión.
-        autoTriggeredRef.current = true;
-        void actualizarPrioridades({ auto: true });
+        // Sin prioridades de hoy — generar automáticamente, una sola vez por sesión,
+        // salvo sábado o domingo: el vendedor no trabaja esos días y no vale la pena
+        // gastar créditos sin uso real. El botón "↻ Recalcular" sigue disponible
+        // por si igual quiere forzarlo un fin de semana puntual.
+        if (!esFinDeSemanaCl()) {
+          autoTriggeredRef.current = true;
+          void actualizarPrioridades({ auto: true });
+        }
       }
     } catch {
       // No interrumpir la pantalla si falla
@@ -517,13 +531,23 @@ export function HoyClient() {
                 <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center">
                   <TrendingUp className="h-8 w-8 text-muted-foreground" />
                 </div>
-                <div className="space-y-1.5 max-w-xs">
-                  <p className="font-semibold">Sin prioridades aún</p>
-                  <p className="text-sm text-muted-foreground">
-                    La IA analizará tus cuentas y te dirá con quién hablar hoy
-                    y por qué, en orden de oportunidad.
-                  </p>
-                </div>
+                {esFinDeSemanaCl() ? (
+                  <div className="space-y-1.5 max-w-xs">
+                    <p className="font-semibold">Es fin de semana 🎉</p>
+                    <p className="text-sm text-muted-foreground">
+                      Las prioridades se generan de lunes a viernes. Si igual quieres
+                      trabajar hoy, recalcula manualmente.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-w-xs">
+                    <p className="font-semibold">Sin prioridades aún</p>
+                    <p className="text-sm text-muted-foreground">
+                      La IA analizará tus cuentas y te dirá con quién hablar hoy
+                      y por qué, en orden de oportunidad.
+                    </p>
+                  </div>
+                )}
                 {errorPrioridades && (
                   <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2.5 max-w-xs">
                     <AlertCircle className="h-4 w-4 shrink-0" />
