@@ -60,12 +60,16 @@ export default function AlertasPage() {
         const body = await resPatch.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error ?? "No se pudo marcar como resuelta");
       }
+      // "seguimiento" no es un tipo válido (viola interacciones_tipo_check).
+      // "No contestó" usa "sin_respuesta" (dispara su lógica de auto-tarea);
+      // "Sí contestó" reutiliza el canal original de la interacción vencida.
+      const tipo = sentimiento === "negativo" ? "sin_respuesta" : v.tipo;
       const resCrear = await fetch("/api/interacciones/crear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           empresa_id: v.empresa_id,
-          tipo: "seguimiento",
+          tipo,
           contacto_id: v.contacto_id ?? undefined,
           texto: resumen,
           sentimiento,
