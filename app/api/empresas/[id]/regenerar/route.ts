@@ -11,6 +11,7 @@ import { scrapeEmpresa, buscarConPerplexity, normalizarUrl } from "@/lib/scraper
 import { PROMPT_INVESTIGADOR } from "@/lib/prompts";
 import { sanitizarTexto, extraerJsonSeguro } from "@/lib/json-parser";
 import { registrarUso } from "@/lib/registrarUso";
+import { generarYGuardarAnguloEntrada } from "@/lib/anguloEntrada";
 import type { FichaIA, BusquedaWebRaw } from "@/lib/types";
 
 // Cliente Supabase con service role — no depende de cookies ni de next/headers
@@ -302,6 +303,18 @@ export async function POST(
 
     if (busquedaWebRaw) {
       await supabase.from("empresas").update({ busqueda_web_raw: busquedaWebRaw }).eq("id", params.id);
+    }
+
+    // El angulo_entrada que devuelve PROMPT_INVESTIGADOR es corto (3-4 líneas).
+    // Lo reemplazamos por la estrategia rica de 5 secciones, que usa además
+    // MEDDIC, historial de interacciones y notas del vendedor — así un solo
+    // botón deja la ficha Y la estrategia actualizadas. Si falla, no aborta
+    // el regenerar completo: la ficha ya quedó guardada con la versión corta.
+    try {
+      await generarYGuardarAnguloEntrada(params.id);
+      console.log("[regenerar] estrategia de entrada enriquecida OK");
+    } catch (anguloErr) {
+      console.error("[regenerar] no se pudo enriquecer la estrategia:", anguloErr instanceof Error ? anguloErr.message : anguloErr);
     }
 
     revalidatePath(`/cuentas/${params.id}`);

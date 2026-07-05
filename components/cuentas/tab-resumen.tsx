@@ -8,7 +8,6 @@ import { Zap, Tag, AlertTriangle, RefreshCw, ExternalLink, Globe, Loader2, Chevr
 import { useToast } from "@/hooks/use-toast";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Accordion,
@@ -64,17 +63,15 @@ export function TabResumen({
   const router = useRouter();
   const { toast } = useToast();
 
-  // Estrategia de entrada (actualizable sin recargar)
-  const [estrategiaActual, setEstrategiaActual] = useState(ficha.angulo_entrada);
-  const [actualizandoEstrategia, setActualizandoEstrategia] = useState(false);
+  // Estrategia de entrada (se refresca vía router.refresh() tras actualizar)
+  const [estrategiaActual] = useState(ficha.angulo_entrada);
 
   // Campo "Lo que sé y cómo quiero entrar" integrado en la sección Estrategia
   const [notasLocal, setNotasLocal] = useState(notasVendedor ?? "");
-  const [guardandoNotas, setGuardandoNotas] = useState(false);
 
-  // Reinvestigar empresa
-  const [reinvestigando, setReinvestigando] = useState(false);
-  const [confirmarReinvestigar, setConfirmarReinvestigar] = useState(false);
+  // Botón único "↻ Actualizar ficha" — guarda notas (si cambiaron) + reinvestiga
+  const [actualizando, setActualizando] = useState(false);
+  const [confirmarActualizar, setConfirmarActualizar] = useState(false);
 
   // MEDDIC — estado local inicializado desde la prop (Supabase)
   const MEDDIC_INICIAL: MeddicData = meddicProp ?? {
@@ -139,68 +136,45 @@ export function TabResumen({
     });
   }, [guardarMeddic]);
 
-  // Guarda notas y luego dispara actualización de estrategia automáticamente
-  const guardarYActualizar = async () => {
-    setGuardandoNotas(true);
+  // Botón único: guarda el contexto nuevo (si lo hay) y reinvestiga la ficha
+  // completa — /regenerar ya deja también la estrategia de entrada enriquecida
+  // (ver lib/anguloEntrada.ts), así que no hace falta un segundo endpoint.
+  const actualizarFicha = async () => {
+    setConfirmarActualizar(false);
+    setActualizando(true);
     try {
-      const res = await fetch(`/api/empresas/${empresaId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notas_vendedor: notasLocal.trim() || null }),
-      });
-      const data = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al guardar");
-      toast({ title: "Contexto guardado — actualizando estrategia..." });
-      // Dispara actualización automática tras guardar
-      await actualizarEstrategia();
-    } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "No se pudo guardar",
-        description: e instanceof Error ? e.message : "Error desconocido",
-      });
-    } finally {
-      setGuardandoNotas(false);
-    }
-  };
+      const notasCambiaron = notasLocal.trim() !== (notasVendedor ?? "").trim();
+      if (notasCambiaron) {
+        const resNotas = await fetch(`/api/empresas/${empresaId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notas_vendedor: notasLocal.trim() || null }),
+        });
+        const dataNotas = (await resNotas.json()) as { ok: boolean; error?: string };
+        if (!resNotas.ok || !dataNotas.ok) throw new Error(dataNotas.error ?? "Error al guardar el contexto");
+      }
 
-  const actualizarEstrategia = async () => {
-    setActualizandoEstrategia(true);
-    try {
-      const res = await fetch(`/api/empresas/${empresaId}/actualizar-angulo`, { method: "POST" });
-      const data = (await res.json()) as { ok: boolean; angulo_entrada?: string; error?: string };
-      if (!data.ok || !data.angulo_entrada) throw new Error(data.error ?? "Error desconocido");
-      setEstrategiaActual(data.angulo_entrada);
-      toast({ title: "Estrategia de entrada actualizada ✓" });
-    } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "No se pudo actualizar la estrategia",
-        description: e instanceof Error ? e.message : "Error desconocido",
-      });
-    } finally {
-      setActualizandoEstrategia(false);
-    }
-  };
-
-  const reinvestigar = async () => {
-    setReinvestigando(true);
-    setConfirmarReinvestigar(false);
-    try {
       const res = await fetch(`/api/empresas/${empresaId}/regenerar`, { method: "POST" });
-      const data = await res.json() as { ok: boolean; error?: string };
+      const data = (await res.json()) as { ok: boolean; error?: string };
       if (!data.ok) throw new Error(data.error ?? "Error desconocido");
-      toast({ title: "✅ Ficha actualizada", description: "La ficha se reinvestigó con éxito." });
+      toast({ title: "✅ Ficha actualizada", description: "La ficha se actualizó con la información más reciente." });
       router.refresh();
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al reinvestigar", description: e instanceof Error ? e.message : "Error desconocido" });
+      toast({
+        variant: "destructive",
+        title: "No se pudo actualizar la ficha",
+        description: e instanceof Error ? e.message : "Error desconocido",
+      });
     } finally {
-      setReinvestigando(false);
+      setActualizando(false);
     }
   };
 
   return (
     <div className="space-y-4 pb-6">
+
+      {/* Acción recomendada — lo más accionable que ya existe en la ficha */}
+      <AccionRecomendada angulo={estrategiaActual} />
 
       {/* 1. Datos generales */}
       <DatosGenerales
@@ -222,24 +196,32 @@ export function TabResumen({
         </CardContent>
       </Card>
 
-      {/* 3. Calificación MEDDIC */}
-      <MeddicCard
-        meddic={meddic}
-        guardando={guardandoMeddic}
-        onComponenteChange={actualizarComponenteMeddic}
-        onValorChange={(campo, valor) => {
-          const siguiente = { ...meddic, [campo]: valor };
-          setMeddic(siguiente);
-          void guardarMeddic(siguiente);
-        }}
-      />
+      {/* 3. Calificación MEDDIC — colapsada por defecto */}
+      <SeccionColapsable
+        titulo="Calificación MEDDIC"
+        resumen={`${scoreEtiqueta(meddic.score).label} · ${scorePct(meddic.score)}%`}
+      >
+        <MeddicCard
+          meddic={meddic}
+          guardando={guardandoMeddic}
+          ocultarTitulo
+          onComponenteChange={actualizarComponenteMeddic}
+          onValorChange={(campo, valor) => {
+            const siguiente = { ...meddic, [campo]: valor };
+            setMeddic(siguiente);
+            void guardarMeddic(siguiente);
+          }}
+        />
+      </SeccionColapsable>
 
-      {/* Inteligencia comercial */}
+      {/* Inteligencia comercial — colapsada por defecto */}
       {ficha.inteligencia_comercial && (
-        <InteligenciaComercialCard intel={ficha.inteligencia_comercial} />
+        <SeccionColapsable titulo="🧠 Inteligencia comercial">
+          <InteligenciaComercialCard intel={ficha.inteligencia_comercial} ocultarTitulo />
+        </SeccionColapsable>
       )}
 
-      {/* Encontrado en internet */}
+      {/* Encontrado en internet — ya colapsado por defecto (Accordion sin defaultValue) */}
       {busquedaWebRaw && (busquedaWebRaw.contactosTexto || busquedaWebRaw.inteligenciaTexto) && (
         <EncontradoEnInternet raw={busquedaWebRaw} />
       )}
@@ -267,11 +249,11 @@ export function TabResumen({
           </div>
 
           {/* Texto de la estrategia */}
-          {actualizandoEstrategia ? (
+          {actualizando ? (
             <div className="space-y-2.5 py-1">
               <div className="flex items-center gap-2 text-xs text-muted-foreground italic">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                Actualizando estrategia...
+                Actualizando ficha...
               </div>
               <div className="space-y-1.5 animate-pulse">
                 <div className="h-3.5 rounded-full bg-muted w-full" />
@@ -293,7 +275,7 @@ export function TabResumen({
               </label>
               <HelpTooltip
                 titulo="¿Para qué sirve este campo?"
-                explicacion="Escribe lo que sabes de la empresa y tu estrategia de entrada. Al guardar, la IA actualiza automáticamente la estrategia de los 5 puntos con tu contexto."
+                explicacion="Escribe lo que sabes de la empresa y tu estrategia de entrada. Al presionar '↻ Actualizar ficha', la IA usa este contexto para actualizar la estrategia de los 5 puntos."
                 ejemplo={"Ej: 'Hablé con Andrés González en septiembre, me dijo que avisaría cuando tuvieran requerimiento...'"}
               />
             </div>
@@ -303,32 +285,8 @@ export function TabResumen({
               rows={3}
               placeholder="Ej: hablé con Andrés González en septiembre, me dijo que avisaría cuando tuvieran requerimiento..."
               className="text-sm resize-none focus-visible:ring-[#F97316]"
-              disabled={guardandoNotas || actualizandoEstrategia}
+              disabled={actualizando}
             />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={guardarYActualizar}
-                disabled={guardandoNotas || actualizandoEstrategia}
-                className="bg-[#F97316] hover:bg-[#EA580C] text-white h-8 text-xs gap-1.5"
-              >
-                {guardandoNotas ? (
-                  <><Loader2 className="h-3 w-3 animate-spin" />Guardando...</>
-                ) : (
-                  "Guardar y actualizar"
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={actualizarEstrategia}
-                disabled={actualizandoEstrategia || guardandoNotas}
-                className="h-8 text-xs gap-1.5"
-              >
-                <Zap className="h-3.5 w-3.5 text-amber-500" />
-                {actualizandoEstrategia ? "Actualizando..." : "⚡ Actualizar estrategia"}
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -419,35 +377,35 @@ export function TabResumen({
         </div>
       )}
 
-      {/* Botón Reinvestigar empresa */}
+      {/* Botón único de actualización de ficha */}
       <div className="pt-2">
-        {!confirmarReinvestigar ? (
+        {!confirmarActualizar ? (
           <button
-            onClick={() => setConfirmarReinvestigar(true)}
-            disabled={reinvestigando}
+            onClick={() => setConfirmarActualizar(true)}
+            disabled={actualizando}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${reinvestigando ? "animate-spin" : ""}`} />
-            {reinvestigando ? "Reinvestigando empresa..." : "↻ Reinvestigar empresa"}
+            <RefreshCw className={`h-3.5 w-3.5 ${actualizando ? "animate-spin" : ""}`} />
+            {actualizando ? "Actualizando ficha..." : "↻ Actualizar ficha"}
           </button>
         ) : (
           <div className="rounded-xl border border-amber-200 dark:border-amber-800/30 bg-amber-50/60 dark:bg-amber-900/10 p-4 space-y-3">
             <p className="text-sm text-amber-800 dark:text-amber-300">
-              ¿Reinvestigar esta empresa? Se actualizará toda la ficha con la información más reciente del sitio web.
+              ¿Actualizar la ficha completa? Esto usa créditos de IA.
             </p>
             <div className="flex gap-2">
               <button
-                onClick={() => setConfirmarReinvestigar(false)}
+                onClick={() => setConfirmarActualizar(false)}
                 className="flex-1 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
               >
                 Cancelar
               </button>
               <button
-                onClick={reinvestigar}
+                onClick={actualizarFicha}
                 className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-primary/90 transition-colors"
               >
                 <Zap className="h-3.5 w-3.5" />
-                Sí, reinvestigar
+                Sí, actualizar
               </button>
             </div>
           </div>
@@ -651,6 +609,70 @@ function EstrategiaTexto({ texto }: { texto: string }) {
   );
 }
 
+// ── Acción recomendada ──────────────────────────────────────────
+// Destaca lo más accionable que YA existe en la ficha — no genera nada nuevo.
+// Prioriza la sección "PRÓXIMO PASO CONCRETO" del ángulo de entrada (la
+// estrategia rica de 5 secciones); si no existe, cae al texto completo.
+function AccionRecomendada({ angulo }: { angulo: string }) {
+  if (!angulo?.trim()) return null;
+
+  const secciones = parsearSecciones(angulo);
+  const proximoPaso = secciones.find((s) => /PR[OÓ]XIMO PASO/i.test(s.titulo));
+  const contenido = (proximoPaso?.contenido || secciones[secciones.length - 1]?.contenido || angulo).trim();
+
+  if (!contenido) return null;
+
+  return (
+    <Card className="border border-orange-200 dark:border-orange-800/30 bg-[#FFF7ED] dark:bg-orange-900/20">
+      <CardContent className="pt-4 pb-4">
+        <p className="text-xs font-semibold text-[#C2410C] dark:text-orange-300 uppercase tracking-wide mb-2">
+          🎯 Próxima acción recomendada
+        </p>
+        <p className="text-sm leading-relaxed whitespace-pre-line text-foreground">
+          {contenido}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Sección colapsable genérica ──────────────────────────────────
+// Envuelve secciones secundarias (MEDDIC, Inteligencia comercial) que
+// deben iniciar colapsadas por defecto para no saturar la pantalla.
+function SeccionColapsable({
+  titulo,
+  resumen,
+  children,
+}: {
+  titulo: string;
+  resumen?: string;
+  children: ReactNode;
+}) {
+  const [abierta, setAbierta] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setAbierta((v) => !v)}
+        className="w-full flex items-center justify-between px-1 mb-2"
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            {titulo}
+          </span>
+          {resumen && !abierta && (
+            <span className="text-xs text-muted-foreground/70">{resumen}</span>
+          )}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${abierta ? "rotate-180" : ""}`}
+        />
+      </button>
+      {abierta && children}
+    </div>
+  );
+}
+
 // ── Datos generales ───────────────────────────────────────────
 function DatosGenerales({
   nombre,
@@ -771,7 +793,7 @@ function EncontradoEnInternet({ raw }: { raw: BusquedaWebRaw }) {
 }
 
 // ── Inteligencia comercial de Perplexity ──────────────────────
-function InteligenciaComercialCard({ intel }: { intel: InteligenciaComercial }) {
+function InteligenciaComercialCard({ intel, ocultarTitulo = false }: { intel: InteligenciaComercial; ocultarTitulo?: boolean }) {
   const propuesta = intel.propuesta_valor_especifica;
   const tienePropuesta = !!propuesta && !propuesta.toLowerCase().startsWith("sin información");
 
@@ -807,9 +829,11 @@ function InteligenciaComercialCard({ intel }: { intel: InteligenciaComercial }) 
 
   return (
     <div>
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-        🧠 Inteligencia comercial
-      </p>
+      {!ocultarTitulo && (
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+          🧠 Inteligencia comercial
+        </p>
+      )}
       <div className="rounded-xl border border-border overflow-hidden">
         {secciones.map((sec, i) => (
           <SeccionAcordeon
@@ -910,9 +934,10 @@ interface MeddicCardProps {
     valor: Partial<MeddicComponente>
   ) => void;
   onValorChange: (campo: "valor_estimado" | "probabilidad", valor: number | null) => void;
+  ocultarTitulo?: boolean;
 }
 
-function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: MeddicCardProps) {
+function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange, ocultarTitulo = false }: MeddicCardProps) {
   const etiqueta = scoreEtiqueta(meddic.score);
   const pct = scorePct(meddic.score);
   const [valorRaw, setValorRaw] = useState<string>(
@@ -924,21 +949,23 @@ function MeddicCard({ meddic, guardando, onComponenteChange, onValorChange }: Me
 
   return (
     <div>
-      <div className="flex items-center justify-between px-1 mb-2">
-        <div className="flex items-center gap-1.5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Calificación MEDDIC
-          </p>
-          <button
-            onClick={() => setMostrarAyuda((v) => !v)}
-            className="h-4 w-4 rounded-full border border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-colors flex items-center justify-center text-[10px] font-bold leading-none"
-            title="¿Qué significa este score?"
-          >
-            ?
-          </button>
+      {!ocultarTitulo && (
+        <div className="flex items-center justify-between px-1 mb-2">
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Calificación MEDDIC
+            </p>
+            <button
+              onClick={() => setMostrarAyuda((v) => !v)}
+              className="h-4 w-4 rounded-full border border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary transition-colors flex items-center justify-center text-[10px] font-bold leading-none"
+              title="¿Qué significa este score?"
+            >
+              ?
+            </button>
+          </div>
+          {guardando && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
         </div>
-        {guardando && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
-      </div>
+      )}
 
       {/* Panel explicativo de rangos */}
       {mostrarAyuda && (
