@@ -199,7 +199,13 @@ export function TabResumen({
       {/* 3. Calificación MEDDIC — colapsada por defecto */}
       <SeccionColapsable
         titulo="Calificación MEDDIC"
-        resumen={`${scoreEtiqueta(meddic.score).label} · ${scorePct(meddic.score)}%`}
+        resumen={
+          <span
+            className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${scoreEtiqueta(meddic.score).badge}`}
+          >
+            MEDDIC · {scorePct(meddic.score)}% {scoreEtiqueta(meddic.score).emoji}
+          </span>
+        }
       >
         <MeddicCard
           meddic={meddic}
@@ -645,7 +651,7 @@ function SeccionColapsable({
   children,
 }: {
   titulo: string;
-  resumen?: string;
+  resumen?: ReactNode;
   children: ReactNode;
 }) {
   const [abierta, setAbierta] = useState(false);
@@ -654,21 +660,19 @@ function SeccionColapsable({
       <button
         type="button"
         onClick={() => setAbierta((v) => !v)}
-        className="w-full flex items-center justify-between px-1 mb-2"
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-border bg-gray-50 dark:bg-muted/30 px-4 py-3 transition-colors hover:bg-gray-100 dark:hover:bg-muted/50"
       >
-        <span className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-semibold text-[#1F2937] dark:text-foreground">
             {titulo}
           </span>
-          {resumen && !abierta && (
-            <span className="text-xs text-muted-foreground/70">{resumen}</span>
-          )}
+          {resumen && !abierta && resumen}
         </span>
         <ChevronDown
-          className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${abierta ? "rotate-180" : ""}`}
+          className={`h-5 w-5 shrink-0 text-[#F97316] transition-transform duration-200 ${abierta ? "rotate-180" : ""}`}
         />
       </button>
-      {abierta && children}
+      {abierta && <div className="mt-2">{children}</div>}
     </div>
   );
 }
@@ -901,11 +905,11 @@ const SEMAFORO_CONFIG: Record<MeddicSemaforo, { emoji: string; label: string; ne
 };
 
 // Rangos en porcentaje (score máx = 12)
-const SCORE_ETIQUETA: { minPct: number; maxPct: number; label: string; color: string; descripcion: string }[] = [
-  { minPct: 0,  maxPct: 25,  label: "Débil",              color: "bg-red-500",    descripcion: "No tienes información suficiente. Sigue en discovery antes de proponer." },
-  { minPct: 26, maxPct: 50,  label: "En exploración",     color: "bg-orange-500", descripcion: "Tienes algunos datos pero faltan piezas clave. No cotices aún." },
-  { minPct: 51, maxPct: 75,  label: "Oportunidad real",   color: "bg-amber-500",  descripcion: "Estás listo para hacer una propuesta con alta probabilidad de éxito." },
-  { minPct: 76, maxPct: 100, label: "Listo para cerrar",  color: "bg-green-500",  descripcion: "Tienes todo mapeado. Una propuesta aquí tiene altísima probabilidad de ganar." },
+const SCORE_ETIQUETA: { minPct: number; maxPct: number; label: string; color: string; badge: string; emoji: string; descripcion: string }[] = [
+  { minPct: 0,  maxPct: 25,  label: "Débil",              color: "bg-red-500",    badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",       emoji: "🔴", descripcion: "No tienes información suficiente. Sigue en discovery antes de proponer." },
+  { minPct: 26, maxPct: 50,  label: "En exploración",     color: "bg-orange-500", badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400", emoji: "🟠", descripcion: "Tienes algunos datos pero faltan piezas clave. No cotices aún." },
+  { minPct: 51, maxPct: 75,  label: "Oportunidad real",   color: "bg-amber-500",  badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", emoji: "🟡", descripcion: "Estás listo para hacer una propuesta con alta probabilidad de éxito." },
+  { minPct: 76, maxPct: 100, label: "Listo para cerrar",  color: "bg-green-500",  badge: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400", emoji: "🟢", descripcion: "Tienes todo mapeado. Una propuesta aquí tiene altísima probabilidad de ganar." },
 ];
 
 function scoreEtiqueta(score: number) {
