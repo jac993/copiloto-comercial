@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2, CheckCheck, ShieldCheck } from "lucide-react";
+import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2, CheckCheck, ShieldCheck, ChevronDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -64,12 +64,29 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
   const cargoRegistrado = new Set(contactosLocales.map((c) => c.cargo));
   const decisoresSugeridos = decisoresLocales.filter((d) => !cargoRegistrado.has(d.cargo));
 
-  const personasIdentificadas = decisoresLocales.filter(
-    (d) => d.persona_encontrada?.nombre != null
+  // Identificado = ya tiene persona con nombre, o ya se confirmó como contacto real
+  const identificados = decisoresLocales.filter(
+    (d) => d.persona_encontrada?.nombre != null || cargoRegistrado.has(d.cargo)
   ).length;
+
+  // Los que tienen persona encontrada van primero — lo útil se ve sin scroll
+  const decisoresSugeridosOrdenados = [...decisoresSugeridos].sort((a, b) => {
+    const aTiene = a.persona_encontrada?.nombre != null ? 0 : 1;
+    const bTiene = b.persona_encontrada?.nombre != null ? 0 : 1;
+    return aTiene - bTiene;
+  });
 
   return (
     <div className="space-y-4 pb-6">
+      {/* Contador de decisores identificados */}
+      {decisoresLocales.length > 0 && (
+        <div className="flex justify-end px-1">
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-foreground">
+            {identificados}/{decisoresLocales.length} identificados
+          </span>
+        </div>
+      )}
+
       {/* Contactos ya registrados */}
       {contactosLocales.length > 0 && (
         <div>
@@ -97,11 +114,6 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               {contactos.length > 0 ? "Buscar también" : "Decisores clave"}
             </p>
-            {personasIdentificadas > 0 && (
-              <span className="text-xs text-[#F97316] font-semibold">
-                [{personasIdentificadas}/{decisoresLocales.length} identificados]
-              </span>
-            )}
             <HelpTooltip
               titulo="¿Para qué sirven los decisores?"
               explicacion="Son las personas clave dentro de la empresa a las que debes contactar. Cada cargo tiene un dolor diferente — hablarle al de Calidad es muy distinto que hablarle al de Compras."
@@ -109,7 +121,7 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
             />
           </div>
           <div className="space-y-2">
-            {decisoresSugeridos.map((decisor, i) => (
+            {decisoresSugeridosOrdenados.map((decisor, i) => (
               <DecisorSugeridoCard
                 key={i}
                 decisor={decisor}
@@ -511,6 +523,9 @@ function DecisorSugeridoCard({
   const areaColor = AREA_COLOR[decisor.area] ?? AREA_COLOR.otro;
   const persona = decisor.persona_encontrada;
   const tienePersona = persona != null && persona.nombre != null;
+  // Sin persona encontrada arranca colapsado — solo cargo + área hasta que se expanda
+  const [expandido, setExpandido] = useState(tienePersona);
+  const mostrarContenido = tienePersona || expandido;
 
   const guardar = async () => {
     if (!nombre.trim()) return;
@@ -569,8 +584,12 @@ function DecisorSugeridoCard({
   return (
     <Card className="border-dashed">
       <CardContent className="pt-4 pb-4">
-        {/* Encabezado */}
-        <div className="flex items-start gap-3 mb-3">
+        {/* Encabezado — colapsable cuando no hay persona encontrada */}
+        <button
+          type="button"
+          onClick={() => { if (!tienePersona) setExpandido((v) => !v); }}
+          className={`w-full flex items-start gap-3 text-left ${mostrarContenido ? "mb-3" : ""} ${tienePersona ? "cursor-default" : "cursor-pointer"}`}
+        >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${areaColor}`}>
@@ -578,12 +597,21 @@ function DecisorSugeridoCard({
               </span>
             </div>
             <p className="font-semibold text-sm">{decisor.cargo}</p>
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-              {decisor.dolor_especifico}
-            </p>
+            {mostrarContenido && (
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                {decisor.dolor_especifico}
+              </p>
+            )}
           </div>
-        </div>
+          {!tienePersona && (
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground shrink-0 mt-0.5 transition-transform duration-200 ${expandido ? "rotate-180" : ""}`}
+            />
+          )}
+        </button>
 
+        {mostrarContenido && (
+        <>
         {/* Persona encontrada */}
         {tienePersona && persona ? (
           <div className="bg-orange-50 dark:bg-orange-900/10 rounded-lg p-3 mb-3 space-y-2">
@@ -723,6 +751,8 @@ function DecisorSugeridoCard({
               {guardando ? "Guardando..." : "Guardar contacto"}
             </Button>
           </div>
+        )}
+        </>
         )}
       </CardContent>
     </Card>
