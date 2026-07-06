@@ -14,7 +14,7 @@ import {
   insertInteraccion,
 } from "@/lib/queries";
 import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
-import { extraerJsonSeguro } from "@/lib/json-parser";
+import { extraerJsonSeguro, sanitizarTexto } from "@/lib/json-parser";
 import { registrarUso } from "@/lib/registrarUso";
 import type {
   ResultadoAnalisis,
@@ -120,6 +120,11 @@ export async function POST(req: NextRequest) {
 
     const encabezadoEmail = asunto ? `Asunto: ${asunto}\n\n` : "";
 
+    // Tope de 15.000 caracteres — mismo límite que regenerar/route.ts.
+    // Sin esto, una transcripción de una llamada larga (30-60 min) puede
+    // presionar la salida hacia el límite de max_tokens y cortar el JSON.
+    const textoSanitizado = sanitizarTexto(texto.trim(), 15000);
+
     const mensajeAnalisis = `
 EMPRESA: ${empresa.nombre}
 INDUSTRIA: ${empresa.industria ?? "No especificada"}
@@ -137,7 +142,9 @@ TIPO DE INTERACCIÓN: ${TIPO_LABEL[tipo]}
 FECHA: ${new Date(fecha ?? new Date()).toLocaleString("es-CL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}
 
 CONTENIDO A ANALIZAR:
-${encabezadoEmail}${texto.trim()}
+${encabezadoEmail}${textoSanitizado}
+
+Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional, sin explicaciones fuera del JSON.
 `.trim();
 
     // ── Llamar a Claude con el prompt de coaching ──
@@ -145,7 +152,7 @@ ${encabezadoEmail}${texto.trim()}
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      max_tokens: 6000,
       system: `${SYSTEM_PROMPT_VALE}\n\n${PROMPT_COACH_ESCRITO}`,
       messages: [{ role: "user", content: mensajeAnalisis }],
     });
@@ -154,6 +161,7 @@ ${encabezadoEmail}${texto.trim()}
     if (!textContent || textContent.type !== "text") {
       throw new Error("Claude no devolvió texto");
     }
+    console.log(`[analizar-interaccion] Claude respondió: ${textContent.text.length} chars | stop_reason: ${response.stop_reason} | tokens: ${response.usage?.output_tokens ?? "?"}`);
     registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens, empresa_id });
 
     // ── Parsear JSON de Claude ──

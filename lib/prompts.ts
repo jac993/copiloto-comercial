@@ -617,7 +617,8 @@ REGLAS CRÍTICAS DE ANÁLISIS:
    No lo fuerces. Si el prospecto dijo "mándame una cotización" → cotizado. Si aceptó reunión → reunion_agendada.
    Si todo sigue igual → null.
 5. Las "senales_detectadas" son datos de negocio valiosos: mencionó un proveedor actual, una fecha límite,
-   un problema concreto, un presupuesto, una persona influyente. Extrae todo lo que puedas usar después.
+   un problema concreto, un presupuesto, una persona influyente. Máximo 5 señales — prioriza las más
+   relevantes para la venta, no extraigas todo lo que aparezca.
 
 REGLAS PARA "proximo_paso" (campo nuevo — MUY IMPORTANTE):
 - Debe ser una sola acción concreta y ejecutable al abrir la app al día siguiente.
@@ -663,7 +664,6 @@ ANÁLISIS ESTRATÉGICO REQUERIDO — aplica esto antes de generar el JSON:
    específico. "Llamar la próxima semana" no es válido — debe ser
    "Llamar el jueves" o "escribir en 48 horas".
 
-Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional, sin explicaciones fuera del JSON.
 La estructura EXACTA es:
 
 {
