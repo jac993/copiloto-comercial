@@ -5,7 +5,7 @@
 // y preferencias del copiloto.
 // =============================================================
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +16,15 @@ import {
   RefreshCw,
   LogOut,
   AlertCircle,
+  ChevronDown,
+  Trophy,
+  DollarSign,
+  Loader2,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { CostosPanel } from "@/components/costos/costos-panel";
+import { CasosClient } from "@/components/casos/casos-client";
+import type { Caso } from "@/lib/types";
 
 interface GmailStatus {
   conectado: boolean;
@@ -28,6 +35,74 @@ interface GmailStatus {
 interface SyncResult {
   detectados: number;
   revisados: number;
+}
+
+// Sección colapsable genérica para plegar Casos y Costos dentro de Configuración
+function SeccionColapsable({
+  titulo,
+  descripcion,
+  icono,
+  children,
+}: {
+  titulo: string;
+  descripcion: string;
+  icono: ReactNode;
+  children: ReactNode;
+}) {
+  const [abierta, setAbierta] = useState(false);
+  return (
+    <Card className="rounded-2xl shadow-sm border border-border overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setAbierta((v) => !v)}
+        className="w-full flex items-center gap-3 p-5 text-left transition-colors hover:bg-muted/40"
+      >
+        <div className="w-10 h-10 rounded-xl bg-[#FFF7ED] dark:bg-orange-900/20 flex items-center justify-center shrink-0">
+          {icono}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-[#111] dark:text-white text-sm">{titulo}</p>
+          <p className="text-xs text-muted-foreground">{descripcion}</p>
+        </div>
+        <ChevronDown
+          className={`h-5 w-5 text-muted-foreground shrink-0 transition-transform duration-200 ${abierta ? "rotate-180" : ""}`}
+        />
+      </button>
+      {abierta && <div className="px-5 pb-5 border-t border-border pt-4">{children}</div>}
+    </Card>
+  );
+}
+
+// Casos de éxito — carga la lista al expandir (evita fetch si nunca se abre)
+function CasosSection() {
+  const [casos, setCasos] = useState<Caso[] | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/casos", { cache: "no-store" })
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((d: { casos?: Caso[] }) => setCasos(d.casos ?? []))
+      .catch(() => setError(true))
+      .finally(() => setCargando(false));
+  }, []);
+
+  if (cargando) {
+    return (
+      <div className="flex items-center justify-center py-8 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+  if (error || casos == null) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-3">
+        <AlertCircle className="h-4 w-4 shrink-0" />
+        No se pudieron cargar los casos. Intenta recargar la página.
+      </div>
+    );
+  }
+  return <CasosClient casosIniciales={casos} />;
 }
 
 function ConfiguracionContent() {
@@ -167,7 +242,7 @@ function ConfiguracionContent() {
 
               {/* Resultado último sync */}
               {syncResult && (
-                <div className="bg-[#EDE9FE] border border-violet-200 rounded-xl p-3 text-xs text-[#5B21B6]">
+                <div className="bg-[#FFF7ED] border border-orange-200 rounded-xl p-3 text-xs text-[#C2410C]">
                   Se revisaron <strong>{syncResult.revisados}</strong> correos —{" "}
                   <strong>{syncResult.detectados}</strong> nuevo(s) de clientes detectado(s).
                 </div>
@@ -176,7 +251,7 @@ function ConfiguracionContent() {
               {/* Acciones */}
               <div className="flex gap-2">
                 <Button
-                  className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-sm h-10 rounded-xl"
+                  className="flex-1 bg-[#F97316] hover:bg-[#EA580C] text-white text-sm h-10 rounded-xl"
                   onClick={sincronizar}
                   disabled={sincronizando}
                 >
@@ -205,7 +280,7 @@ function ConfiguracionContent() {
                 </p>
               </div>
               <Button
-                className="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-11 rounded-xl text-sm"
+                className="w-full bg-[#F97316] hover:bg-[#EA580C] text-white h-11 rounded-xl text-sm"
                 onClick={() => { window.location.href = "/api/gmail/auth"; }}
               >
                 <Mail className="w-4 h-4 mr-2" />
@@ -215,6 +290,24 @@ function ConfiguracionContent() {
           )}
         </CardContent>
       </Card>
+
+      {/* Casos de éxito — plegado aquí desde el menú principal */}
+      <SeccionColapsable
+        titulo="Casos de éxito"
+        descripcion="Base de casos reales que la IA usa como referencia"
+        icono={<Trophy className="w-5 h-5 text-[#F97316]" />}
+      >
+        <CasosSection />
+      </SeccionColapsable>
+
+      {/* Costos y uso — monitor de APIs (antes /admin/costos) */}
+      <SeccionColapsable
+        titulo="Costos y uso"
+        descripcion="Uso de APIs externas — mes actual"
+        icono={<DollarSign className="w-5 h-5 text-[#F97316]" />}
+      >
+        <CostosPanel />
+      </SeccionColapsable>
 
       {/* Placeholder otras integraciones */}
       <Card className="rounded-2xl shadow-sm border border-dashed border-border opacity-50">

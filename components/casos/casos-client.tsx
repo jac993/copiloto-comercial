@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Trophy, Plus, Pencil, Trash2, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { BORRADOR_CASO_STORAGE_KEY } from "@/lib/borradorCaso";
 import type { Caso, CasoInsert, TecnicaCaso, TamanoCaso, CanalCaso } from "@/lib/types";
 
 // ─── Opciones de selects ──────────────────────────────────────
@@ -65,6 +66,28 @@ export function CasosClient({ casosIniciales }: CasosClientProps) {
   const [guardando, setGuardando] = useState(false);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
+
+  // Borrador pre-llenado que dejó el Kanban al marcar un negocio como ganado.
+  // Se arma solo con datos existentes (sin IA); el vendedor completa solución
+  // y resultado antes de guardar. Se abre el formulario automáticamente.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(BORRADOR_CASO_STORAGE_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(BORRADOR_CASO_STORAGE_KEY);
+      const draft = JSON.parse(raw) as Partial<Omit<CasoInsert, "activo">> & { _empresaNombre?: string };
+      const { _empresaNombre, ...campos } = draft;
+      setEditando(null);
+      setForm({ ...FORM_VACIO, ...campos });
+      setSheetAbierto(true);
+      toast({
+        title: _empresaNombre ? `Borrador de caso: ${_empresaNombre}` : "Borrador de caso",
+        description: "Completa solución y resultado para guardarlo.",
+      });
+    } catch {
+      /* sessionStorage no disponible o JSON inválido — ignorar */
+    }
+  }, [toast]);
 
   // ── Formulario helpers ──────────────────────────────────────
 

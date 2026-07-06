@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, ChevronLeft, X } from "lucide-react";
+import { ChevronRight, ChevronLeft, X, Trophy } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -24,6 +24,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { PerdidoDialog } from "@/components/cuentas/perdido-dialog";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { construirBorradorCaso, BORRADOR_CASO_STORAGE_KEY } from "@/lib/borradorCaso";
 import type { Empresa, EstadoEmpresa } from "@/lib/types";
 
 // Columnas visibles en orden (excluye "perdido" — tiene sección aparte)
@@ -37,7 +38,7 @@ const COLUMNAS: { id: EstadoEmpresa; label: string; accentColor: string }[] = [
 ];
 
 const TECNICA_DOT: Record<string, string> = {
-  SPIN:       "bg-[#7C3AED]",
+  SPIN:       "bg-[#F97316]",
   consultiva: "bg-[#22C55E]",
   relacional: "bg-blue-500",
   challenger: "bg-[#F97316]",
@@ -68,6 +69,8 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
   const [perdidoExpanded, setPerdidoExpanded] = useState(false);
   const [dialogEmpresa, setDialogEmpresa] = useState<Empresa | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Empresa recién movida a "ganado" → sugerencia no bloqueante de agregar caso
+  const [sugerenciaCaso, setSugerenciaCaso] = useState<Empresa | null>(null);
 
   const vencidasSet = new Set(empresasVencidasIds);
 
@@ -118,6 +121,8 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
         body: JSON.stringify({ estado: nuevoEstado }),
       });
       if (!res.ok) throw new Error("PATCH fallido");
+      // Al cerrar un negocio, sugerir (sin forzar) documentarlo como caso
+      if (nuevoEstado === "ganado") setSugerenciaCaso(empresa);
     } catch {
       // Revertir si falla
       setEmpresas((prev) =>
@@ -125,6 +130,19 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
       );
     }
   }
+
+  // "Revisar": deja el borrador pre-llenado en sessionStorage y abre Casos
+  const revisarCaso = () => {
+    if (!sugerenciaCaso) return;
+    try {
+      sessionStorage.setItem(
+        BORRADOR_CASO_STORAGE_KEY,
+        JSON.stringify(construirBorradorCaso(sugerenciaCaso))
+      );
+    } catch { /* sessionStorage no disponible — se abre el form vacío igual */ }
+    setSugerenciaCaso(null);
+    router.push("/casos");
+  };
 
   const handleConfirmPerdido = () => {
     setDialogEmpresa(null);
@@ -221,6 +239,46 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
           onClose={() => setDialogEmpresa(null)}
           onConfirm={handleConfirmPerdido}
         />
+      )}
+
+      {/* Sugerencia no bloqueante de documentar el negocio ganado como caso */}
+      {sugerenciaCaso && (
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md">
+          <div className="flex items-start gap-3 rounded-2xl border border-green-200 dark:border-green-800/40 bg-white dark:bg-card shadow-lg p-4">
+            <div className="h-9 w-9 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+              <Trophy className="h-5 w-5 text-[#22C55E]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                📋 ¡Ganaste {sugerenciaCaso.nombre}!
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ¿Agregar este negocio a tu base de casos? La IA lo usará como referencia real.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={revisarCaso}
+                  className="flex-1 py-2 rounded-lg bg-[#22C55E] hover:bg-[#16a34a] text-white text-xs font-semibold transition-colors"
+                >
+                  Revisar
+                </button>
+                <button
+                  onClick={() => setSugerenciaCaso(null)}
+                  className="py-2 px-3 rounded-lg border border-border text-muted-foreground text-xs font-medium hover:bg-muted transition-colors"
+                >
+                  Descartar
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setSugerenciaCaso(null)}
+              className="text-muted-foreground hover:text-foreground shrink-0"
+              aria-label="Cerrar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       )}
     </>
   );
