@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector } from "@/lib/queries";
 import { buildPromptBorradorCanal, buildPromptBorradores, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { validarDatosParaGeneracion } from "@/lib/validar-borrador";
+import { calcularCadencia } from "@/lib/cadencia";
 import { registrarUso } from "@/lib/registrarUso";
 
 export const maxDuration = 60;
@@ -236,6 +237,27 @@ export async function POST(req: NextRequest) {
     const tipo: TipoBorrador = tipoRaw ?? "apertura";
     const ficha = empresa.ficha_ia;
 
+    // ── Cadencia de seguimiento (solo con contacto real e historial) ──
+    // Le dice explícitamente a Claude en qué touch va y qué canal rotar,
+    // para que el borrador no repita el enfoque del intento anterior.
+    let cadenciaTexto = "";
+    if (contactoId) {
+      const { data: intsCad } = await supabase
+        .from("interacciones")
+        .select("tipo, fecha, remitente, sentimiento, contacto_id")
+        .eq("empresa_id", empresaId)
+        .eq("contacto_id", contactoId)
+        .order("fecha", { ascending: true });
+      const cadencia = calcularCadencia(intsCad ?? [], contactoId);
+      if (cadencia) {
+        const rotacion =
+          cadencia.canalSugerido && cadencia.canalSugerido !== canal
+            ? ` La cadencia sugería "${cadencia.canalSugerido}" para rotar (el canal anterior fue ${cadencia.ultimoCanal ?? "—"}); ajusta el enfoque para no repetir el intento previo.`
+            : " Coincide con el canal sugerido por la rotación.";
+        cadenciaTexto = `\n\n━━━ CADENCIA DE SEGUIMIENTO ━━━\n${cadencia.resumen} Este borrador es para el canal "${canal}".${rotacion}`;
+      }
+    }
+
     // Decisor en la ficha IA (para dolor específico)
     const decisorFicha = ficha?.decisores?.find(
       (d) => d.cargo.toLowerCase() === decisorCargo.toLowerCase()
@@ -344,8 +366,8 @@ ${ejemplosAprobados}
     console.log("[preparacion] prompt incluye rechazados:", rechazadosTexto.includes("RECHAZADOS"));
 
     const userMessage = canal === "llamada"
-      ? contextoLlamada + rechazadosTexto
-      : (promptBorradores ?? "") + ejemplosAprobados + rechazadosTexto;
+      ? contextoLlamada + rechazadosTexto + cadenciaTexto
+      : (promptBorradores ?? "") + ejemplosAprobados + rechazadosTexto + cadenciaTexto;
 
     const client = new Anthropic();
     const response = await client.messages.create({

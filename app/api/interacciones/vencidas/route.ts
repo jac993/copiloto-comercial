@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { calcularCadencia, type InteraccionCadencia } from "@/lib/cadencia";
 import type { InteraccionVencida } from "@/lib/types";
 
 // Sin esto, Next.js puede tratar este GET() sin parámetros como estático
@@ -55,6 +56,32 @@ export async function GET() {
     transcripcion: row.transcripcion as string | null,
     contacto_id: row.contacto_id as string | null,
   }));
+
+  // Cadencia por contacto: se calcula sobre TODO el historial de cada contacto
+  // involucrado (no solo la fila vencida) y se adjunta a cada alerta.
+  const contactoIds = Array.from(
+    new Set(vencidas.map((v) => v.contacto_id).filter((id): id is string => !!id))
+  );
+  if (contactoIds.length > 0) {
+    const { data: histRows } = await supabase
+      .from("interacciones")
+      .select("tipo, fecha, remitente, sentimiento, contacto_id")
+      .in("contacto_id", contactoIds)
+      .order("fecha", { ascending: true });
+
+    const porContacto = new Map<string, InteraccionCadencia[]>();
+    for (const r of (histRows ?? []) as InteraccionCadencia[]) {
+      if (!r.contacto_id) continue;
+      const lista = porContacto.get(r.contacto_id) ?? [];
+      lista.push(r);
+      porContacto.set(r.contacto_id, lista);
+    }
+
+    for (const v of vencidas) {
+      if (!v.contacto_id) continue;
+      v.cadencia = calcularCadencia(porContacto.get(v.contacto_id) ?? [], v.contacto_id);
+    }
+  }
 
   return NextResponse.json({ vencidas, total: vencidas.length });
 }

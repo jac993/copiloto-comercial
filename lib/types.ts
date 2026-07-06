@@ -4,6 +4,8 @@
 // columnas que pueden ser NULL en la base de datos.
 // =============================================================
 
+import type { Cadencia } from "@/lib/cadencia";
+
 // ─── TIPOS DE IA ─────────────────────────────────────────────
 
 export type TecnicaVenta = "consultiva" | "relacional" | "SPIN" | "challenger";
@@ -394,6 +396,9 @@ export interface InteraccionVencida {
   fecha: string;
   transcripcion: string | null;
   contacto_id: string | null;
+  // Estado de cadencia de seguimiento del contacto (touch actual, canal sugerido…).
+  // Calculado en el servidor; null si no hay contacto o historial suficiente.
+  cadencia?: Cadencia | null;
 }
 
 // ─── TABLA: senales ──────────────────────────────────────────

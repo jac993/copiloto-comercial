@@ -10,6 +10,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { calcularCadencia, CANAL_CADENCIA_LABEL } from "@/lib/cadencia";
 import type { FichaIA, Interaccion, Compromiso, Contacto, BorradoresGuardados, BorradorCanal } from "@/lib/types";
 import type { CanalBorrador, BorradorCanalResult, TipoBorrador } from "@/app/api/preparacion/route";
 
@@ -574,7 +575,9 @@ export function TabPreparacion({
         ) : decisorSeleccionado == null ? (
           /* ── PASO 1: elegir a quién ─────────────────────────── */
           <div className="space-y-2">
-            {decisores.map((d) => (
+            {decisores.map((d) => {
+              const cad = d.contactoId ? calcularCadencia(interacciones, d.contactoId) : null;
+              return (
               <button
                 key={d.id}
                 onClick={() => setDecisorSeleccionadoId(d.id)}
@@ -586,6 +589,11 @@ export function TabPreparacion({
                     <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap", TIPO_BADGE[d.tipo])}>
                       {TIPO_TITULO[d.tipo]}
                     </span>
+                    {cad && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap bg-[#F97316]/10 text-[#C2410C] dark:text-orange-300">
+                        Touch {cad.touch}/{cad.totalTouches}
+                      </span>
+                    )}
                   </div>
                   {d.nombre ? (
                     <p className="text-xs text-muted-foreground mt-0.5">{d.nombre}</p>
@@ -598,12 +606,14 @@ export function TabPreparacion({
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </button>
-            ))}
+              );
+            })}
           </div>
         ) : (
           /* ── PASO 2: elegir canal y ver el borrador ─────────── */
           (() => {
             const d = decisorSeleccionado;
+            const cadencia = d.contactoId ? calcularCadencia(interacciones, d.contactoId) : null;
             const cargandoCanal = cargando[d.id] ?? null;
             const canalAbierto = abiertos[d.id];
             const borradorActivo = canalAbierto ? cache[d.id]?.[canalAbierto] : undefined;
@@ -642,6 +652,21 @@ export function TabPreparacion({
                         </p>
                       )}
                     </div>
+
+                    {/* Estado de cadencia de seguimiento */}
+                    {cadencia && (
+                      <div className={cn(
+                        "mb-3 flex items-start gap-2 rounded-xl px-3 py-2 text-xs border",
+                        cadencia.accion === "pausar"
+                          ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/15 dark:border-amber-800/40 dark:text-amber-400"
+                          : "bg-[#F97316]/10 border-[#F97316]/20 text-[#C2410C] dark:text-orange-300"
+                      )}>
+                        <span className="shrink-0 font-semibold whitespace-nowrap">
+                          Touch {cadencia.touch}/{cadencia.totalTouches}
+                        </span>
+                        <span className="leading-relaxed">{cadencia.resumen}</span>
+                      </div>
+                    )}
 
                     {/* Botones de canal */}
                     <div className="flex gap-2 flex-wrap">
@@ -683,6 +708,17 @@ export function TabPreparacion({
                     {/* Contenido desplegado */}
                     {canalAbierto && (
                       <div className="mt-3 border-t border-border pt-3">
+                        {/* Aviso suave: el canal elegido no coincide con el sugerido por la cadencia */}
+                        {cadencia?.canalSugerido && canalAbierto !== cadencia.canalSugerido && (
+                          <div className="mb-3 flex items-start gap-1.5 text-[11px] text-muted-foreground bg-muted/50 rounded-lg px-2.5 py-1.5">
+                            <span className="shrink-0">💡</span>
+                            <span>
+                              La cadencia sugiere <strong>{cadencia.canalSugeridoLabel}</strong> para rotar de canal
+                              {cadencia.ultimoCanal ? ` (el último intento fue por ${CANAL_CADENCIA_LABEL[cadencia.ultimoCanal]})` : ""}.
+                              Igual puedes preparar este por {CANAL_META[canalAbierto].label}.
+                            </span>
+                          </div>
+                        )}
                         {cargandoCanal === canalAbierto ? (
                           <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin text-[#F97316]" />

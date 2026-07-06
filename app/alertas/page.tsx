@@ -180,6 +180,25 @@ export default function AlertasPage() {
                       ⚠️ Sin respuesta — ¿contestó?
                     </p>
 
+                    {/* Estado de cadencia de seguimiento */}
+                    {v.cadencia && (
+                      v.cadencia.accion === "pausar" ? (
+                        <div className="flex items-start gap-1.5 text-xs rounded-lg px-2.5 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-900/15 dark:border-amber-800/40 dark:text-amber-400">
+                          <span className="shrink-0">⏸️</span>
+                          <span>
+                            Touch {v.cadencia.touch}/{v.cadencia.totalTouches} — sugerido pausar y reactivar en 30 días
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 bg-[#F97316]/10 text-[#C2410C] dark:text-orange-300">
+                          <span className="font-semibold">Touch {v.cadencia.touch}/{v.cadencia.totalTouches}</span>
+                          {v.cadencia.canalSugeridoLabel && (
+                            <span className="text-muted-foreground">— sugerido: {v.cadencia.canalSugeridoLabel}</span>
+                          )}
+                        </div>
+                      )
+                    )}
+
                     <div className="flex gap-2">
                       <Button
                         size="sm"
