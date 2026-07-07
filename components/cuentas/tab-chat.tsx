@@ -13,7 +13,7 @@
 import { useState, useEffect, useRef, useMemo, KeyboardEvent } from "react";
 import {
   Send, Bot, User, Loader2, X, Copy, CheckCheck, Clock,
-  Mail, ExternalLink, AlertCircle, RefreshCw, Phone, MessageSquare,
+  Mail, ExternalLink, AlertCircle, RefreshCw, Phone, MessageSquare, MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -630,7 +630,11 @@ export function TabChat({
       </div>
 
       {/* Input */}
-      <div className="mt-3 flex gap-2 items-end border border-border rounded-2xl p-2 bg-background focus-within:border-primary transition-colors">
+      <div className={cn(
+        "mt-3 flex gap-2 items-end rounded-2xl p-2 bg-gray-900/50 transition-colors",
+        "border-2 border-orange-500/40 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-500/20"
+      )}>
+        <MessageCircle className="h-4 w-4 text-orange-500/70 shrink-0 mb-1.5 ml-1" />
         <textarea
           ref={inputRef}
           value={input}
@@ -1247,18 +1251,19 @@ function EstadoVacio({
           Tengo el contexto completo de esta cuenta. El historial queda guardado.
         </p>
       </div>
-      <div className="w-full space-y-2 px-1">
-        <p className="text-xs font-medium text-muted-foreground px-1">Preguntas frecuentes:</p>
-        {PREGUNTAS_RAPIDAS.map((p) => (
-          <button
-            key={p}
-            onClick={() => onPregunta(p)}
-            className="w-full text-left text-xs px-3.5 py-2.5 rounded-xl border border-border
-              hover:border-primary/40 hover:bg-primary/5 transition-all active:scale-[0.98]"
-          >
-            {p}
-          </button>
-        ))}
+      <div className="w-full px-1">
+        <p className="text-xs font-medium text-muted-foreground px-1 mb-2">Preguntas frecuentes:</p>
+        <div className="flex flex-wrap gap-2">
+          {PREGUNTAS_RAPIDAS.map((p) => (
+            <button
+              key={p}
+              onClick={() => onPregunta(p)}
+              className="bg-gray-800 hover:bg-orange-500/20 border border-gray-700 rounded-full px-3 py-1.5 text-sm transition-colors active:scale-[0.98]"
+            >
+              {p}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
