@@ -458,9 +458,9 @@ export function TabChat({
   ].sort((a, b) => new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime());
 
   return (
-    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[500px] pb-4 max-w-full overflow-x-hidden">
+    <div className="flex flex-col min-h-[calc(100vh-280px)] pb-4 max-w-full overflow-x-hidden">
       {/* ── Contexto fijo arriba: SPIN, última conversación, compromisos ── */}
-      <div className="space-y-3 mb-4">
+      <div className="space-y-2 mb-3">
         {ficha && ficha.preguntas_spin.length > 0 && (
           <details className="group rounded-xl border border-border bg-card">
             <summary className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none">
@@ -611,8 +611,8 @@ export function TabChat({
         )}
       </div>
 
-      {/* Área de mensajes */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1 mt-4">
+      {/* Área de mensajes — piso garantizado de 60vh para que domine la pantalla */}
+      <div className="flex-1 min-h-[60vh] overflow-y-auto space-y-4 pr-1 mt-3">
         {cargandoHistorial ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
