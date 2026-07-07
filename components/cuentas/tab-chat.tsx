@@ -457,7 +457,7 @@ export function TabChat({
   ].sort((a, b) => new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime());
 
   return (
-    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[500px] pb-4">
+    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[500px] pb-4 max-w-full overflow-x-hidden">
       {/* ── Contexto fijo arriba: SPIN, última conversación, compromisos ── */}
       <div className="space-y-3 mb-3">
         {ficha && ficha.preguntas_spin.length > 0 && (
@@ -523,7 +523,7 @@ export function TabChat({
                 </p>
               </div>
             )}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <div className="flex items-center flex-wrap gap-1.5 pb-1">
               {decisores.map((d) => {
                 const cad = d.contactoId ? calcularCadencia(interacciones, d.contactoId) : null;
                 const activo = d.id === decisorActivoId;
@@ -563,7 +563,7 @@ export function TabChat({
               </div>
             )}
 
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <div className="flex items-center flex-wrap gap-1.5 pb-1">
               {CANALES.map((canal) => (
                 <button
                   key={canal}
