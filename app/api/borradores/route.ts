@@ -1,8 +1,8 @@
 // =============================================================
 // GET /api/borradores
 // Retorna el último borrador no usado para una combinación
-// empresa + contacto + canal. Usado por tab-preparacion para
-// cargar el borrador guardado sin gastar créditos de IA.
+// empresa + contacto + canal. Usado por tab-chat (tab "Consultar")
+// para cargar el borrador guardado sin gastar créditos de IA.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";

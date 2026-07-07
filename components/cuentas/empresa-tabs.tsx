@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  FileText, Users, Clock, Clipboard, MessageSquare,
+  FileText, Users, Clock, MessageSquare,
   ArrowLeft, Zap, Pencil, Globe, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import { useToast } from "@/hooks/use-toast";
 import { TabResumen } from "@/components/cuentas/tab-resumen";
 import { TabDecisores } from "@/components/cuentas/tab-decisores";
 import { TabHistorial } from "@/components/cuentas/tab-historial";
-import { TabPreparacion } from "@/components/cuentas/tab-preparacion";
 import { TabChat } from "@/components/cuentas/tab-chat";
 import type { EmpresaCompleta, EstadoEmpresa, Interaccion, Contacto } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -27,7 +26,6 @@ const TABS = [
   { id: "resumen", label: "Resumen", Icon: FileText },
   { id: "decisores", label: "Decisores", Icon: Users },
   { id: "historial", label: "Historial", Icon: Clock },
-  { id: "preparacion", label: "Preparación", Icon: Clipboard },
   { id: "chat", label: "Consultar", Icon: MessageSquare },
 ] as const;
 
@@ -240,25 +238,15 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
           />
         )}
 
-        {tabActivo === "preparacion" && ficha && (
-          <TabPreparacion
-            ficha={ficha}
-            ultimaInteraccion={empresa.ultima_interaccion}
-            notasVendedor={empresa.notas_vendedor}
-            empresaId={empresa.id}
-            nombreEmpresa={empresa.nombre_comercial ?? empresa.nombre}
-            industria={empresa.industria}
-            interacciones={interacciones}
-            contactos={empresa.contactos as Contacto[]}
-            borradores={empresa.borradores ?? null}
-          />
-        )}
-        {tabActivo === "preparacion" && !ficha && <SinFicha />}
-
         {tabActivo === "chat" && (
           <TabChat
             empresaId={empresa.id}
-            empresaNombre={empresa.nombre}
+            empresaNombre={empresa.nombre_comercial ?? empresa.nombre}
+            ficha={ficha}
+            ultimaInteraccion={empresa.ultima_interaccion}
+            notasVendedor={empresa.notas_vendedor}
+            interacciones={interacciones}
+            contactos={empresa.contactos as Contacto[]}
           />
         )}
       </div>

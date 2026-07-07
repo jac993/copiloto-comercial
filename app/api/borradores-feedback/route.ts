@@ -1,8 +1,8 @@
 // =============================================================
 // POST /api/borradores-feedback
 // Guarda la evaluación del vendedor sobre un borrador generado.
-// Se llama desde tab-preparacion cuando el vendedor presiona
-// 👍 o 👎 en un borrador. No consume créditos de IA.
+// Se llama desde tab-chat (tab "Consultar") cuando el vendedor
+// presiona 👍 o 👎 en un borrador. No consume créditos de IA.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
