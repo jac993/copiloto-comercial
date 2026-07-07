@@ -165,7 +165,7 @@ function ContactoCard({
   const [datos, setDatos] = useState<Contacto>(contacto);
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({
-    nombre:      datos.nombre,
+    nombre:      datos.nombre     ?? "",
     cargo:       datos.cargo      ?? "",
     area:        datos.area       ?? "",
     email:       datos.email      ?? "",
@@ -210,7 +210,7 @@ function ContactoCard({
   };
 
   const areaColor = AREA_COLOR[datos.area ?? "otro"] ?? AREA_COLOR.otro;
-  const iniciales = datos.nombre
+  const iniciales = (datos.nombre?.trim() || datos.cargo?.trim() || "?")
     .split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
   const handleEliminar = async () => {
@@ -350,7 +350,9 @@ function ContactoCard({
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-sm">{datos.nombre}</p>
+                  <p className="font-semibold text-sm">
+                    {datos.nombre ?? datos.cargo ?? "Sin nombre"}
+                  </p>
                   {datos.es_decisor && (
                     <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
                       Decisor
@@ -367,7 +369,9 @@ function ContactoCard({
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">{datos.cargo}</p>
+                {datos.nombre && (
+                  <p className="text-xs text-muted-foreground">{datos.cargo}</p>
+                )}
                 {datos.area && (
                   <span className={`inline-block mt-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${areaColor}`}>
                     {AREA_LABEL[datos.area]}

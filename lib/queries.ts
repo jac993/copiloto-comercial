@@ -813,7 +813,7 @@ export async function guardarEmpresaDesdeFicha(
       .filter((d) => !cargosExistentes.has(d.cargo))
       .map((d) => ({
         empresa_id: empresa.id,
-        nombre: d.cargo, // nombre provisional hasta que el vendedor lo encuentre en LinkedIn
+        nombre: null, // sin nombre hasta que el vendedor lo confirme — nunca duplicar el cargo
         cargo: d.cargo,
         area: d.area as "adquisiciones" | "calidad" | "operaciones" | "gerencia" | "otro",
         notas_ia: `${d.por_que_es_clave}\n\nDolor específico: ${d.dolor_especifico}\n\nBuscar en LinkedIn: ${d.query_linkedin}`,

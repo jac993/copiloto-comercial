@@ -284,7 +284,7 @@ export async function POST(
     if (ficha.decisores.length > 0) {
       const contactosDecisores = ficha.decisores.map((d) => ({
         empresa_id: params.id,
-        nombre: d.cargo,
+        nombre: null, // sin nombre hasta que el vendedor lo confirme — nunca duplicar el cargo
         cargo: d.cargo,
         area: d.area,
         notas_ia: `${d.por_que_es_clave}\n\nDolor: ${d.dolor_especifico}\n\nLinkedIn: ${d.query_linkedin}`,

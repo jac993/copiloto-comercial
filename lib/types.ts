@@ -326,7 +326,7 @@ export type EmpresaUpdate = Partial<EmpresaInsert>;
 export interface Contacto {
   id: string;
   empresa_id: string;
-  nombre: string;
+  nombre: string | null; // null = sugerido sin persona real confirmada aún
   cargo: string | null;
   area: AreaContacto | null;
   email: string | null;
