@@ -187,6 +187,7 @@ export function TabChat({
   // Borradores generados por los botones de canal — SOLO estado local
   const [borradorItems, setBorradorItems] = useState<BorradorFeedItem[]>([]);
   const [decisorActivoId, setDecisorActivoId] = useState<string | null>(null);
+  const [mostrarContexto, setMostrarContexto] = useState(false);
 
   // Compromisos pendientes del vendedor de la última interacción
   const compromisosPendientes =
@@ -459,7 +460,7 @@ export function TabChat({
   return (
     <div className="flex flex-col h-[calc(100vh-280px)] min-h-[500px] pb-4 max-w-full overflow-x-hidden">
       {/* ── Contexto fijo arriba: SPIN, última conversación, compromisos ── */}
-      <div className="space-y-3 mb-3">
+      <div className="space-y-3 mb-4">
         {ficha && ficha.preguntas_spin.length > 0 && (
           <details className="group rounded-xl border border-border bg-card">
             <summary className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none">
@@ -516,12 +517,29 @@ export function TabChat({
         {ficha && decisores.length > 0 && (
           <div className="space-y-2">
             {notasVendedor?.trim() && (
-              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
-                <span className="text-amber-600 shrink-0 text-xs mt-0.5">📒</span>
-                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                  Tu contexto: {notasVendedor}
-                </p>
-              </div>
+              mostrarContexto ? (
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
+                  <span className="text-amber-600 shrink-0 text-xs mt-0.5">📒</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                      Tu contexto: {notasVendedor}
+                    </p>
+                    <button
+                      onClick={() => setMostrarContexto(false)}
+                      className="mt-1.5 text-[10px] font-medium text-amber-700/70 dark:text-amber-400/70 hover:text-amber-700 dark:hover:text-amber-400 underline underline-offset-2"
+                    >
+                      Ocultar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setMostrarContexto(true)}
+                  className="text-xs font-medium text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 transition-colors"
+                >
+                  ℹ️ Ver contexto ingresado
+                </button>
+              )
             )}
             <div className="flex items-center flex-wrap gap-1.5 pb-1">
               {decisores.map((d) => {
@@ -594,7 +612,7 @@ export function TabChat({
       </div>
 
       {/* Área de mensajes */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-1 mt-4">
         {cargandoHistorial ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -640,7 +658,7 @@ export function TabChat({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={`Pregúntame sobre ${empresaNombre}...`}
+          placeholder="Chatear con la IA"
           rows={1}
           disabled={cargando}
           className={cn(
@@ -1241,7 +1259,7 @@ function EstadoVacio({
   onPregunta: (p: string) => void;
 }) {
   return (
-    <div className="flex flex-col items-center py-6 gap-5">
+    <div className="flex flex-col items-center py-6 gap-6">
       <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
         <Bot className="h-7 w-7 text-primary" />
       </div>
@@ -1251,14 +1269,14 @@ function EstadoVacio({
           Tengo el contexto completo de esta cuenta. El historial queda guardado.
         </p>
       </div>
-      <div className="w-full px-1">
-        <p className="text-xs font-medium text-muted-foreground px-1 mb-2">Preguntas frecuentes:</p>
-        <div className="flex flex-wrap gap-2">
+      <div className="w-full px-1 pb-2">
+        <p className="text-xs font-medium text-muted-foreground px-1 mb-3">Preguntas frecuentes:</p>
+        <div className="flex flex-wrap gap-2.5">
           {PREGUNTAS_RAPIDAS.map((p) => (
             <button
               key={p}
               onClick={() => onPregunta(p)}
-              className="bg-gray-800 hover:bg-orange-500/20 border border-gray-700 rounded-full px-3 py-1.5 text-sm transition-colors active:scale-[0.98]"
+              className="bg-gray-800 hover:bg-orange-500/20 border border-gray-700 rounded-full px-4 py-2 text-sm leading-snug whitespace-normal text-left transition-colors active:scale-[0.98]"
             >
               {p}
             </button>
