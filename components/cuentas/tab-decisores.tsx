@@ -64,6 +64,13 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
   const cargoRegistrado = new Set(contactosLocales.map((c) => c.cargo));
   const decisoresSugeridos = decisoresLocales.filter((d) => !cargoRegistrado.has(d.cargo));
 
+  const tieneNombreReal = (c: Contacto) => c.nombre != null && c.nombre.trim() !== "";
+  const porFechaCreacion = (a: Contacto, b: Contacto) =>
+    new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime();
+
+  const contactosConfirmados = contactosLocales.filter(tieneNombreReal).sort(porFechaCreacion);
+  const cargosSinIdentificar = contactosLocales.filter((c) => !tieneNombreReal(c)).sort(porFechaCreacion);
+
   // Identificado = ya tiene persona con nombre, o ya se confirmó como contacto real
   const identificados = decisoresLocales.filter(
     (d) => d.persona_encontrada?.nombre != null || cargoRegistrado.has(d.cargo)
@@ -87,14 +94,34 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
         </div>
       )}
 
-      {/* Contactos ya registrados */}
-      {contactosLocales.length > 0 && (
+      {/* Contactos confirmados — nombre real, vengan de investigación o agregados manualmente */}
+      {contactosConfirmados.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-            Contactos registrados
+            ✅ Contactos confirmados
           </p>
           <div className="space-y-2">
-            {contactosLocales.map((contacto) => (
+            {contactosConfirmados.map((contacto) => (
+              <ContactoCard
+                key={contacto.id}
+                contacto={contacto}
+                onEliminar={() => handleContactoEliminado(contacto.id)}
+                empresaId={empresaId}
+                onContactoAgregado={handleContactoAgregado}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cargos sugeridos sin persona real todavía (nombre = null) */}
+      {cargosSinIdentificar.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+            🔍 Cargos por identificar
+          </p>
+          <div className="space-y-2">
+            {cargosSinIdentificar.map((contacto) => (
               <ContactoCard
                 key={contacto.id}
                 contacto={contacto}
