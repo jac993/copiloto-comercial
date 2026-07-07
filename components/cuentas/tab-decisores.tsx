@@ -250,6 +250,12 @@ function ContactoCard({
     }
   };
 
+  // No tiene sentido "confirmar" un contacto que es puro cargo sin ningún
+  // dato verificable — solo se muestra el botón si hay algo real que revisar.
+  const tieneAlgunDatoReal = Boolean(
+    datos.nombre?.trim() || datos.email?.trim() || datos.telefono?.trim() || datos.linkedin_url?.trim()
+  );
+
   const handleConfirmar = async () => {
     setVerificando(true);
     try {
@@ -461,8 +467,8 @@ function ContactoCard({
           </div>
         )}
 
-        {/* Botón Confirmar — solo visible si la persona no ha sido verificada */}
-        {!datos.verificado && (
+        {/* Botón Confirmar — solo si no está verificado Y hay al menos un dato real que revisar */}
+        {!datos.verificado && tieneAlgunDatoReal && (
           <Button
             variant="outline"
             size="sm"
