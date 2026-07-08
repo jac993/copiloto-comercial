@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import type { Empresa, PrioridadCacheItem, TareaPendiente } from "@/lib/types";
+import type { Empresa, TareaPendiente } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -144,31 +144,28 @@ export async function GET() {
   }));
   console.log('[TAREAS_PENDIENTES]', tareasPendientes.length);
 
-  // Leer caché de prioridades del día (generado en la última llamada a /api/priorizar)
+  // Prioridades de hoy sin ejecutar — fuente de verdad: prioridades_diarias
+  const { data: prioridadesHoyRaw } = await supabase
+    .from("prioridades_diarias")
+    .select("id, empresa_id, nombre_empresa, industria, score, razon, accion_sugerida, urgencia")
+    .eq("fecha", hoy)
+    .eq("completada", false)
+    .order("score", { ascending: false });
+
+  // Prioridades de días anteriores no ejecutadas → aparecen en "Vencidas"
+  const { data: prioridadesVencidasRaw } = await supabase
+    .from("prioridades_diarias")
+    .select("id, empresa_id, nombre_empresa, accion_sugerida, urgencia, fecha")
+    .lt("fecha", hoy)
+    .eq("completada", false)
+    .order("fecha", { ascending: true }); // más antigua primero
+
+  // Resumen del día y timestamp de generación (para la lógica de auto-trigger)
   const { data: metricaHoy } = await supabase
     .from("metricas_diarias")
-    .select("prioridades_cache, prioridades_generadas_en, notas_dia")
+    .select("prioridades_generadas_en, notas_dia")
     .eq("fecha", hoy)
     .maybeSingle();
-
-  // Empresas ya contactadas hoy (incluye el registro que deja el botón
-  // "✓ Hecho" de una prioridad) — se excluyen de la lista para que no
-  // reaparezcan tras recargar la página, ya que prioridades_cache es una
-  // foto fija tomada al generar las prioridades, no se actualiza sola.
-  const { data: contactadasHoyRaw } = await supabase
-    .from("interacciones")
-    .select("empresa_id")
-    .gte("fecha", `${hoy}T00:00:00`)
-    .lte("fecha", `${hoy}T23:59:59`);
-  const empresasContactadasHoy = new Set(
-    (contactadasHoyRaw ?? []).map((r) => r.empresa_id as string)
-  );
-
-  const prioridadesCache = metricaHoy?.prioridades_cache
-    ? (metricaHoy.prioridades_cache as unknown as PrioridadCacheItem[]).filter(
-        (item) => !empresasContactadasHoy.has(item.empresa_id)
-      )
-    : null;
 
   return NextResponse.json({
     contactos_hoy: contactos,
@@ -177,7 +174,8 @@ export async function GET() {
     llamadas_hoy: llamadas,
     ganados_mes: ganados,
     reactivaciones: (reactivaciones ?? []) as Empresa[],
-    prioridades_cache: prioridadesCache,
+    prioridades_hoy: prioridadesHoyRaw ?? [],
+    prioridades_vencidas_ia: prioridadesVencidasRaw ?? [],
     prioridades_generadas_en: metricaHoy?.prioridades_generadas_en ?? null,
     resumen_dia_cache: metricaHoy?.notas_dia ?? null,
     tareas_pendientes: tareasPendientes,

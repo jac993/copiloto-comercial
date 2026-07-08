@@ -182,12 +182,8 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
     )
   );
 
-  // Enriquecer respuesta con datos completos de empresa
+  // Datos de empresa para enriquecer la respuesta
   const empresasMap = new Map(empresas.map((e) => [e.id, e]));
-  const prioridadesEnriquecidas = resultado.prioridades.map((p) => ({
-    ...p,
-    empresa: empresasMap.get(p.empresa_id) ?? null,
-  }));
 
   // Guardar en cache de metricas_diarias para el día actual
   const hoy = new Date().toISOString().split("T")[0];
@@ -203,6 +199,42 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
       urgencia: p.urgencia,
     };
   });
+
+  // Persistir en prioridades_diarias para carry-over a "Vencidas" al día siguiente.
+  // onConflict sin tocar completada/completada_en/interaccion_id: solo actualiza
+  // score, razon y urgencia si el usuario recalcula el mismo día.
+  const upsertRows = cache.map((item) => ({
+    fecha: hoy,
+    empresa_id: item.empresa_id,
+    nombre_empresa: item.nombre_empresa,
+    industria: item.industria,
+    score: item.score,
+    razon: item.razon,
+    accion_sugerida: item.accion_sugerida,
+    urgencia: item.urgencia,
+  }));
+  await supabase
+    .from("prioridades_diarias")
+    .upsert(upsertRows, { onConflict: "fecha,empresa_id" })
+    .then(() => {}, () => {});
+
+  // Leer los IDs generados para incluirlos en la respuesta (necesarios para el
+  // botón "✓ Hecho" que ahora usa prioridad_id en lugar de empresa_id).
+  const { data: pdRows } = await supabase
+    .from("prioridades_diarias")
+    .select("id, empresa_id")
+    .eq("fecha", hoy)
+    .in("empresa_id", resultado.prioridades.map((p) => p.empresa_id));
+  const idsPorEmpresa = new Map(
+    (pdRows ?? []).map((r) => [r.empresa_id as string, r.id as string])
+  );
+
+  // Enriquecer con empresa + id de prioridades_diarias
+  const prioridadesEnriquecidas = resultado.prioridades.map((p) => ({
+    ...p,
+    id: idsPorEmpresa.get(p.empresa_id) ?? null,
+    empresa: empresasMap.get(p.empresa_id) ?? null,
+  }));
 
   // Guardar cache sin bloquear la respuesta
   guardarPrioridadesCache(hoy, cache, resultado.resumen_dia).catch(() => {});

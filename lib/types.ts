@@ -385,6 +385,9 @@ export interface TareaPendiente {
   contacto_nombre: string | null;
   proximo_paso: string;
   proximo_paso_fecha: string; // YYYY-MM-DD
+  // 'ia' cuando proviene de prioridades_diarias (vencida sin ejecutar);
+  // undefined para tareas manuales normales.
+  origen?: "ia";
 }
 
 // Interacción cuyo plazo de respuesta de 48h ya venció — usada por la API /vencidas
@@ -494,6 +497,29 @@ export interface ChatEmpresa {
 }
 
 export type ChatEmpresaInsert = Omit<ChatEmpresa, "id" | "creado_en">;
+
+// ─── TABLA: prioridades_diarias ──────────────────────────────
+
+export interface PrioridadDiaria {
+  id: string;
+  fecha: string;            // "YYYY-MM-DD"
+  empresa_id: string;
+  nombre_empresa: string;
+  industria: string | null;
+  score: number;
+  razon: string;
+  accion_sugerida: string;
+  urgencia: "alta" | "media" | "baja";
+  completada: boolean;
+  completada_en: string | null;
+  interaccion_id: string | null;
+  creado_en: string;
+}
+
+export type PrioridadDiariaInsert = Omit<
+  PrioridadDiaria,
+  "id" | "creado_en" | "completada" | "completada_en" | "interaccion_id"
+>;
 
 // ─── TABLA: misiones_diarias ──────────────────────────────────
 

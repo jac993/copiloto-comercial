@@ -1,18 +1,27 @@
 // =============================================================
 // POST /api/prioridades/completar
-// Registra que el vendedor ya ejecutó la acción sugerida por la IA
-// para una prioridad del día (botón "✓ Hecho" en la pantalla Hoy).
-// Solo deja constancia en el historial (interacción resuelta=true);
-// NO llama a la IA ni genera coaching — eso sigue ocurriendo en el
-// flujo separado "Reportar mi día" (POST /api/misiones/feedback).
+// Registra que el vendedor ejecutó la acción sugerida por la IA.
+// Acepta:
+//   { prioridad_id }                  ← nuevo contrato (prioridades_diarias.id)
+//   { empresa_id, accion_sugerida }   ← legacy para compatibilidad
+// Crea una interacción resuelta=true y, cuando usa prioridad_id,
+// marca prioridades_diarias.completada=true con referencia a la
+// interacción creada.
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { insertInteraccion } from "@/lib/queries";
 import type { TipoInteraccion, InteraccionInsert } from "@/lib/types";
 
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
 // Infiere el canal a partir del texto de la acción sugerida
-// ("Llamar a...", "Enviar email a...", "seguimiento por LinkedIn...").
 function inferirTipoInteraccion(texto: string): TipoInteraccion {
   const t = texto.toLowerCase();
   if (t.includes("email") || t.includes("correo")) return "email";
@@ -22,41 +31,89 @@ function inferirTipoInteraccion(texto: string): TipoInteraccion {
   return "llamada";
 }
 
+function construirInteraccion(empresa_id: string, accion_sugerida: string): InteraccionInsert {
+  return {
+    empresa_id,
+    contacto_id: null,
+    parent_id: null,
+    tipo: inferirTipoInteraccion(accion_sugerida),
+    fecha: new Date().toISOString(),
+    audio_url: null,
+    transcripcion: accion_sugerida,
+    resumen_ia: null,
+    compromisos: null,
+    sentimiento: null,
+    tecnica_usada: null,
+    coaching_ia: null,
+    proximo_paso: null,
+    proximo_paso_fecha: null,
+    badge_estado: null,
+    decision_sugerida: null,
+    remitente: "vendedor",
+    resuelta: true,
+  };
+}
+
 export async function POST(req: NextRequest) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: "Falta SUPABASE_SERVICE_ROLE_KEY" }, { status: 500 });
+  }
+
   try {
-    const body = await req.json() as { empresa_id?: string; accion_sugerida?: string };
-    const { empresa_id, accion_sugerida } = body;
-
-    if (!empresa_id || !accion_sugerida) {
-      return NextResponse.json({ error: "empresa_id y accion_sugerida son requeridos" }, { status: 400 });
-    }
-
-    const interaccionData: InteraccionInsert = {
-      empresa_id,
-      contacto_id: null,
-      parent_id: null,
-      tipo: inferirTipoInteraccion(accion_sugerida),
-      fecha: new Date().toISOString(),
-      audio_url: null,
-      transcripcion: accion_sugerida,
-      resumen_ia: null,
-      compromisos: null,
-      sentimiento: null,
-      tecnica_usada: null,
-      coaching_ia: null,
-      proximo_paso: null,
-      proximo_paso_fecha: null,
-      badge_estado: null,
-      decision_sugerida: null,
-      remitente: "vendedor",
-      resuelta: true,
+    const body = await req.json() as {
+      prioridad_id?: string;
+      empresa_id?: string;
+      accion_sugerida?: string;
     };
 
-    const interaccion = await insertInteraccion(interaccionData);
-    return NextResponse.json({ ok: true, interaccion });
+    if (body.prioridad_id) {
+      // ── Flujo nuevo: lookup en prioridades_diarias ────────────
+      const supabase = getSupabase();
+      const { data: prioridad } = await supabase
+        .from("prioridades_diarias")
+        .select("empresa_id, accion_sugerida")
+        .eq("id", body.prioridad_id)
+        .maybeSingle();
+
+      if (!prioridad) {
+        return NextResponse.json({ error: "Prioridad no encontrada" }, { status: 404 });
+      }
+
+      const interaccion = await insertInteraccion(
+        construirInteraccion(
+          prioridad.empresa_id as string,
+          prioridad.accion_sugerida as string
+        )
+      );
+
+      // Marcar como completada en prioridades_diarias
+      await supabase
+        .from("prioridades_diarias")
+        .update({
+          completada: true,
+          completada_en: new Date().toISOString(),
+          interaccion_id: interaccion.id,
+        })
+        .eq("id", body.prioridad_id);
+
+      return NextResponse.json({ ok: true, interaccion });
+    }
+
+    if (body.empresa_id && body.accion_sugerida) {
+      // ── Flujo legacy: solo crea interacción (sin prioridades_diarias) ──
+      const interaccion = await insertInteraccion(
+        construirInteraccion(body.empresa_id, body.accion_sugerida)
+      );
+      return NextResponse.json({ ok: true, interaccion });
+    }
+
+    return NextResponse.json(
+      { error: "Se requiere prioridad_id o empresa_id+accion_sugerida" },
+      { status: 400 }
+    );
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : "Error desconocido";
-    console.error("[PRIORIDAD_COMPLETAR_ERROR]", mensaje, err);
+    console.error("[PRIORIDAD_COMPLETAR_ERROR]", mensaje);
     return NextResponse.json({ error: mensaje }, { status: 500 });
   }
 }

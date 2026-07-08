@@ -26,9 +26,31 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import type { Empresa, PrioridadCacheItem, ResultadoMision, TareaPendiente } from "@/lib/types";
+import type { Empresa, ResultadoMision, TareaPendiente } from "@/lib/types";
 
 // ── Tipos de respuesta de las APIs ──────────────────────────
+
+// Shape de cada item en prioridades_hoy (viene de prioridades_diarias)
+interface PrioridadDiariaResumen {
+  id: string;
+  empresa_id: string;
+  nombre_empresa: string;
+  industria: string | null;
+  score: number;
+  razon: string;
+  accion_sugerida: string;
+  urgencia: "alta" | "media" | "baja";
+}
+
+// Shape de cada item en prioridades_vencidas_ia
+interface PrioridadVencidaIA {
+  id: string;
+  empresa_id: string;
+  nombre_empresa: string;
+  accion_sugerida: string;
+  urgencia: "alta" | "media" | "baja";
+  fecha: string; // YYYY-MM-DD del día en que se generó
+}
 
 interface MetricasHoy {
   contactos_hoy: number;
@@ -37,7 +59,8 @@ interface MetricasHoy {
   llamadas_hoy: number;
   ganados_mes: number;
   reactivaciones: Empresa[];
-  prioridades_cache: PrioridadCacheItem[] | null;
+  prioridades_hoy: PrioridadDiariaResumen[];
+  prioridades_vencidas_ia: PrioridadVencidaIA[];
   prioridades_generadas_en: string | null;
   resumen_dia_cache: string | null;
   tareas_pendientes: TareaPendiente[];
@@ -58,6 +81,7 @@ interface EmpresaResumen {
 }
 
 interface PrioridadIA {
+  id: string | null; // prioridades_diarias.id — null solo antes de migrar la tabla
   empresa_id: string;
   score: number;
   razon: string;
@@ -111,8 +135,11 @@ export function HoyClient() {
   const [errorPrioridades, setErrorPrioridades] = useState<string | null>(null);
   const [cacheTimestamp, setCacheTimestamp] = useState<string | null>(null);
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
+  // Tracks el ID (prioridades_diarias.id) del item de IA marcándose
   const [marcandoPrioridadId, setMarcandoPrioridadId] = useState<string | null>(null);
-  const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "hoy" | "7d" | "todas">("7d");
+  // Prioridades vencidas de días anteriores (prioridades_diarias con fecha < hoy y completada=false)
+  const [prioridadesVencidasIA, setPrioridadesVencidasIA] = useState<TareaPendiente[]>([]);
+  const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "hoy" | "todas">("hoy");
   const [dialogReporte, setDialogReporte] = useState(false);
   const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
   const [guardandoReporte, setGuardandoReporte] = useState(false);
@@ -134,7 +161,7 @@ export function HoyClient() {
   // pueda resucitar una tarea ya resuelta localmente.
   const tareasResueltasRef = useRef<Set<string>>(new Set());
   // Mismo mecanismo, para prioridades de IA marcadas "Hecho" (identificadas
-  // por empresa_id, ya que prioridades_cache no tiene id propio persistente).
+  // por prioridades_diarias.id — UUID único de la prioridad).
   const prioridadesResueltasRef = useRef<Set<string>>(new Set());
 
   // Identidad estable (deps vacías) para que cargarMetricas no cambie de
@@ -179,18 +206,12 @@ export function HoyClient() {
       prevContactosRef.current = data.contactos_hoy;
       setMetricas(data);
 
-      // ¿Las prioridades cacheadas son de HOY? Mismo campo que ya usa
-      // GET /api/metricas/hoy: prioridades_generadas_en. Comparación en
-      // huso horario de Chile para no cruzar el día antes de medianoche local.
-      const hoyClStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
-      const generadasHoy = !!data.prioridades_generadas_en &&
-        new Date(data.prioridades_generadas_en).toLocaleDateString("en-CA", { timeZone: "America/Santiago" }) === hoyClStr;
-
-      if (data.prioridades_cache && data.prioridades_cache.length > 0 && generadasHoy) {
-        // Hidratar desde caché — no gasta créditos de nuevo
-        const fromCache: PrioridadIA[] = data.prioridades_cache
-          .filter((item) => !prioridadesResueltasRef.current.has(item.empresa_id))
+      // Hidratar prioridades de HOY desde prioridades_diarias (fuente de verdad nueva)
+      if (data.prioridades_hoy.length > 0) {
+        const fromPD: PrioridadIA[] = data.prioridades_hoy
+          .filter((item) => !prioridadesResueltasRef.current.has(item.id))
           .map((item) => ({
+            id: item.id,
             empresa_id: item.empresa_id,
             score: item.score,
             razon: item.razon,
@@ -198,19 +219,37 @@ export function HoyClient() {
             urgencia: item.urgencia,
             empresa: { nombre: item.nombre_empresa, industria: item.industria },
           }));
-        setPrioridades(fromCache);
+        setPrioridades(fromPD);
         if (data.resumen_dia_cache) setResumenDia(data.resumen_dia_cache);
         if (data.prioridades_generadas_en) setCacheTimestamp(data.prioridades_generadas_en);
-      } else if (!autoTriggeredRef.current) {
-        // Sin prioridades de hoy — generar automáticamente, una sola vez por sesión,
-        // salvo sábado o domingo: el vendedor no trabaja esos días y no vale la pena
-        // gastar créditos sin uso real. El botón "↻ Recalcular" sigue disponible
-        // por si igual quiere forzarlo un fin de semana puntual.
-        if (!esFinDeSemanaCl()) {
-          autoTriggeredRef.current = true;
-          void actualizarPrioridades({ auto: true });
+      } else {
+        // prioridades_hoy vacío → o no se generaron hoy o todas ya marcadas.
+        // Disparar auto-generación solo si no se generaron hoy todavía.
+        const hoyClStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
+        const generadasHoy = !!data.prioridades_generadas_en &&
+          new Date(data.prioridades_generadas_en).toLocaleDateString("en-CA", { timeZone: "America/Santiago" }) === hoyClStr;
+
+        if (!generadasHoy && !autoTriggeredRef.current) {
+          if (!esFinDeSemanaCl()) {
+            autoTriggeredRef.current = true;
+            void actualizarPrioridades({ auto: true });
+          }
         }
       }
+
+      // Prioridades vencidas de días anteriores → filtrar las ya resueltas esta sesión
+      const vencidasMapped: TareaPendiente[] = (data.prioridades_vencidas_ia ?? [])
+        .filter((item) => !prioridadesResueltasRef.current.has(item.id))
+        .map((item) => ({
+          id: item.id,
+          empresa_id: item.empresa_id,
+          empresa_nombre: item.nombre_empresa,
+          contacto_nombre: null,
+          proximo_paso: item.accion_sugerida,
+          proximo_paso_fecha: item.fecha,
+          origen: "ia" as const,
+        }));
+      setPrioridadesVencidasIA(vencidasMapped);
     } catch {
       // No interrumpir la pantalla si falla
     } finally {
@@ -253,20 +292,41 @@ export function HoyClient() {
     }
   }
 
-  // Marca como hecha una prioridad de IA: solo deja constancia en el
-  // historial (interacción resuelta=true), sin llamar a la IA — el
-  // coaching de fin de día sigue viviendo en "Reportar mi día".
+  // Marca como hecha una prioridad de HOY. Usa prioridad_id para actualizar
+  // prioridades_diarias; el coaching de fin de día vive en "Reportar mi día".
   async function marcarHechaPrioridad(p: PrioridadIA) {
-    setMarcandoPrioridadId(p.empresa_id);
+    const key = p.id ?? p.empresa_id; // fallback a empresa_id si la tabla no existe aún
+    setMarcandoPrioridadId(key);
+    try {
+      const body = p.id
+        ? { prioridad_id: p.id }
+        : { empresa_id: p.empresa_id, accion_sugerida: p.accion_sugerida };
+      const res = await fetch("/api/prioridades/completar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        prioridadesResueltasRef.current.add(key);
+        setPrioridades((prev) => prev.filter((x) => (x.id ?? x.empresa_id) !== key));
+      }
+    } finally {
+      setMarcandoPrioridadId(null);
+    }
+  }
+
+  // Marca como hecha una prioridad VENCIDA de días anteriores.
+  async function marcarHechaVencidaIA(t: TareaPendiente) {
+    setMarcandoPrioridadId(t.id);
     try {
       const res = await fetch("/api/prioridades/completar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresa_id: p.empresa_id, accion_sugerida: p.accion_sugerida }),
+        body: JSON.stringify({ prioridad_id: t.id }),
       });
       if (res.ok) {
-        prioridadesResueltasRef.current.add(p.empresa_id);
-        setPrioridades((prev) => prev.filter((x) => x.empresa_id !== p.empresa_id));
+        prioridadesResueltasRef.current.add(t.id);
+        setPrioridadesVencidasIA((prev) => prev.filter((x) => x.id !== t.id));
       }
     } finally {
       setMarcandoPrioridadId(null);
@@ -311,18 +371,28 @@ export function HoyClient() {
 
   // Fecha en zona horaria de Chile — evita que el día cambie antes de medianoche local
   const hoyStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
-  const en7diasDate = new Date(hoyStr + "T12:00:00");
-  en7diasDate.setDate(en7diasDate.getDate() + 7);
-  const en7dias = en7diasDate.toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
   const todasTareas = metricas?.tareas_pendientes ?? [];
-  const tareas = todasTareas.filter((t) => {
-    if (filtroTareas === "vencidas") return t.proximo_paso_fecha < hoyStr;
-    if (filtroTareas === "hoy")      return t.proximo_paso_fecha === hoyStr;
-    if (filtroTareas === "7d")       return t.proximo_paso_fecha <= en7dias;
-    return true;
-  });
-  const countVencidas = todasTareas.filter((t) => t.proximo_paso_fecha < hoyStr).length;
-  const countHoy      = todasTareas.filter((t) => t.proximo_paso_fecha === hoyStr).length;
+
+  // Tareas que muestra el filtro activo:
+  // • Vencidas: manuales vencidas + IA vencidas mezcladas y ordenadas por fecha
+  // • Hoy: solo manuales con fecha = hoy
+  // • Todas: todas las manuales (cualquier fecha), sin IA vencidas (están en Vencidas)
+  const tareasAMostrar = (() => {
+    if (filtroTareas === "vencidas") {
+      const manualVencidas = todasTareas.filter((t) => t.proximo_paso_fecha < hoyStr);
+      return [...manualVencidas, ...prioridadesVencidasIA].sort((a, b) =>
+        a.proximo_paso_fecha.localeCompare(b.proximo_paso_fecha)
+      );
+    }
+    if (filtroTareas === "hoy") return todasTareas.filter((t) => t.proximo_paso_fecha === hoyStr);
+    return todasTareas; // todas (solo manuales)
+  })();
+
+  // Incluye IA vencidas en el badge del pill "Vencidas"
+  const countVencidas =
+    todasTareas.filter((t) => t.proximo_paso_fecha < hoyStr).length +
+    prioridadesVencidasIA.length;
+  const countHoy = todasTareas.filter((t) => t.proximo_paso_fecha === hoyStr).length;
 
   const contactos = metricas?.contactos_hoy ?? 0;
   const meta = metricas?.meta ?? 5;
@@ -452,7 +522,7 @@ export function HoyClient() {
             <Target className="h-4 w-4 text-primary" />
             <h2 className="font-semibold text-base">Tareas de hoy</h2>
             <span className="text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
-              {prioridades.length + todasTareas.length}
+              {prioridades.length + todasTareas.length + prioridadesVencidasIA.length}
             </span>
           </div>
 
@@ -515,7 +585,7 @@ export function HoyClient() {
                   key={p.empresa_id}
                   prioridad={p}
                   posicion={i + 1}
-                  marcando={marcandoPrioridadId === p.empresa_id}
+                  marcando={marcandoPrioridadId === (p.id ?? p.empresa_id)}
                   onMarcar={() => marcarHechaPrioridad(p)}
                 />
               ))}
@@ -545,12 +615,12 @@ export function HoyClient() {
             </div>
           )}
 
-          {/* Tareas con fecha de vencimiento — debajo de las prioridades de IA */}
-          {todasTareas.length > 0 && (
+          {/* Tareas con fecha + IA vencidas — debajo de las prioridades de IA */}
+          {(todasTareas.length > 0 || prioridadesVencidasIA.length > 0) && (
             <div className="mt-4">
-              {/* Selector de filtro */}
+              {/* Selector de filtro: Vencidas / Hoy / Todas */}
               <div className="flex gap-1.5 mb-3 flex-wrap">
-                {/* Vencidas — rojo si hay, gris si no */}
+                {/* Vencidas — rojo si hay (manuales + IA), gris si no */}
                 <button
                   onClick={() => setFiltroTareas("vencidas")}
                   className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
@@ -582,19 +652,7 @@ export function HoyClient() {
                   Hoy{countHoy > 0 ? ` (${countHoy})` : ""}
                 </button>
 
-                {/* 7 días */}
-                <button
-                  onClick={() => setFiltroTareas("7d")}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                    filtroTareas === "7d"
-                      ? "bg-primary text-white border-primary"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  }`}
-                >
-                  7 días
-                </button>
-
-                {/* Todas */}
+                {/* Todas — solo tareas manuales, cualquier fecha */}
                 <button
                   onClick={() => setFiltroTareas("todas")}
                   className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
@@ -607,12 +665,16 @@ export function HoyClient() {
                 </button>
               </div>
               <div className="space-y-2">
-                {tareas.map((t) => (
+                {tareasAMostrar.map((t) => (
                   <TareaCard
                     key={t.id}
                     tarea={t}
-                    marcando={marcandoId === t.id}
-                    onMarcar={() => marcarHecha(t.id)}
+                    marcando={t.origen === "ia" ? marcandoPrioridadId === t.id : marcandoId === t.id}
+                    onMarcar={
+                      t.origen === "ia"
+                        ? () => marcarHechaVencidaIA(t)
+                        : () => marcarHecha(t.id)
+                    }
                     onFechaChange={(nuevaFecha) =>
                       setMetricas((prev) =>
                         prev
@@ -627,7 +689,7 @@ export function HoyClient() {
                     }
                   />
                 ))}
-                {tareas.length === 0 && (
+                {tareasAMostrar.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
                     ✅ Sin tareas pendientes para este filtro
                   </p>
@@ -1124,11 +1186,16 @@ function TareaCard({
         {/* Nombre empresa — clickable para expandir */}
         <button
           onClick={() => setExpandida((v) => !v)}
-          className="flex-1 min-w-0 text-left"
+          className="flex-1 min-w-0 text-left flex items-center gap-1.5"
         >
           <span className="text-sm font-semibold truncate block leading-tight">
             {tarea.empresa_nombre}
           </span>
+          {tarea.origen === "ia" && (
+            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+              IA
+            </span>
+          )}
         </button>
 
         {/* Fecha corta + hora */}
@@ -1195,13 +1262,16 @@ function TareaCard({
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1">
                 <p className={`text-xs font-medium ${colorVencimiento}`}>{textoVencimiento}</p>
-                <button
-                  onClick={() => { setInputVal(toDatetimeLocal(tarea.proximo_paso_fecha)); setEditando(true); }}
-                  className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                  title="Editar fecha"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
+                {/* Solo tareas manuales pueden reprogramarse */}
+                {!tarea.origen && (
+                  <button
+                    onClick={() => { setInputVal(toDatetimeLocal(tarea.proximo_paso_fecha)); setEditando(true); }}
+                    className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                    title="Editar fecha"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
               </div>
               <Link
                 href={`/cuentas/${tarea.empresa_id}`}
