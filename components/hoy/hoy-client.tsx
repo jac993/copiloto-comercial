@@ -124,6 +124,14 @@ export function HoyClient() {
   // Evita disparar la generación automática más de una vez por sesión —
   // cargarMetricas se vuelve a llamar en cada focus de ventana.
   const autoTriggeredRef = useRef(false);
+  // IDs marcados como "Hecho" en esta sesión. cargarMetricas se dispara al
+  // montar Y al recuperar foco, sin cancelación de peticiones en curso: si
+  // una petición GET que ya estaba en vuelo (ej. la del montaje, lenta en
+  // celular) responde DESPUÉS de que el usuario ya marcó una tarea, pisaría
+  // el estado optimista y la tarea reaparecería. Filtramos siempre contra
+  // este set para que ninguna respuesta, sin importar el orden de llegada,
+  // pueda resucitar una tarea ya resuelta localmente.
+  const tareasResueltasRef = useRef<Set<string>>(new Set());
 
   // Identidad estable (deps vacías) para que cargarMetricas no cambie de
   // referencia en cada render y el useEffect de montaje no se re-dispare.
@@ -151,6 +159,11 @@ export function HoyClient() {
       const res = await fetch("/api/metricas/hoy");
       if (!res.ok) throw new Error("Error al cargar métricas");
       const data: MetricasHoy = await res.json();
+      if (tareasResueltasRef.current.size > 0) {
+        data.tareas_pendientes = data.tareas_pendientes.filter(
+          (t) => !tareasResueltasRef.current.has(t.id)
+        );
+      }
 
       // Disparar confeti si acaba de llegar a la meta
       if (
@@ -220,6 +233,7 @@ export function HoyClient() {
         body: JSON.stringify({ resuelta: true }),
       });
       if (res.ok) {
+        tareasResueltasRef.current.add(id);
         setMetricas((prev) => {
           if (!prev) return prev;
           return {
