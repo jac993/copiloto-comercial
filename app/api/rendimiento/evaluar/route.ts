@@ -14,7 +14,7 @@ import {
 } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
 import { PROMPT_EVALUAR, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
-import type { EvaluacionSemanalInsert } from "@/lib/types";
+import type { EvaluacionSemanalInsert, MeddicData } from "@/lib/types";
 
 export const maxDuration = 60;
 
@@ -52,6 +52,36 @@ function domingoDeSemana(lunesStr: string): string {
   const domingo = new Date(lunes);
   domingo.setDate(lunes.getDate() + 6);
   return domingo.toISOString().split("T")[0];
+}
+
+// Diferencia en días calendario entre dos fechas "YYYY-MM-DD"
+function diasEntreFechas(a: string, b: string): number {
+  const da = new Date(`${a}T00:00:00`);
+  const db = new Date(`${b}T00:00:00`);
+  return Math.round((db.getTime() - da.getTime()) / 86400000);
+}
+
+// Racha máxima histórica de días CONSECUTIVOS (calendario, sin saltos)
+// con meta_cumplida = true. Un día sin fila en metricas_diarias, o con
+// meta_cumplida = false, corta la racha.
+function calcularRachaRecord(filas: { fecha: string; meta_cumplida: boolean }[]): number {
+  const ordenadas = [...filas].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  let record = 0;
+  let actual = 0;
+  let fechaAnterior: string | null = null;
+
+  for (const fila of ordenadas) {
+    if (!fila.meta_cumplida) {
+      actual = 0;
+      fechaAnterior = fila.fecha;
+      continue;
+    }
+    actual = fechaAnterior && diasEntreFechas(fechaAnterior, fila.fecha) === 1 ? actual + 1 : 1;
+    record = Math.max(record, actual);
+    fechaAnterior = fila.fecha;
+  }
+
+  return record;
 }
 
 export async function POST() {
@@ -183,10 +213,46 @@ ${JSON.stringify(contextoSemana, null, 2)}`;
 
   const evaluacion = await insertEvaluacionSemanal(evalInsert);
 
+  // ── Recalcular las 4 métricas acumuladas de rendimiento_ejecutivo ──
+  // sobre TODO el histórico (no solo la semana recién evaluada), ya
+  // que esta fila representa el acumulado global del vendedor.
+  const [{ data: todasEvaluaciones }, { data: todasMetricasDiarias }, { data: empresasActivas }] =
+    await Promise.all([
+      supabase.from("evaluaciones_semanales").select("tasa_cumplimiento, tasa_conversion"),
+      supabase.from("metricas_diarias").select("fecha, meta_cumplida"),
+      supabase
+        .from("empresas")
+        .select("meddic")
+        .not("estado", "eq", "perdido")
+        .not("estado", "eq", "ganado"),
+    ]);
+
+  const evalsHistoricas = todasEvaluaciones ?? [];
+  const tasaCumplimientoHistorica = evalsHistoricas.length > 0
+    ? Math.round(evalsHistoricas.reduce((acc, e) => acc + (e.tasa_cumplimiento ?? 0), 0) / evalsHistoricas.length)
+    : 0;
+  const tasaConversionHistorica = evalsHistoricas.length > 0
+    ? Math.round(evalsHistoricas.reduce((acc, e) => acc + (e.tasa_conversion ?? 0), 0) / evalsHistoricas.length)
+    : 0;
+
+  const rachaRecord = calcularRachaRecord(todasMetricasDiarias ?? []);
+
+  const empresasParaScore = empresasActivas ?? [];
+  const scoreActual = empresasParaScore.length > 0
+    ? Math.round(
+        empresasParaScore.reduce(
+          (acc, e) => acc + ((e.meddic as MeddicData | null)?.score ?? 0),
+          0
+        ) / empresasParaScore.length
+      )
+    : 0;
+
   // Actualizar registro único de rendimiento ejecutivo
   await updateRendimientoEjecutivo({
-    tasa_cumplimiento_historica: tasaCumplimiento,
-    tasa_conversion_historica: tasaConversion,
+    tasa_cumplimiento_historica: tasaCumplimientoHistorica,
+    tasa_conversion_historica: tasaConversionHistorica,
+    racha_record: rachaRecord,
+    score_actual: scoreActual,
   }).catch(() => {
     // Si no existe la fila 1, ignorar — se crea con SQL
   });

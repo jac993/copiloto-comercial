@@ -918,17 +918,14 @@ const RESULTADO_LABEL: Record<ResultadoMision, string> = {
 
 function CoachingCard({ feedback }: { feedback: FeedbackItem }) {
   return (
-    <div
-      className="rounded-2xl p-4 space-y-2.5"
-      style={{ background: "#FFF7ED", border: "1px solid rgba(124,58,237,0.15)" }}
-    >
+    <div className="rounded-2xl p-4 space-y-2.5 bg-orange-50 dark:bg-gray-800 border border-orange-100 dark:border-gray-700">
       <div className="flex items-center justify-between gap-2">
         <p className="font-semibold text-sm text-[#F97316]">{feedback.nombre_empresa}</p>
         <span className="text-[11px] text-muted-foreground shrink-0">
           {RESULTADO_LABEL[feedback.resultado]}
         </span>
       </div>
-      <p className="text-xs leading-relaxed whitespace-pre-wrap text-foreground/80">
+      <p className="text-xs leading-relaxed whitespace-pre-wrap text-gray-700 dark:text-gray-200">
         {feedback.feedback_ia}
       </p>
     </div>
