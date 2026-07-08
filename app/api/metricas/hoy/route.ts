@@ -151,8 +151,23 @@ export async function GET() {
     .eq("fecha", hoy)
     .maybeSingle();
 
+  // Empresas ya contactadas hoy (incluye el registro que deja el botón
+  // "✓ Hecho" de una prioridad) — se excluyen de la lista para que no
+  // reaparezcan tras recargar la página, ya que prioridades_cache es una
+  // foto fija tomada al generar las prioridades, no se actualiza sola.
+  const { data: contactadasHoyRaw } = await supabase
+    .from("interacciones")
+    .select("empresa_id")
+    .gte("fecha", `${hoy}T00:00:00`)
+    .lte("fecha", `${hoy}T23:59:59`);
+  const empresasContactadasHoy = new Set(
+    (contactadasHoyRaw ?? []).map((r) => r.empresa_id as string)
+  );
+
   const prioridadesCache = metricaHoy?.prioridades_cache
-    ? (metricaHoy.prioridades_cache as unknown as PrioridadCacheItem[])
+    ? (metricaHoy.prioridades_cache as unknown as PrioridadCacheItem[]).filter(
+        (item) => !empresasContactadasHoy.has(item.empresa_id)
+      )
     : null;
 
   return NextResponse.json({
