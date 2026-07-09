@@ -345,7 +345,7 @@ export function HoyClient() {
       });
       const data = await res.json() as { ok: boolean };
       if (data.ok) {
-        setNoRealizadasVisual((prev) => new Set([...prev, t.id]));
+        setNoRealizadasVisual((prev) => new Set(Array.from(prev).concat(t.id)));
       }
     } finally {
       setMarcandoNoRealizadaId(null);
@@ -365,7 +365,7 @@ export function HoyClient() {
       const data = await res.json() as { ok: boolean };
       if (data.ok) {
         // Mostrar visualmente como "no realizada" hasta el próximo GET
-        setPrioridadesNoRealizadasVisual((prev) => new Set([...prev, p.id!]));
+        setPrioridadesNoRealizadasVisual((prev) => new Set(Array.from(prev).concat(p.id!)));
         // Agregar al ref para que el próximo GET no la resucite
         prioridadesResueltasRef.current.add(p.id!);
       }
@@ -1170,16 +1170,6 @@ function formatearVencimiento(fechaIso: string): { texto: string; color: string 
   return         { texto: `Vence ${label}${sufijo}`,          color: "text-muted-foreground" };
 }
 
-// Infiere hora sugerida a partir del texto de la tarea (sin IA, sin tildes)
-function inferirHoraSugerida(texto: string): string {
-  const t = texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  if (/whatsapp|mensaje|escribir/.test(t))          return "09:00";
-  if (/llamar|llamada|telefono/.test(t))            return "10:30";
-  if (/correo|email|propuesta/.test(t))             return "12:00";
-  if (/reunion|visita|presencial/.test(t))          return "14:00";
-  if (/seguimiento|revisar|confirmar/.test(t))      return "16:00";
-  return "09:00";
-}
 
 // Convierte ISO o YYYY-MM-DD al formato que acepta <input type="datetime-local">
 function toDatetimeLocal(fechaIso: string): string {
