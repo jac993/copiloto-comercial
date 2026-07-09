@@ -370,6 +370,7 @@ export interface Interaccion {
   badge_estado: BadgeEstado | null;
   decision_sugerida: string | null;
   resuelta: boolean;
+  no_realizada: boolean;
   creado_en: string;
   actualizado_en: string;
 }
@@ -512,6 +513,7 @@ export interface PrioridadDiaria {
   urgencia: "alta" | "media" | "baja";
   completada: boolean;
   completada_en: string | null;
+  no_realizada: boolean;
   interaccion_id: string | null;
   creado_en: string;
 }

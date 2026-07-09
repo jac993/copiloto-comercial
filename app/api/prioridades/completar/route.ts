@@ -51,6 +51,7 @@ function construirInteraccion(empresa_id: string, accion_sugerida: string): Inte
     decision_sugerida: null,
     remitente: "vendedor",
     resuelta: true,
+    no_realizada: false,
   };
 }
 

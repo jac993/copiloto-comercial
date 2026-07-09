@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
         decision_sugerida: null,
         remitente: "vendedor",
         resuelta: false,
+        no_realizada: false,
       });
 
       return NextResponse.json({ ok: true, interaccion_id: interaccion.id, resultado: null });
@@ -216,6 +217,7 @@ Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional, sin explica
       decision_sugerida: resultado.decision_sugerida ?? null,
       remitente: "vendedor",
       resuelta: false,
+      no_realizada: false,
     };
 
     const interaccion = await insertInteraccion(interaccionData);

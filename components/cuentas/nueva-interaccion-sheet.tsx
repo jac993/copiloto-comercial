@@ -276,6 +276,7 @@ export function NuevaInteraccionSheet({
         decision_sugerida: dataA.resultado?.decision_sugerida ?? null,
         remitente: "vendedor",
         resuelta: false,
+        no_realizada: false,
         creado_en: new Date().toISOString(),
         actualizado_en: new Date().toISOString(),
       };

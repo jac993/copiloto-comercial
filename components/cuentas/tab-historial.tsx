@@ -380,7 +380,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
           fecha: new Date().toISOString(),
           audio_url: null, transcripcion: texto, resumen_ia: null, compromisos: null,
           sentimiento, tecnica_usada: null, coaching_ia: null, proximo_paso: null,
-          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null, resuelta: false,
+          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null, resuelta: false, no_realizada: false,
           creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString(),
         };
         setLista((prev) => [...prev, nueva]);
@@ -672,7 +672,7 @@ function TarjetaHilo({
           audio_url: null, transcripcion: texto, resumen_ia: null, compromisos: null,
           sentimiento: inputBar.remitente === "prospecto" ? "neutro" : null,
           tecnica_usada: null, coaching_ia: null, proximo_paso: null,
-          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null, resuelta: false,
+          proximo_paso_fecha: null, badge_estado: null, decision_sugerida: null, resuelta: false, no_realizada: false,
           creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString(),
         };
         onMensajeAgregado(nueva);

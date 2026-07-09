@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
       decision_sugerida: null,
       remitente: remitente ?? "vendedor",
       resuelta: false,
+      no_realizada: false,
     };
 
     console.log('[TAREA_DEBUG]', JSON.stringify({
