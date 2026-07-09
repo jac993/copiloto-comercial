@@ -206,14 +206,13 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
   // no fueron ejecutadas — evita que empresas descartadas reaparezcan al recargar.
   const nuevasEmpresaIds = cache.map((item) => item.empresa_id);
   console.log("[PRIORIZAR] empresas nuevo top-5:", nuevasEmpresaIds);
-  const { error: deleteError, count: deleteCount } = await supabase
+  const { error: deleteError } = await supabase
     .from("prioridades_diarias")
     .delete()
     .eq("fecha", hoy)
     .eq("completada", false)
-    .not("empresa_id", "in", `(${nuevasEmpresaIds.join(",")})`)
-    .select();
-  console.log("[PRIORIZAR] DELETE resultado:", { error: deleteError, count: deleteCount });
+    .not("empresa_id", "in", `(${nuevasEmpresaIds.join(",")})`);
+  console.log("[PRIORIZAR] DELETE resultado:", { error: deleteError?.message ?? null });
 
   // onConflict sin tocar completada/completada_en/interaccion_id: solo actualiza
   // score, razon y urgencia si el usuario recalcula el mismo día.
