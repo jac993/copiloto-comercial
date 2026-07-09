@@ -22,6 +22,9 @@ export const maxDuration = 60;
 
 // ── GET — cargar historial guardado ──────────────────────────
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }

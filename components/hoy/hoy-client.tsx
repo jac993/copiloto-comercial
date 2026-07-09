@@ -747,13 +747,31 @@ export function HoyClient() {
           {(todasTareas.length > 0 || prioridadesVencidasIA.length > 0 || todasRealizadas.length > 0) && (
             <div className="mt-4">
               <div className="space-y-2">
-                {tareasAMostrar.map((t) => (
+                {/* Pestaña Realizadas: filas compactas — solo el nombre, tachado */}
+                {filtroTareas === "realizadas" ? (
+                  <div className="rounded-2xl border border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/10 divide-y divide-green-100 dark:divide-green-900/30">
+                    {tareasAMostrar.map((t) => (
+                      <div key={t.id} className="flex items-center gap-2 px-3 py-1.5">
+                        <span className="text-green-600 dark:text-green-400 text-xs shrink-0">✓</span>
+                        <span className="text-sm line-through text-muted-foreground truncate">
+                          {t.empresa_nombre}
+                        </span>
+                        {t.origen === "ia" && (
+                          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+                            IA
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                tareasAMostrar.map((t) => (
                   <TareaCard
                     key={t.id}
                     tarea={t}
                     marcando={marcandoId === t.id}
                     onMarcar={() => verificarYCompletarTarea(t)}
-                    hecha={filtroTareas === "realizadas" || tareasHechasVisual.has(t.id)}
+                    hecha={tareasHechasVisual.has(t.id)}
                     noRealizada={false}
                     marcandoNoRealizada={marcandoNoRealizadaId === t.id}
                     onNoRealizada={() => marcarNoRealizada(t)}
@@ -775,7 +793,8 @@ export function HoyClient() {
                       )
                     }
                   />
-                ))}
+                ))
+                )}
                 {tareasAMostrar.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
                     {filtroTareas === "realizadas"

@@ -12,6 +12,7 @@ import type { InteraccionVencida } from "@/lib/types";
 // y cachear la respuesta en el Full Route Cache — el badge de alertas
 // quedaría congelado en producción aunque el cliente reintente el poll.
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function GET() {
   const supabase = createClient(

@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { insertContacto, getContactosPorEmpresa } from "@/lib/queries";
 import type { ContactoInsert, AreaContacto } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export async function GET(req: NextRequest) {
   const empresa_id = req.nextUrl.searchParams.get("empresa_id");
   if (!empresa_id) {

@@ -10,6 +10,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Interaccion, Empresa } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export interface InteraccionFeed extends Interaccion {
   empresa_nombre: string;

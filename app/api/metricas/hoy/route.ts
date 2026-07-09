@@ -11,6 +11,9 @@ import type { Empresa, TareaPendiente } from "@/lib/types";
 import { hoyCL, rangoDiaChileUTC } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
+// Sin esto, Next.js cachea los fetch() internos de supabase-js (Data Cache)
+// y el GET devuelve datos viejos de la BD aunque la ruta sea force-dynamic.
+export const fetchCache = "force-no-store";
 
 function getSupabase() {
   return createClient(

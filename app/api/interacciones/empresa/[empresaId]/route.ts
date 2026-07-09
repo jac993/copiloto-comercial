@@ -5,6 +5,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getInteraccionesPorEmpresa } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: { empresaId: string } }

@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCasos, insertCaso } from "@/lib/queries";
 import type { CasoInsert, TecnicaCaso, TamanoCaso, CanalCaso } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export async function GET() {
   try {
     const casos = await getCasos();

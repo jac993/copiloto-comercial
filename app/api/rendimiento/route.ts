@@ -9,6 +9,7 @@ import { getEvaluacionesSemana, getRendimientoEjecutivo } from "@/lib/queries";
 import { hoyCL } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function GET() {
   const supabase = createClient(

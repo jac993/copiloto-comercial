@@ -9,6 +9,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { BorradorCanalResult } from "@/app/api/preparacion/route";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const empresaId = searchParams.get("empresaId");
