@@ -64,6 +64,7 @@ interface MetricasHoy {
   prioridades_generadas_en: string | null;
   resumen_dia_cache: string | null;
   tareas_pendientes: TareaPendiente[];
+  tareas_realizadas: TareaPendiente[];
 }
 
 // Feedback de coaching que devuelve la API tras guardar misiones
@@ -139,7 +140,10 @@ export function HoyClient() {
   const [marcandoPrioridadId, setMarcandoPrioridadId] = useState<string | null>(null);
   // Prioridades vencidas de días anteriores (prioridades_diarias con fecha < hoy y completada=false)
   const [prioridadesVencidasIA, setPrioridadesVencidasIA] = useState<TareaPendiente[]>([]);
-  const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "hoy" | "todas">("hoy");
+  const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "hoy" | "todas" | "realizadas">("hoy");
+  // Tareas marcadas "Hecho" en esta sesión: quedan tachadas en su lugar
+  // (verde) hasta el próximo GET, que las mueve a la pestaña "Realizadas".
+  const [tareasHechasVisual, setTareasHechasVisual] = useState<Set<string>>(new Set());
   // noRealizadasVisual eliminado: las tareas manuales desaparecen del estado inmediatamente al marcar "No realizada"
   const [prioridadesNoRealizadasVisual, setPrioridadesNoRealizadasVisual] = useState<Set<string>>(new Set());
   const [marcandoNoRealizadaId, setMarcandoNoRealizadaId] = useState<string | null>(null);
@@ -292,14 +296,13 @@ export function HoyClient() {
       });
       const data = await res.json() as { ok: boolean; motivo?: string };
       if (data.ok) {
+        // Dejar la tarjeta tachada en su lugar (verde) en vez de eliminarla.
+        // El próximo GET la excluye de pendientes y la trae en tareas_realizadas.
+        setTareasHechasVisual((prev) => new Set(Array.from(prev).concat(t.id)));
         if (t.origen === "ia") {
           prioridadesResueltasRef.current.add(t.id);
-          setPrioridadesVencidasIA((prev) => prev.filter((x) => x.id !== t.id));
         } else {
           tareasResueltasRef.current.add(t.id);
-          setMetricas((prev) =>
-            prev ? { ...prev, tareas_pendientes: prev.tareas_pendientes.filter((x) => x.id !== t.id) } : prev
-          );
         }
       } else if (data.motivo === "sin_interaccion") {
         setMensajeVerificacionId(t.id);
@@ -430,10 +433,20 @@ export function HoyClient() {
   const hoyStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
   const todasTareas = metricas?.tareas_pendientes ?? [];
 
+  // Tareas realizadas hoy (servidor) + las marcadas Hecho en esta sesión que
+  // aún figuran en pendientes/vencidas (evita duplicados por id).
+  const realizadasServidor = metricas?.tareas_realizadas ?? [];
+  const realizadasIds = new Set(realizadasServidor.map((t) => t.id));
+  const realizadasLocales = [...todasTareas, ...prioridadesVencidasIA].filter(
+    (t) => tareasHechasVisual.has(t.id) && !realizadasIds.has(t.id)
+  );
+  const todasRealizadas = [...realizadasLocales, ...realizadasServidor];
+
   // Tareas que muestra el filtro activo:
   // • Vencidas: manuales vencidas + IA vencidas mezcladas y ordenadas por fecha
   // • Hoy: solo manuales con fecha = hoy
   // • Todas: todas las manuales (cualquier fecha), sin IA vencidas (están en Vencidas)
+  // • Realizadas: marcadas "Hecho" hoy (manuales + IA), tachadas en verde
   const tareasAMostrar = (() => {
     if (filtroTareas === "vencidas") {
       const manualVencidas = todasTareas.filter((t) => t.proximo_paso_fecha < hoyStr);
@@ -442,6 +455,7 @@ export function HoyClient() {
       );
     }
     if (filtroTareas === "hoy") return todasTareas.filter((t) => t.proximo_paso_fecha === hoyStr);
+    if (filtroTareas === "realizadas") return todasRealizadas;
     return todasTareas; // todas (solo manuales)
   })();
 
@@ -450,6 +464,7 @@ export function HoyClient() {
     todasTareas.filter((t) => t.proximo_paso_fecha < hoyStr).length +
     prioridadesVencidasIA.length;
   const countHoy = todasTareas.filter((t) => t.proximo_paso_fecha === hoyStr).length;
+  const countRealizadas = todasRealizadas.length;
 
   const contactos = metricas?.contactos_hoy ?? 0;
   const meta = metricas?.meta ?? 5;
@@ -618,6 +633,18 @@ export function HoyClient() {
               >
                 Todas
               </button>
+              <button
+                onClick={() => setFiltroTareas("realizadas")}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                  filtroTareas === "realizadas"
+                    ? "bg-green-600 text-white border-green-600"
+                    : countRealizadas > 0
+                      ? "bg-green-50 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                ✓ Realizadas{countRealizadas > 0 ? ` (${countRealizadas})` : ""}
+              </button>
             </div>
             <span className="ml-auto text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full shrink-0">
               {prioridades.length + todasTareas.length + prioridadesVencidasIA.length}
@@ -717,7 +744,7 @@ export function HoyClient() {
           )}
 
           {/* Tareas con fecha + IA vencidas — debajo de las prioridades de IA */}
-          {(todasTareas.length > 0 || prioridadesVencidasIA.length > 0) && (
+          {(todasTareas.length > 0 || prioridadesVencidasIA.length > 0 || todasRealizadas.length > 0) && (
             <div className="mt-4">
               <div className="space-y-2">
                 {tareasAMostrar.map((t) => (
@@ -726,6 +753,7 @@ export function HoyClient() {
                     tarea={t}
                     marcando={marcandoId === t.id}
                     onMarcar={() => verificarYCompletarTarea(t)}
+                    hecha={filtroTareas === "realizadas" || tareasHechasVisual.has(t.id)}
                     noRealizada={false}
                     marcandoNoRealizada={marcandoNoRealizadaId === t.id}
                     onNoRealizada={() => marcarNoRealizada(t)}
@@ -750,7 +778,9 @@ export function HoyClient() {
                 ))}
                 {tareasAMostrar.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    ✅ Sin tareas pendientes para este filtro
+                    {filtroTareas === "realizadas"
+                      ? "Aún no marcas tareas como hechas hoy"
+                      : "✅ Sin tareas pendientes para este filtro"}
                   </p>
                 )}
               </div>
@@ -1201,6 +1231,7 @@ function TareaCard({
   marcando,
   onMarcar,
   onFechaChange,
+  hecha = false,
   noRealizada = false,
   marcandoNoRealizada = false,
   onNoRealizada,
@@ -1210,6 +1241,7 @@ function TareaCard({
   marcando: boolean;
   onMarcar: () => void;
   onFechaChange: (nuevaFecha: string) => void;
+  hecha?: boolean;
   noRealizada?: boolean;
   marcandoNoRealizada?: boolean;
   onNoRealizada?: () => void;
@@ -1253,10 +1285,10 @@ function TareaCard({
   };
 
   return (
-    <div className={`rounded-2xl border bg-card transition-colors ${vencida && !noRealizada ? "border-red-200 dark:border-red-900/40" : noRealizada ? "border-red-200/60 dark:border-red-900/30" : "border-border"}`}>
+    <div className={`rounded-2xl border bg-card transition-colors ${hecha ? "border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/10" : vencida && !noRealizada ? "border-red-200 dark:border-red-900/40" : noRealizada ? "border-red-200/60 dark:border-red-900/30" : "border-border"}`}>
 
       {/* ── Fila colapsada (siempre visible) ── */}
-      <div className={`flex items-center gap-2 px-3 py-2.5 ${noRealizada ? "opacity-50" : ""}`}>
+      <div className={`flex items-center gap-2 px-3 py-2.5 ${noRealizada ? "opacity-50" : hecha ? "opacity-70" : ""}`}>
         {/* Chevron toggle */}
         <button
           onClick={() => setExpandida((v) => !v)}
@@ -1271,7 +1303,7 @@ function TareaCard({
           onClick={() => setExpandida((v) => !v)}
           className="flex-1 min-w-0 text-left flex items-center gap-1.5"
         >
-          <span className={`text-sm font-semibold truncate block leading-tight ${noRealizada ? "line-through" : ""}`}>
+          <span className={`text-sm font-semibold truncate block leading-tight ${noRealizada || hecha ? "line-through" : ""}`}>
             {tarea.empresa_nombre}
           </span>
           {tarea.origen === "ia" && (
@@ -1292,8 +1324,12 @@ function TareaCard({
           )}
         </div>
 
-        {/* Acciones — tachado si ya marcada como "no realizada" */}
-        {noRealizada ? (
+        {/* Acciones — tachado si ya marcada como "hecha" o "no realizada" */}
+        {hecha ? (
+          <span className="shrink-0 text-[10px] font-semibold text-green-600 dark:text-green-400 ml-1 flex items-center gap-1">
+            ✓ Hecha
+          </span>
+        ) : noRealizada ? (
           <span className="shrink-0 text-[10px] font-semibold text-red-500 ml-1">No realizada</span>
         ) : (
           <>

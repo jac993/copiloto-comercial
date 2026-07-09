@@ -23,6 +23,8 @@ import type { EvaluacionSemanal, RendimientoEjecutivo } from "@/lib/types";
 interface CumplimientoTareas {
   total: number;
   resueltas: number;
+  no_realizadas: number;
+  pendientes: number;
   porcentaje: number | null;
 }
 
@@ -192,6 +194,18 @@ export default function RendimientoPage() {
                           : "#DC2626",
                       }}
                     />
+                  </div>
+                  {/* Desglose hechas / no realizadas / pendientes */}
+                  <div className="flex items-center gap-3 mt-3 text-xs">
+                    <span className="flex items-center gap-1 text-[#22C55E] font-medium">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> {ct.resueltas} hechas
+                    </span>
+                    <span className="flex items-center gap-1 text-destructive font-medium">
+                      <MinusCircle className="h-3.5 w-3.5" /> {ct.no_realizadas} no realizadas
+                    </span>
+                    <span className="text-muted-foreground">
+                      {ct.pendientes} pendientes
+                    </span>
                   </div>
                 </CardContent>
               </Card>

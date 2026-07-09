@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Empresa, TareaPendiente } from "@/lib/types";
-import { hoyCL } from "@/lib/fecha";
+import { hoyCL, rangoDiaChileUTC } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -119,14 +119,43 @@ export async function GET() {
 
   console.log('[TAREAS_RAW]', tareasRaw?.length, tareasError?.message);
 
+  // Tareas realizadas HOY (día chileno) — alimentan la pestaña "Realizadas".
+  // Manuales: interacciones con proximo_paso marcadas Hecho hoy.
+  // IA: prioridades_diarias marcadas Hecho hoy (incluye vencidas completadas hoy).
+  const { desde: hoyDesde, hasta: hoyHasta } = rangoDiaChileUTC(hoy);
+  const [{ data: realizadasManualRaw }, { data: realizadasIARaw }] = await Promise.all([
+    supabase
+      .from("interacciones")
+      .select("id, empresa_id, contacto_id, proximo_paso, proximo_paso_fecha, actualizado_en")
+      .not("proximo_paso", "is", null)
+      .eq("resuelta", true)
+      .eq("no_realizada", false)
+      .gte("actualizado_en", hoyDesde)
+      .lt("actualizado_en", hoyHasta)
+      .order("actualizado_en", { ascending: false })
+      .limit(50),
+    supabase
+      .from("prioridades_diarias")
+      .select("id, empresa_id, nombre_empresa, accion_sugerida, fecha, completada_en")
+      .eq("completada", true)
+      .eq("no_realizada", false)
+      .gte("completada_en", hoyDesde)
+      .lt("completada_en", hoyHasta)
+      .order("completada_en", { ascending: false }),
+  ]);
+
   // Resolver nombres de empresas y contactos en queries separadas
-  const empresaIds = Array.from(new Set((tareasRaw ?? []).map((r) => r.empresa_id as string)));
+  // (incluye las de tareas realizadas para reusar los mismos mapas)
+  const empresaIds = Array.from(new Set([
+    ...(tareasRaw ?? []).map((r) => r.empresa_id as string),
+    ...(realizadasManualRaw ?? []).map((r) => r.empresa_id as string),
+  ]));
   const { data: empresasRaw } = empresaIds.length > 0
     ? await supabase.from("empresas").select("id, nombre").in("id", empresaIds)
     : { data: [] };
   const empresasMap = new Map((empresasRaw ?? []).map((e) => [e.id, e.nombre as string]));
 
-  const contactoIds = (tareasRaw ?? [])
+  const contactoIds = [...(tareasRaw ?? []), ...(realizadasManualRaw ?? [])]
     .map((r) => r.contacto_id as string | null)
     .filter(Boolean) as string[];
   const { data: contactosRaw } = contactoIds.length > 0
@@ -143,6 +172,27 @@ export async function GET() {
     proximo_paso_fecha: r.proximo_paso_fecha as string,
   }));
   console.log('[TAREAS_PENDIENTES]', tareasPendientes.length);
+
+  // Unificar realizadas manuales + IA al mismo shape que TareaPendiente
+  const tareasRealizadas: TareaPendiente[] = [
+    ...(realizadasManualRaw ?? []).map((r) => ({
+      id: r.id as string,
+      empresa_id: r.empresa_id as string,
+      empresa_nombre: empresasMap.get(r.empresa_id as string) ?? "Empresa",
+      contacto_nombre: contactosMap.get(r.contacto_id as string) ?? null,
+      proximo_paso: r.proximo_paso as string,
+      proximo_paso_fecha: (r.proximo_paso_fecha as string | null) ?? hoy,
+    })),
+    ...(realizadasIARaw ?? []).map((r) => ({
+      id: r.id as string,
+      empresa_id: r.empresa_id as string,
+      empresa_nombre: r.nombre_empresa as string,
+      contacto_nombre: null,
+      proximo_paso: r.accion_sugerida as string,
+      proximo_paso_fecha: r.fecha as string,
+      origen: "ia" as const,
+    })),
+  ];
 
   // Prioridades de hoy sin ejecutar — fuente de verdad: prioridades_diarias
   const { data: prioridadesHoyRaw } = await supabase
@@ -182,6 +232,7 @@ export async function GET() {
       prioridades_generadas_en: metricaHoy?.prioridades_generadas_en ?? null,
       resumen_dia_cache: metricaHoy?.notas_dia ?? null,
       tareas_pendientes: tareasPendientes,
+      tareas_realizadas: tareasRealizadas,
     },
     {
       headers: {

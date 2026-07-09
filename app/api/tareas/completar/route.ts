@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { hoyCL } from "@/lib/fecha";
+import { hoyCL, rangoDiaChileUTC } from "@/lib/fecha";
 
 function getSupabase() {
   return createClient(
@@ -40,13 +40,17 @@ export async function POST(req: NextRequest) {
   const hoy = hoyCL();
 
   // Verificar si existe una interacción real hoy para esta empresa.
+  // Ventana del día calendario CHILENO en UTC — con la ventana UTC cruda,
+  // una llamada registrada después de las ~20:00 hora Chile quedaba fuera
+  // y el botón "Hecho" rechazaba la tarea aunque la interacción existiera.
   // Para tareas manuales excluimos la tarea misma (no cuenta como prueba de sí misma).
+  const { desde, hasta } = rangoDiaChileUTC(hoy);
   let query = supabase
     .from("interacciones")
     .select("id")
     .eq("empresa_id", empresa_id)
-    .gte("fecha", `${hoy}T00:00:00Z`)
-    .lte("fecha", `${hoy}T23:59:59Z`);
+    .gte("fecha", desde)
+    .lt("fecha", hasta);
 
   if (origen === "manual") {
     query = query.neq("id", tarea_id);
