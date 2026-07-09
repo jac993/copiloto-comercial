@@ -180,6 +180,7 @@ export async function POST(req: NextRequest) {
           proximo_paso: proximoPasoAuto,
           proximo_paso_fecha: fechaSeguimiento,
           resuelta: false,
+          transcripcion: null, // no mostrar en historial — es una tarea, no una interacción real
         })
         .eq("id", interaccion.id);
 

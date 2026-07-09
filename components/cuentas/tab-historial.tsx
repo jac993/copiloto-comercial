@@ -183,7 +183,10 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
     }
 
     const rootMsgs = lista.filter(
-      (i) => i.parent_id == null && !legacyRespIds.has(i.id)
+      (i) =>
+        i.parent_id == null &&
+        !legacyRespIds.has(i.id) &&
+        !(i.transcripcion === null && i.resumen_ia === null && i.proximo_paso !== null)
     );
     const legacyMsgs = lista.filter((i) => legacyRespIds.has(i.id));
 
