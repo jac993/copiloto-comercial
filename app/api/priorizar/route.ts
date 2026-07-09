@@ -57,10 +57,11 @@ export async function POST() {
   const hoy = hoyCL();
   const { data: yaGestionadas } = await supabase
     .from("prioridades_diarias")
-    .select("empresa_id")
+    .select("empresa_id, nombre_empresa")
     .eq("fecha", hoy)
     .eq("completada", true);
   const gestionadasSet = new Set((yaGestionadas ?? []).map((r) => r.empresa_id as string));
+  const gestionadasNombres = (yaGestionadas ?? []).map((r) => r.nombre_empresa as string);
   const empresas = todasEmpresas.filter((e) => !gestionadasSet.has(e.id));
   console.log("[PRIORIZAR] candidatas:", empresas.length, "| excluidas (ya gestionadas hoy):", gestionadasSet.size);
 
@@ -76,7 +77,7 @@ export async function POST() {
     empresas.map(async (e) => {
       const { data: interacciones } = await supabase
         .from("interacciones")
-        .select("tipo, sentimiento, proximo_paso, proximo_paso_fecha, fecha")
+        .select("tipo, sentimiento, proximo_paso, proximo_paso_fecha, fecha, resumen_ia, remitente")
         .eq("empresa_id", e.id)
         .order("fecha", { ascending: false })
         .limit(1);
@@ -110,8 +111,13 @@ export async function POST() {
         dias_sin_contacto: diasSinContacto,
         ultima_interaccion: ultima
           ? {
+              fecha: ultima.fecha,
               tipo: ultima.tipo,
               sentimiento: ultima.sentimiento,
+              resumen: ultima.resumen_ia,
+              // "vendedor" → el vendedor habló último y espera respuesta del cliente.
+              // "prospecto" → el cliente habló último y ESPERA respuesta del vendedor.
+              quien_envio_ultimo_mensaje: ultima.remitente,
               proximo_paso: ultima.proximo_paso,
               fecha_proximo_paso: ultima.proximo_paso_fecha,
             }
@@ -137,9 +143,21 @@ export async function POST() {
 
   const aprendizajes = await getAprendizajesActivos();
 
+  const notaGestionadas = gestionadasNombres.length > 0
+    ? `
+Empresas YA gestionadas hoy (NO las incluyas en el top-5, ya fueron contactadas):
+${gestionadasNombres.map((n) => `- ${n}`).join("\n")}
+Prioriza otras empresas del pipeline que necesiten atención.
+`
+    : "";
+
   const mensajeUsuario = `
 Pipeline actual (${empresas.length} cuentas activas):
 ${JSON.stringify(empresasConContexto, null, 2)}
+${notaGestionadas}
+Nota sobre "quien_envio_ultimo_mensaje" en ultima_interaccion:
+- "prospecto" significa que el CLIENTE habló último y está ESPERANDO respuesta del vendedor → máxima urgencia de contacto.
+- "vendedor" significa que el vendedor habló último y espera respuesta del cliente.
 
 Aprendizajes del vendedor (los más confirmados):
 ${JSON.stringify(
@@ -267,23 +285,28 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
     .upsert(upsertRows, { onConflict: "fecha,empresa_id" });
   console.log("[PRIORIZAR] UPSERT resultado:", { error: upsertError });
 
-  // Leer los IDs generados para incluirlos en la respuesta (necesarios para el
-  // botón "✓ Hecho" que ahora usa prioridad_id en lugar de empresa_id).
-  const { data: pdRows } = await supabase
+  // Respuesta consistente: re-consultar prioridades_diarias después del upsert
+  // y devolver ESA lista. Así lo que aparece tras recalcular es exactamente lo
+  // que devolverá el GET de metricas/hoy al volver a la pestaña Hoy.
+  const { data: pendientesHoy } = await supabase
     .from("prioridades_diarias")
-    .select("id, empresa_id")
+    .select("id, empresa_id, nombre_empresa, industria, score, razon, accion_sugerida, urgencia")
     .eq("fecha", hoy)
-    .in("empresa_id", resultado.prioridades.map((p) => p.empresa_id));
-  const idsPorEmpresa = new Map(
-    (pdRows ?? []).map((r) => [r.empresa_id as string, r.id as string])
-  );
+    .eq("completada", false)
+    .eq("no_realizada", false)
+    .order("score", { ascending: false });
 
-  // Enriquecer con empresa + id de prioridades_diarias
-  const prioridadesEnriquecidas = resultado.prioridades.map((p) => ({
-    ...p,
-    id: idsPorEmpresa.get(p.empresa_id) ?? null,
-    empresa: empresasMap.get(p.empresa_id) ?? null,
+  const prioridadesRespuesta = (pendientesHoy ?? []).map((r) => ({
+    id: r.id as string,
+    empresa_id: r.empresa_id as string,
+    score: r.score as number,
+    razon: r.razon as string,
+    accion_sugerida: r.accion_sugerida as string,
+    urgencia: r.urgencia as "alta" | "media" | "baja",
+    empresa: empresasMap.get(r.empresa_id as string)
+      ?? { nombre: r.nombre_empresa as string, industria: r.industria as string | null },
   }));
+  console.log("[PRIORIZAR] respuesta desde prioridades_diarias:", prioridadesRespuesta.length, "pendientes");
 
   // Guardar cache antes de responder — awaiteado para garantizar que
   // prioridades_generadas_en quede persistido y el auto-trigger no se repita.
@@ -294,7 +317,7 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
   }
 
   return NextResponse.json({
-    prioridades: prioridadesEnriquecidas,
+    prioridades: prioridadesRespuesta,
     resumen_dia: resultado.resumen_dia,
   });
 }
