@@ -169,17 +169,24 @@ export async function GET() {
 
   console.log("[METRICAS_HOY] prioridades_hoy ids/nombres:", (prioridadesHoyRaw ?? []).map((p) => `${p.empresa_id}:${p.nombre_empresa}`));
 
-  return NextResponse.json({
-    contactos_hoy: contactos,
-    meta: META,
-    racha_actual: racha,
-    llamadas_hoy: llamadas,
-    ganados_mes: ganados,
-    reactivaciones: (reactivaciones ?? []) as Empresa[],
-    prioridades_hoy: prioridadesHoyRaw ?? [],
-    prioridades_vencidas_ia: prioridadesVencidasRaw ?? [],
-    prioridades_generadas_en: metricaHoy?.prioridades_generadas_en ?? null,
-    resumen_dia_cache: metricaHoy?.notas_dia ?? null,
-    tareas_pendientes: tareasPendientes,
-  });
+  return NextResponse.json(
+    {
+      contactos_hoy: contactos,
+      meta: META,
+      racha_actual: racha,
+      llamadas_hoy: llamadas,
+      ganados_mes: ganados,
+      reactivaciones: (reactivaciones ?? []) as Empresa[],
+      prioridades_hoy: prioridadesHoyRaw ?? [],
+      prioridades_vencidas_ia: prioridadesVencidasRaw ?? [],
+      prioridades_generadas_en: metricaHoy?.prioridades_generadas_en ?? null,
+      resumen_dia_cache: metricaHoy?.notas_dia ?? null,
+      tareas_pendientes: tareasPendientes,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
+    }
+  );
 }

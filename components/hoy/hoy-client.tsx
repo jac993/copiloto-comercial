@@ -192,7 +192,7 @@ export function HoyClient() {
 
   const cargarMetricas = useCallback(async () => {
     try {
-      const res = await fetch("/api/metricas/hoy");
+      const res = await fetch("/api/metricas/hoy", { cache: "no-store" });
       if (!res.ok) throw new Error("Error al cargar métricas");
       const data: MetricasHoy = await res.json();
       if (tareasResueltasRef.current.size > 0) {
