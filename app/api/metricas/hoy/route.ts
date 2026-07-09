@@ -167,6 +167,8 @@ export async function GET() {
     .eq("fecha", hoy)
     .maybeSingle();
 
+  console.log("[METRICAS_HOY] prioridades_hoy ids/nombres:", (prioridadesHoyRaw ?? []).map((p) => `${p.empresa_id}:${p.nombre_empresa}`));
+
   return NextResponse.json({
     contactos_hoy: contactos,
     meta: META,
