@@ -1213,7 +1213,6 @@ function TareaCard({
   const vencida = tarea.proximo_paso_fecha < hoy;
   const esHoy = tarea.proximo_paso_fecha.startsWith(hoy);
   const { texto: textoVencimiento, color: colorVencimiento } = formatearVencimiento(tarea.proximo_paso_fecha);
-  const horaSugerida = inferirHoraSugerida(tarea.proximo_paso);
 
   const [expandida, setExpandida] = useState(false);
   const [editando, setEditando] = useState(false);
