@@ -34,12 +34,15 @@ export async function POST(req: NextRequest) {
   const supabase = getSupabase();
 
   if (origen === "manual") {
-    await supabase
+    const { error } = await supabase
       .from("interacciones")
       .update({ resuelta: true, no_realizada: true })
       .eq("id", tarea_id);
+    if (error) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
   } else {
-    await supabase
+    const { error } = await supabase
       .from("prioridades_diarias")
       .update({
         completada: true,
@@ -47,6 +50,9 @@ export async function POST(req: NextRequest) {
         no_realizada: true,
       })
       .eq("id", tarea_id);
+    if (error) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ ok: true });

@@ -20,9 +20,16 @@ import type { EvaluacionSemanal, RendimientoEjecutivo } from "@/lib/types";
 
 // ── Tipos de respuesta ───────────────────────────────────────
 
+interface CumplimientoTareas {
+  total: number;
+  resueltas: number;
+  porcentaje: number | null;
+}
+
 interface RespuestaRendimiento {
   rendimiento: RendimientoEjecutivo | null;
   evaluaciones: EvaluacionSemanal[];
+  cumplimiento_tareas: CumplimientoTareas;
 }
 
 interface RespuestaEvaluar {
@@ -96,11 +103,12 @@ export default function RendimientoPage() {
 
   const r = data?.rendimiento;
   const evaluaciones = data?.evaluaciones ?? [];
+  const ct = data?.cumplimiento_tareas;
 
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <header className="bg-gradient-to-r from-[#7C3AED] to-[#6d28d9] px-5 pt-10 pb-7 md:pt-8">
+      <header className="bg-gradient-to-r from-[#F97316] to-[#EA580C] px-5 pt-10 pb-7 md:pt-8">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-white/70 text-sm font-medium">Tu progreso</p>
@@ -139,9 +147,76 @@ export default function RendimientoPage() {
           </div>
         )}
 
-        {/* Métricas ejecutivas globales */}
+        {/* Cumplimiento de tareas — calculado directo desde interacciones, siempre disponible */}
         {cargando ? (
           <SkeletonMetricas />
+        ) : ct ? (
+          <section>
+            <h2 className="font-semibold text-base mb-3 flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary" />
+              Cumplimiento de tareas
+              <span className="text-xs font-normal text-muted-foreground">(últimos 30 días)</span>
+            </h2>
+            {ct.total === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="pt-5 pb-5 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Aún no tienes tareas registradas. Cuando registres interacciones con próximo paso,
+                    aquí verás cuántas completaste.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-end justify-between mb-2">
+                    <div>
+                      <p className={`text-3xl font-bold ${colorTasa(ct.porcentaje)}`}>
+                        {ct.porcentaje !== null ? `${ct.porcentaje}%` : "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {ct.resueltas} de {ct.total} tareas completadas
+                      </p>
+                    </div>
+                    <CheckCircle2 className={`h-8 w-8 ${colorTasa(ct.porcentaje)}`} />
+                  </div>
+                  {/* Barra de progreso */}
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${ct.porcentaje ?? 0}%`,
+                        backgroundColor:
+                          (ct.porcentaje ?? 0) >= 80 ? "#22C55E"
+                          : (ct.porcentaje ?? 0) >= 50 ? "#F59E0B"
+                          : "#DC2626",
+                      }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </section>
+        ) : null}
+
+        {/* Métricas ejecutivas globales — se alimentan de evaluaciones_semanales */}
+        {cargando ? null : evaluaciones.length === 0 ? (
+          <section>
+            <h2 className="font-semibold text-base mb-3 flex items-center gap-2">
+              <Award className="h-4 w-4 text-primary" />
+              Métricas acumuladas
+            </h2>
+            <Card className="border-dashed">
+              <CardContent className="pt-5 pb-5 flex items-start gap-3">
+                <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-sm text-muted-foreground">
+                  Las métricas acumuladas se calculan al evaluar la semana con IA.
+                  Presiona &quot;Evaluar semana&quot; al terminar tu semana laboral para ver tu score,
+                  racha récord y tasa de conversión histórica.
+                </p>
+              </CardContent>
+            </Card>
+          </section>
         ) : (
           <section>
             <h2 className="font-semibold text-base mb-3 flex items-center gap-2">

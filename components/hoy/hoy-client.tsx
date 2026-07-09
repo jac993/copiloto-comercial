@@ -345,7 +345,19 @@ export function HoyClient() {
       });
       const data = await res.json() as { ok: boolean };
       if (data.ok) {
-        setNoRealizadasVisual((prev) => new Set(Array.from(prev).concat(t.id)));
+        if (t.origen === "ia") {
+          // Vencida de IA: sacar de la lista y prevenir que el próximo GET la reviva
+          prioridadesResueltasRef.current.add(t.id);
+          setPrioridadesVencidasIA((prev) => prev.filter((x) => x.id !== t.id));
+        } else {
+          // Tarea manual: sacar de la lista y prevenir que el próximo GET la reviva
+          tareasResueltasRef.current.add(t.id);
+          setMetricas((prev) =>
+            prev
+              ? { ...prev, tareas_pendientes: prev.tareas_pendientes.filter((x) => x.id !== t.id) }
+              : prev
+          );
+        }
       }
     } finally {
       setMarcandoNoRealizadaId(null);
