@@ -777,6 +777,12 @@ REGLAS PARA "razon":
 - Máximo 2 frases. Específica: menciona la industria, el estado y la señal concreta.
 - Nunca genérica como "es importante contactarlos". Di por qué HOY específicamente.
 
+REGLA CRÍTICA PARA "urgencia" — INNEGOCIABLE:
+El campo "urgencia" SOLO puede tomar uno de estos tres valores exactos (minúsculas, sin variantes):
+  "alta"  |  "media"  |  "baja"
+PROHIBIDO usar: "media-alta", "muy alta", "alta-media", "urgente", o cualquier otro valor.
+Si tienes duda entre dos niveles, elige el menor ("media" en lugar de "media-alta").
+
 Prioriza considerando: señales de oportunidad sin usar, días sin contacto, etapa del pipeline,
 urgencia detectada y aprendizajes del vendedor.
 Responde ÚNICAMENTE con JSON, sin texto adicional.

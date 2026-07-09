@@ -186,6 +186,19 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
   // Datos de empresa para enriquecer la respuesta
   const empresasMap = new Map(empresas.map((e) => [e.id, e]));
 
+  // Normalizar urgencia ANTES de construir el cache — salvaguarda ante valores
+  // inesperados de Claude como "media-alta" que violan el CHECK constraint de la DB.
+  const normalizeUrgencia = (u: string): "alta" | "media" | "baja" => {
+    const lower = u.toLowerCase();
+    if (lower.includes("alta")) return "alta";
+    if (lower.includes("baja")) return "baja";
+    return "media";
+  };
+  resultado.prioridades = resultado.prioridades.map((p) => ({
+    ...p,
+    urgencia: normalizeUrgencia(p.urgencia),
+  }));
+
   // Guardar en cache de metricas_diarias para el día actual
   const hoy = hoyCL();
   const cache: PrioridadCacheItem[] = resultado.prioridades.map((p) => {
@@ -201,9 +214,6 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
     };
   });
 
-  // Persistir en prioridades_diarias para carry-over a "Vencidas" al día siguiente.
-  // Antes de upsert: eliminar filas de hoy que ya no están en el nuevo top-5 y
-  // no fueron ejecutadas — evita que empresas descartadas reaparezcan al recargar.
   const nuevasEmpresaIds = cache.map((item) => item.empresa_id);
   console.log("[PRIORIZAR] empresas nuevo top-5:", nuevasEmpresaIds);
   const { error: deleteError } = await supabase
