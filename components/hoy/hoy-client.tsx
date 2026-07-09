@@ -140,8 +140,7 @@ export function HoyClient() {
   // Prioridades vencidas de días anteriores (prioridades_diarias con fecha < hoy y completada=false)
   const [prioridadesVencidasIA, setPrioridadesVencidasIA] = useState<TareaPendiente[]>([]);
   const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "hoy" | "todas">("hoy");
-  // IDs de tareas/prioridades marcadas "No realizada" esta sesión — se muestran tachadas hasta el próximo GET
-  const [noRealizadasVisual, setNoRealizadasVisual] = useState<Set<string>>(new Set());
+  // noRealizadasVisual eliminado: las tareas manuales desaparecen del estado inmediatamente al marcar "No realizada"
   const [prioridadesNoRealizadasVisual, setPrioridadesNoRealizadasVisual] = useState<Set<string>>(new Set());
   const [marcandoNoRealizadaId, setMarcandoNoRealizadaId] = useState<string | null>(null);
   // ID de la tarea que muestra el aviso "Registra una interacción hoy para confirmar"
@@ -722,7 +721,7 @@ export function HoyClient() {
                     tarea={t}
                     marcando={marcandoId === t.id}
                     onMarcar={() => verificarYCompletarTarea(t)}
-                    noRealizada={noRealizadasVisual.has(t.id)}
+                    noRealizada={false}
                     marcandoNoRealizada={marcandoNoRealizadaId === t.id}
                     onNoRealizada={() => marcarNoRealizada(t)}
                     mensajeVerificacion={
