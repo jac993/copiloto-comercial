@@ -140,6 +140,12 @@ export function HoyClient() {
   // Prioridades vencidas de días anteriores (prioridades_diarias con fecha < hoy y completada=false)
   const [prioridadesVencidasIA, setPrioridadesVencidasIA] = useState<TareaPendiente[]>([]);
   const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "hoy" | "todas">("hoy");
+  // IDs de tareas/prioridades marcadas "No realizada" esta sesión — se muestran tachadas hasta el próximo GET
+  const [noRealizadasVisual, setNoRealizadasVisual] = useState<Set<string>>(new Set());
+  const [prioridadesNoRealizadasVisual, setPrioridadesNoRealizadasVisual] = useState<Set<string>>(new Set());
+  const [marcandoNoRealizadaId, setMarcandoNoRealizadaId] = useState<string | null>(null);
+  // ID de la tarea que muestra el aviso "Registra una interacción hoy para confirmar"
+  const [mensajeVerificacionId, setMensajeVerificacionId] = useState<string | null>(null);
   const [dialogReporte, setDialogReporte] = useState(false);
   const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
   const [guardandoReporte, setGuardandoReporte] = useState(false);
@@ -269,23 +275,34 @@ export function HoyClient() {
     return () => window.removeEventListener("focus", onFocus);
   }, [cargarMetricas]);
 
-  async function marcarHecha(id: string) {
-    setMarcandoId(id);
+  // Verifica que existe una interacción real hoy para la empresa antes de marcar.
+  // Para IA vencidas: actualiza prioridades_diarias. Para manuales: actualiza interacciones.
+  async function verificarYCompletarTarea(t: TareaPendiente) {
+    setMarcandoId(t.id);
     try {
-      const res = await fetch(`/api/interacciones/${id}`, {
-        method: "PATCH",
+      const origen = t.origen === "ia" ? "ia" : "manual";
+      const res = await fetch("/api/tareas/completar", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resuelta: true }),
+        body: JSON.stringify({ tarea_id: t.id, empresa_id: t.empresa_id, origen }),
       });
-      if (res.ok) {
-        tareasResueltasRef.current.add(id);
-        setMetricas((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            tareas_pendientes: prev.tareas_pendientes.filter((t) => t.id !== id),
-          };
-        });
+      const data = await res.json() as { ok: boolean; motivo?: string };
+      if (data.ok) {
+        if (t.origen === "ia") {
+          prioridadesResueltasRef.current.add(t.id);
+          setPrioridadesVencidasIA((prev) => prev.filter((x) => x.id !== t.id));
+        } else {
+          tareasResueltasRef.current.add(t.id);
+          setMetricas((prev) =>
+            prev ? { ...prev, tareas_pendientes: prev.tareas_pendientes.filter((x) => x.id !== t.id) } : prev
+          );
+        }
+      } else if (data.motivo === "sin_interaccion") {
+        setMensajeVerificacionId(t.id);
+        setTimeout(
+          () => setMensajeVerificacionId((prev) => (prev === t.id ? null : prev)),
+          5000
+        );
       }
     } finally {
       setMarcandoId(null);
@@ -315,21 +332,45 @@ export function HoyClient() {
     }
   }
 
-  // Marca como hecha una prioridad VENCIDA de días anteriores.
-  async function marcarHechaVencidaIA(t: TareaPendiente) {
-    setMarcandoPrioridadId(t.id);
+  // Marca una tarea/prioridad como "No realizada" — permanece tachada ese día,
+  // desaparece en el próximo GET (resuelta/completada=true filtra del servidor).
+  async function marcarNoRealizada(t: TareaPendiente) {
+    setMarcandoNoRealizadaId(t.id);
     try {
-      const res = await fetch("/api/prioridades/completar", {
+      const origen = t.origen === "ia" ? "ia" : "manual";
+      const res = await fetch("/api/tareas/no-realizada", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prioridad_id: t.id }),
+        body: JSON.stringify({ tarea_id: t.id, origen }),
       });
-      if (res.ok) {
-        prioridadesResueltasRef.current.add(t.id);
-        setPrioridadesVencidasIA((prev) => prev.filter((x) => x.id !== t.id));
+      const data = await res.json() as { ok: boolean };
+      if (data.ok) {
+        setNoRealizadasVisual((prev) => new Set([...prev, t.id]));
       }
     } finally {
-      setMarcandoPrioridadId(null);
+      setMarcandoNoRealizadaId(null);
+    }
+  }
+
+  // Marca una prioridad de HOY (PrioridadCard) como "No realizada".
+  async function marcarNoRealizadaPrioridad(p: PrioridadIA) {
+    if (!p.id) return;
+    setMarcandoNoRealizadaId(p.id);
+    try {
+      const res = await fetch("/api/tareas/no-realizada", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tarea_id: p.id, origen: "ia" }),
+      });
+      const data = await res.json() as { ok: boolean };
+      if (data.ok) {
+        // Mostrar visualmente como "no realizada" hasta el próximo GET
+        setPrioridadesNoRealizadasVisual((prev) => new Set([...prev, p.id!]));
+        // Agregar al ref para que el próximo GET no la resucite
+        prioridadesResueltasRef.current.add(p.id!);
+      }
+    } finally {
+      setMarcandoNoRealizadaId(null);
     }
   }
 
@@ -518,10 +559,51 @@ export function HoyClient() {
 
         {/* Tareas de hoy — prioridades de IA + tareas con fecha, unificadas */}
         <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Target className="h-4 w-4 text-primary" />
-            <h2 className="font-semibold text-base">Tareas de hoy</h2>
-            <span className="text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            <Target className="h-4 w-4 text-primary shrink-0" />
+            <h2 className="font-semibold text-base shrink-0">Tareas de hoy</h2>
+            {/* Pills de filtro inline con el título */}
+            <div className="flex gap-1 ml-0.5">
+              <button
+                onClick={() => setFiltroTareas("vencidas")}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                  filtroTareas === "vencidas"
+                    ? countVencidas > 0
+                      ? "bg-red-600 text-white border-red-600"
+                      : "bg-primary text-white border-primary"
+                    : countVencidas > 0
+                      ? "bg-red-50 text-red-600 border-red-300 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                Vencidas{countVencidas > 0 ? ` (${countVencidas})` : ""}
+              </button>
+              <button
+                onClick={() => setFiltroTareas("hoy")}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                  filtroTareas === "hoy"
+                    ? countHoy > 0
+                      ? "bg-green-600 text-white border-green-600"
+                      : "bg-primary text-white border-primary"
+                    : countHoy > 0
+                      ? "bg-green-50 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                Hoy{countHoy > 0 ? ` (${countHoy})` : ""}
+              </button>
+              <button
+                onClick={() => setFiltroTareas("todas")}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                  filtroTareas === "todas"
+                    ? "bg-primary text-white border-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                Todas
+              </button>
+            </div>
+            <span className="ml-auto text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full shrink-0">
               {prioridades.length + todasTareas.length + prioridadesVencidasIA.length}
             </span>
           </div>
@@ -587,6 +669,9 @@ export function HoyClient() {
                   posicion={i + 1}
                   marcando={marcandoPrioridadId === (p.id ?? p.empresa_id)}
                   onMarcar={() => marcarHechaPrioridad(p)}
+                  noRealizada={prioridadesNoRealizadasVisual.has(p.id ?? "")}
+                  marcandoNoRealizada={marcandoNoRealizadaId === p.id}
+                  onNoRealizada={() => marcarNoRealizadaPrioridad(p)}
                 />
               ))}
               <div className="flex gap-2 mt-2">
@@ -618,62 +703,20 @@ export function HoyClient() {
           {/* Tareas con fecha + IA vencidas — debajo de las prioridades de IA */}
           {(todasTareas.length > 0 || prioridadesVencidasIA.length > 0) && (
             <div className="mt-4">
-              {/* Selector de filtro: Vencidas / Hoy / Todas */}
-              <div className="flex gap-1.5 mb-3 flex-wrap">
-                {/* Vencidas — rojo si hay (manuales + IA), gris si no */}
-                <button
-                  onClick={() => setFiltroTareas("vencidas")}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                    filtroTareas === "vencidas"
-                      ? countVencidas > 0
-                        ? "bg-red-600 text-white border-red-600"
-                        : "bg-primary text-white border-primary"
-                      : countVencidas > 0
-                        ? "bg-red-50 text-red-600 border-red-300 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800"
-                        : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  }`}
-                >
-                  Vencidas{countVencidas > 0 ? ` (${countVencidas})` : ""}
-                </button>
-
-                {/* Hoy — verde si hay, gris si no */}
-                <button
-                  onClick={() => setFiltroTareas("hoy")}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                    filtroTareas === "hoy"
-                      ? countHoy > 0
-                        ? "bg-green-600 text-white border-green-600"
-                        : "bg-primary text-white border-primary"
-                      : countHoy > 0
-                        ? "bg-green-50 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
-                        : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  }`}
-                >
-                  Hoy{countHoy > 0 ? ` (${countHoy})` : ""}
-                </button>
-
-                {/* Todas — solo tareas manuales, cualquier fecha */}
-                <button
-                  onClick={() => setFiltroTareas("todas")}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                    filtroTareas === "todas"
-                      ? "bg-primary text-white border-primary"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  }`}
-                >
-                  Todas
-                </button>
-              </div>
               <div className="space-y-2">
                 {tareasAMostrar.map((t) => (
                   <TareaCard
                     key={t.id}
                     tarea={t}
-                    marcando={t.origen === "ia" ? marcandoPrioridadId === t.id : marcandoId === t.id}
-                    onMarcar={
-                      t.origen === "ia"
-                        ? () => marcarHechaVencidaIA(t)
-                        : () => marcarHecha(t.id)
+                    marcando={marcandoId === t.id}
+                    onMarcar={() => verificarYCompletarTarea(t)}
+                    noRealizada={noRealizadasVisual.has(t.id)}
+                    marcandoNoRealizada={marcandoNoRealizadaId === t.id}
+                    onNoRealizada={() => marcarNoRealizada(t)}
+                    mensajeVerificacion={
+                      mensajeVerificacionId === t.id
+                        ? "Registra una interacción hoy para confirmar"
+                        : null
                     }
                     onFechaChange={(nuevaFecha) =>
                       setMetricas((prev) =>
@@ -841,17 +884,23 @@ function PrioridadCard({
   posicion,
   marcando,
   onMarcar,
+  noRealizada = false,
+  marcandoNoRealizada = false,
+  onNoRealizada,
 }: {
   prioridad: PrioridadIA;
   posicion: number;
   marcando: boolean;
   onMarcar: () => void;
+  noRealizada?: boolean;
+  marcandoNoRealizada?: boolean;
+  onNoRealizada?: () => void;
 }) {
   const conf = URGENCIA_CONFIG[prioridad.urgencia];
   const empresa = prioridad.empresa;
 
   return (
-    <Card className={`overflow-hidden ${conf.borde}`}>
+    <Card className={`overflow-hidden ${conf.borde} ${noRealizada ? "opacity-60" : ""}`}>
       <CardContent className="pt-4 pb-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-start gap-2.5 flex-1 min-w-0">
@@ -861,12 +910,18 @@ function PrioridadCard({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-semibold text-sm leading-tight">
+                <p className={`font-semibold text-sm leading-tight ${noRealizada ? "line-through" : ""}`}>
                   {empresa?.nombre ?? "Empresa"}
                 </p>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${conf.badge}`}>
-                  {conf.label}
-                </span>
+                {noRealizada ? (
+                  <span className="text-[11px] font-semibold text-red-500 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-900 shrink-0">
+                    No realizada
+                  </span>
+                ) : (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${conf.badge}`}>
+                    {conf.label}
+                  </span>
+                )}
               </div>
               {empresa?.industria && (
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -902,25 +957,40 @@ function PrioridadCard({
           </p>
         </div>
 
-        {/* Botones: ver ficha + hecho */}
-        <div className="flex gap-2">
-          <Link
-            href={`/cuentas/${prioridad.empresa_id}`}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-border
-              text-xs font-medium hover:border-primary/40 hover:bg-primary/5 transition-all"
-          >
-            <Building2 className="h-3.5 w-3.5" />
-            Ver ficha completa
-            <ChevronRight className="h-3.5 w-3.5 ml-auto" />
-          </Link>
-          <button
-            onClick={onMarcar}
-            disabled={marcando}
-            className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl border border-green-300 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400"
-          >
-            {marcando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "✓ Hecho"}
-          </button>
-        </div>
+        {/* Botones: ver ficha + hecho + no realizada */}
+        {!noRealizada ? (
+          <div className="flex gap-2">
+            <Link
+              href={`/cuentas/${prioridad.empresa_id}`}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-border
+                text-xs font-medium hover:border-primary/40 hover:bg-primary/5 transition-all"
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              Ver ficha completa
+              <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+            </Link>
+            <button
+              onClick={onMarcar}
+              disabled={marcando || marcandoNoRealizada}
+              className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl border border-green-300 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400"
+            >
+              {marcando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "✓ Hecho"}
+            </button>
+            <button
+              onClick={onNoRealizada}
+              disabled={marcandoNoRealizada || marcando}
+              className="shrink-0 flex items-center gap-1 px-2.5 py-2 rounded-xl border border-red-200 bg-red-50/80 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-50 dark:bg-red-950/20 dark:border-red-900 dark:text-red-400"
+              title="No realizada"
+            >
+              {marcandoNoRealizada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "✗"}
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-1.5 py-1.5">
+            <XCircle className="h-3.5 w-3.5 text-red-400" />
+            <p className="text-xs text-red-500 font-medium">No realizada — desaparecerá mañana</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1125,11 +1195,19 @@ function TareaCard({
   marcando,
   onMarcar,
   onFechaChange,
+  noRealizada = false,
+  marcandoNoRealizada = false,
+  onNoRealizada,
+  mensajeVerificacion,
 }: {
   tarea: TareaPendiente;
   marcando: boolean;
   onMarcar: () => void;
   onFechaChange: (nuevaFecha: string) => void;
+  noRealizada?: boolean;
+  marcandoNoRealizada?: boolean;
+  onNoRealizada?: () => void;
+  mensajeVerificacion?: string | null;
 }) {
   const hoy = new Date().toISOString().split("T")[0];
   const vencida = tarea.proximo_paso_fecha < hoy;
@@ -1170,10 +1248,10 @@ function TareaCard({
   };
 
   return (
-    <div className={`rounded-2xl border bg-card transition-colors ${vencida ? "border-red-200 dark:border-red-900/40" : "border-border"}`}>
+    <div className={`rounded-2xl border bg-card transition-colors ${vencida && !noRealizada ? "border-red-200 dark:border-red-900/40" : noRealizada ? "border-red-200/60 dark:border-red-900/30" : "border-border"}`}>
 
       {/* ── Fila colapsada (siempre visible) ── */}
-      <div className="flex items-center gap-2 px-3 py-2.5">
+      <div className={`flex items-center gap-2 px-3 py-2.5 ${noRealizada ? "opacity-50" : ""}`}>
         {/* Chevron toggle */}
         <button
           onClick={() => setExpandida((v) => !v)}
@@ -1188,7 +1266,7 @@ function TareaCard({
           onClick={() => setExpandida((v) => !v)}
           className="flex-1 min-w-0 text-left flex items-center gap-1.5"
         >
-          <span className="text-sm font-semibold truncate block leading-tight">
+          <span className={`text-sm font-semibold truncate block leading-tight ${noRealizada ? "line-through" : ""}`}>
             {tarea.empresa_nombre}
           </span>
           {tarea.origen === "ia" && (
@@ -1198,8 +1276,8 @@ function TareaCard({
           )}
         </button>
 
-        {/* Fecha corta + hora */}
-        <div className="shrink-0 flex items-center gap-1.5 text-xs">
+        {/* Fecha corta */}
+        <div className="shrink-0 text-xs">
           {vencida ? (
             <span className="font-semibold text-red-600 dark:text-red-400">{fechaCorta}</span>
           ) : esHoy ? (
@@ -1207,19 +1285,41 @@ function TareaCard({
           ) : (
             <span className="text-muted-foreground">{fechaCorta}</span>
           )}
-          <span className="text-muted-foreground/50">·</span>
-          <span className="text-muted-foreground/70">{horaSugerida}</span>
         </div>
 
-        {/* Botón Hecho — siempre visible */}
-        <button
-          onClick={onMarcar}
-          disabled={marcando}
-          className="shrink-0 h-7 px-2.5 rounded-xl border border-green-300 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 flex items-center gap-1 ml-1"
-        >
-          {marcando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓ Hecho"}
-        </button>
+        {/* Acciones — tachado si ya marcada como "no realizada" */}
+        {noRealizada ? (
+          <span className="shrink-0 text-[10px] font-semibold text-red-500 ml-1">No realizada</span>
+        ) : (
+          <>
+            <button
+              onClick={onMarcar}
+              disabled={marcando || marcandoNoRealizada}
+              className="shrink-0 h-7 px-2.5 rounded-xl border border-green-300 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400 flex items-center gap-1 ml-1"
+            >
+              {marcando ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓ Hecho"}
+            </button>
+            <button
+              onClick={onNoRealizada}
+              disabled={marcandoNoRealizada || marcando}
+              className="shrink-0 h-7 px-2 rounded-xl border border-red-200 bg-red-50/80 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-50 dark:bg-red-950/20 dark:border-red-900 dark:text-red-400 flex items-center"
+              title="No realizada"
+            >
+              {marcandoNoRealizada ? <Loader2 className="h-3 w-3 animate-spin" /> : "✗"}
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Aviso inline cuando no hay interacción registrada hoy */}
+      {mensajeVerificacion && (
+        <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-100 dark:border-amber-800">
+          <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            {mensajeVerificacion}
+          </p>
+        </div>
+      )}
 
       {/* ── Detalle expandido ── */}
       <div className={`overflow-hidden transition-all duration-200 ${expandida ? "max-h-64" : "max-h-0"}`}>
