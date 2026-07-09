@@ -9,6 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { updateRendimientoEjecutivo } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
+import { hoyCL } from "@/lib/fecha";
 import { PROMPT_FEEDBACK_MISION, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import type { ResultadoMision } from "@/lib/types";
 
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getSupabase();
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyCL();
 
   // Borrar misiones previas de hoy y reinsertar con select para obtener IDs
   const empresaIds = misiones.map((m) => m.empresa_id);

@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Empresa, TareaPendiente } from "@/lib/types";
+import { hoyCL } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function GET() {
   }
 
   const supabase = getSupabase();
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyCL();
 
   // Contar todas las interacciones de hoy (cualquier tipo)
   const { count: contactosHoy } = await supabase
@@ -41,15 +42,14 @@ export async function GET() {
     .gte("fecha", `${hoy}T00:00:00`)
     .lte("fecha", `${hoy}T23:59:59`);
 
-  // Contar negocios ganados este mes
-  const inicioMes = new Date();
-  inicioMes.setDate(1);
-  inicioMes.setHours(0, 0, 0, 0);
+  // Contar negocios ganados este mes (en zona horaria Chile)
+  const [hoyY, hoyM] = hoy.split("-");
+  const inicioMesISO = `${hoyY}-${hoyM}-01T00:00:00Z`;
   const { count: ganadosMes } = await supabase
     .from("empresas")
     .select("*", { count: "exact", head: true })
     .eq("estado", "ganado")
-    .gte("actualizado_en", inicioMes.toISOString());
+    .gte("actualizado_en", inicioMesISO);
 
   const META = 5;
   const contactos = contactosHoy ?? 0;
@@ -72,8 +72,8 @@ export async function GET() {
   );
 
   // Calcular racha: días consecutivos desde hoy hacia atrás con meta cumplida
-  const hace31 = new Date();
-  hace31.setDate(hace31.getDate() - 31);
+  const hace31 = new Date(hoy + "T12:00:00Z");
+  hace31.setUTCDate(hace31.getUTCDate() - 31);
   const { data: metricas } = await supabase
     .from("metricas_diarias")
     .select("fecha, meta_cumplida")

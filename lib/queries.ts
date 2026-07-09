@@ -6,6 +6,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { unstable_noStore as noStore } from "next/cache";
+import { hoyCL } from "@/lib/fecha";
 
 // Crea un cliente fresco con service role key para evitar bloqueos de RLS en inserts/updates.
 // queries.ts solo se ejecuta en el servidor (API routes); la service role key nunca llega al browser.
@@ -381,7 +382,7 @@ export async function upsertPatronConversion(patron: PatronConversionInsert): Pr
 // ─── MÉTRICAS DIARIAS ────────────────────────────────────────
 
 export async function getMetricaHoy(): Promise<MetricaDiaria | null> {
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyCL();
   const { data, error } = await getSupabase()
     .from("metricas_diarias")
     .select("*")
@@ -393,8 +394,8 @@ export async function getMetricaHoy(): Promise<MetricaDiaria | null> {
 }
 
 export async function getMetricasUltimos30Dias(): Promise<MetricaDiaria[]> {
-  const hace30 = new Date();
-  hace30.setDate(hace30.getDate() - 30);
+  const hace30 = new Date(hoyCL() + "T12:00:00Z");
+  hace30.setUTCDate(hace30.getUTCDate() - 30);
 
   const { data, error } = await getSupabase()
     .from("metricas_diarias")
@@ -408,7 +409,7 @@ export async function getMetricasUltimos30Dias(): Promise<MetricaDiaria[]> {
 
 // Crea la fila del día si no existe, o actualiza si ya existe
 export async function upsertMetricaHoy(cambios: MetricaDiariaUpdate): Promise<MetricaDiaria> {
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyCL();
   const { data, error } = await getSupabase()
     .from("metricas_diarias")
     .upsert({ fecha: hoy, ...cambios })
@@ -463,7 +464,7 @@ export async function regenerarContexto(): Promise<ContextoExportable> {
 
 // Empresas perdidas cuya fecha de reactivación es hoy o ya pasó
 export async function getEmpresasParaReactivar(): Promise<Empresa[]> {
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyCL();
   const { data, error } = await getSupabase()
     .from("empresas")
     .select("*")

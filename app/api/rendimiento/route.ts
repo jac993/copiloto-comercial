@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getEvaluacionesSemana, getRendimientoEjecutivo } from "@/lib/queries";
+import { hoyCL } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,8 @@ export async function GET() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const hace30 = new Date();
-  hace30.setDate(hace30.getDate() - 30);
+  const hace30 = new Date(hoyCL() + "T12:00:00Z");
+  hace30.setUTCDate(hace30.getUTCDate() - 30);
   const hace30Str = hace30.toISOString().split("T")[0];
 
   // Calcular cumplimiento de tareas desde interacciones reales (últimos 30 días).

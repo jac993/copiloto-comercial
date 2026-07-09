@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
+import { hoyCL } from "@/lib/fecha";
 import { getEmpresasPriorizadas, getAprendizajesActivos, guardarPrioridadesCache } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
 import { PROMPT_PRIORIZAR, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
@@ -186,7 +187,7 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
   const empresasMap = new Map(empresas.map((e) => [e.id, e]));
 
   // Guardar en cache de metricas_diarias para el día actual
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyCL();
   const cache: PrioridadCacheItem[] = resultado.prioridades.map((p) => {
     const emp = empresasMap.get(p.empresa_id);
     return {

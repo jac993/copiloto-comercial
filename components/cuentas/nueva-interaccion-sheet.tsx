@@ -8,6 +8,7 @@
 // =============================================================
 
 import { useState, useRef } from "react";
+import { nowChileLocal } from "@/lib/fecha";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +54,7 @@ export function NuevaInteraccionSheet({
   const [cargando, setCargando] = useState(false);
   const [mensajeCarga, setMensajeCarga] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [fecha, setFecha] = useState<string>(() => new Date().toISOString().slice(0, 16));
+  const [fecha, setFecha] = useState<string>(() => nowChileLocal());
   const [resultado, setResultado] = useState<string>("");
   const [noContesto, setNoContesto] = useState(false);
   const [proximoPasoFecha, setProximoPasoFecha] = useState("");
@@ -69,7 +70,7 @@ export function NuevaInteraccionSheet({
     setCargando(false);
     setMensajeCarga("");
     setError(null);
-    setFecha(new Date().toISOString().slice(0, 16));
+    setFecha(nowChileLocal());
     setResultado("");
     setNoContesto(false);
     setProximoPasoFecha("");

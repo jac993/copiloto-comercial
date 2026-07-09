@@ -10,14 +10,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { insertInteraccion } from "@/lib/queries";
 import type { TipoInteraccion, InteraccionInsert } from "@/lib/types";
+import { hoyCL } from "@/lib/fecha";
 
-// Suma N días hábiles (excluye sáb/dom)
+// Suma N días hábiles (excluye sáb/dom) desde hoy en zona Chile
 function sumarDiasHabiles(n: number): string {
-  const fecha = new Date();
+  const fecha = new Date(hoyCL() + "T12:00:00Z");
   let contados = 0;
   while (contados < n) {
-    fecha.setDate(fecha.getDate() + 1);
-    const dia = fecha.getDay();
+    fecha.setUTCDate(fecha.getUTCDate() + 1);
+    const dia = fecha.getUTCDay();
     if (dia !== 0 && dia !== 6) contados++;
   }
   return fecha.toISOString().split("T")[0];
@@ -25,8 +26,8 @@ function sumarDiasHabiles(n: number): string {
 
 // Avanza un día calendario desde una fecha YYYY-MM-DD
 function avanzarUnDia(fechaStr: string): string {
-  const d = new Date(fechaStr + "T12:00:00");
-  d.setDate(d.getDate() + 1);
+  const d = new Date(fechaStr + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().split("T")[0];
 }
 
@@ -148,9 +149,9 @@ export async function POST(req: NextRequest) {
       );
 
       // Buscar primer día libre desde hoy + 3 días hábiles, máx 14 días calendario
-      const hoy = new Date().toISOString().split("T")[0];
-      const limiteDate = new Date(hoy + "T12:00:00");
-      limiteDate.setDate(limiteDate.getDate() + 14);
+      const hoy = hoyCL();
+      const limiteDate = new Date(hoy + "T12:00:00Z");
+      limiteDate.setUTCDate(limiteDate.getUTCDate() + 14);
       const limite = limiteDate.toISOString().split("T")[0];
 
       let fechaSeguimiento = sumarDiasHabiles(3);

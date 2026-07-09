@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { hoyCL } from "@/lib/fecha";
 
 function getSupabase() {
   return createClient(
@@ -36,8 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getSupabase();
-  // Usamos UTC date — consistente con el resto de la app
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = hoyCL();
 
   // Verificar si existe una interacción real hoy para esta empresa.
   // Para tareas manuales excluimos la tarea misma (no cuenta como prueba de sí misma).

@@ -13,6 +13,7 @@ import {
   updateRendimientoEjecutivo,
 } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
+import { hoyCL } from "@/lib/fecha";
 import { PROMPT_EVALUAR, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import type { EvaluacionSemanalInsert, MeddicData } from "@/lib/types";
 
@@ -37,20 +38,20 @@ function getSupabase() {
   );
 }
 
-// Lunes de la semana actual en "YYYY-MM-DD"
+// Lunes de la semana actual en "YYYY-MM-DD" (zona Chile)
 function lunesDeSemana(): string {
-  const hoy = new Date();
-  const dia = hoy.getDay(); // 0=dom, 1=lun...
-  const lunes = new Date(hoy);
-  lunes.setDate(hoy.getDate() - (dia === 0 ? 6 : dia - 1));
+  const hoyStr = hoyCL();
+  const hoy = new Date(hoyStr + "T12:00:00Z");
+  const dia = hoy.getUTCDay(); // 0=dom, 1=lun...
+  const offset = dia === 0 ? 6 : dia - 1;
+  const lunes = new Date(hoy.getTime() - offset * 86400000);
   return lunes.toISOString().split("T")[0];
 }
 
 // Domingo de la semana actual en "YYYY-MM-DD"
 function domingoDeSemana(lunesStr: string): string {
-  const lunes = new Date(lunesStr);
-  const domingo = new Date(lunes);
-  domingo.setDate(lunes.getDate() + 6);
+  const lunes = new Date(lunesStr + "T12:00:00Z");
+  const domingo = new Date(lunes.getTime() + 6 * 86400000);
   return domingo.toISOString().split("T")[0];
 }
 
