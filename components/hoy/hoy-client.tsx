@@ -996,9 +996,9 @@ function PrioridadCard({
               onClick={onNoRealizada}
               disabled={marcandoNoRealizada || marcando}
               className="shrink-0 flex items-center gap-1 px-2.5 py-2 rounded-xl border border-red-200 bg-red-50/80 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-50 dark:bg-red-950/20 dark:border-red-900 dark:text-red-400"
-              title="No realizada"
+              title="No realizado"
             >
-              {marcandoNoRealizada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "✗"}
+              {marcandoNoRealizada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "No realizado"}
             </button>
           </div>
         ) : (
@@ -1308,9 +1308,9 @@ function TareaCard({
               onClick={onNoRealizada}
               disabled={marcandoNoRealizada || marcando}
               className="shrink-0 h-7 px-2 rounded-xl border border-red-200 bg-red-50/80 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-50 dark:bg-red-950/20 dark:border-red-900 dark:text-red-400 flex items-center"
-              title="No realizada"
+              title="No realizado"
             >
-              {marcandoNoRealizada ? <Loader2 className="h-3 w-3 animate-spin" /> : "✗"}
+              {marcandoNoRealizada ? <Loader2 className="h-3 w-3 animate-spin" /> : "No realizado"}
             </button>
           </>
         )}
