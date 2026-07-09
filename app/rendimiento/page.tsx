@@ -199,25 +199,8 @@ export default function RendimientoPage() {
           </section>
         ) : null}
 
-        {/* Métricas ejecutivas globales — se alimentan de evaluaciones_semanales */}
-        {cargando ? null : evaluaciones.length === 0 ? (
-          <section>
-            <h2 className="font-semibold text-base mb-3 flex items-center gap-2">
-              <Award className="h-4 w-4 text-primary" />
-              Métricas acumuladas
-            </h2>
-            <Card className="border-dashed">
-              <CardContent className="pt-5 pb-5 flex items-start gap-3">
-                <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-sm text-muted-foreground">
-                  Las métricas acumuladas se calculan al evaluar la semana con IA.
-                  Presiona &quot;Evaluar semana&quot; al terminar tu semana laboral para ver tu score,
-                  racha récord y tasa de conversión histórica.
-                </p>
-              </CardContent>
-            </Card>
-          </section>
-        ) : (
+        {/* Métricas ejecutivas globales — siempre visibles; "—" hasta que haya evaluaciones */}
+        {!cargando && (
           <section>
             <h2 className="font-semibold text-base mb-3 flex items-center gap-2">
               <Award className="h-4 w-4 text-primary" />
@@ -249,6 +232,12 @@ export default function RendimientoPage() {
                 hint="Puntuación general calculada por la IA"
               />
             </div>
+            {evaluaciones.length === 0 && (
+              <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Se actualizan al presionar &quot;Evaluar semana&quot; al final de cada semana.
+              </p>
+            )}
           </section>
         )}
 
