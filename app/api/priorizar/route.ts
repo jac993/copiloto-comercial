@@ -42,11 +42,32 @@ export async function POST() {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const empresas = await getEmpresasPriorizadas(20);
-  if (empresas.length === 0) {
+  const todasEmpresas = await getEmpresasPriorizadas(20);
+  if (todasEmpresas.length === 0) {
     return NextResponse.json({
       prioridades: [],
       resumen_dia: "Sin cuentas activas aún. ¡Agrega empresas en la sección Cuentas!",
+    });
+  }
+
+  // Excluir empresas ya gestionadas hoy (marcadas Hecho o No realizado).
+  // Sin esto, Claude vuelve a sugerir cuentas cuya fila en prioridades_diarias
+  // ya tiene completada=true: aparecen en pantalla tras el recálculo pero el
+  // GET de metricas/hoy las filtra, y "desaparecen" al volver a la pestaña Hoy.
+  const hoy = hoyCL();
+  const { data: yaGestionadas } = await supabase
+    .from("prioridades_diarias")
+    .select("empresa_id")
+    .eq("fecha", hoy)
+    .eq("completada", true);
+  const gestionadasSet = new Set((yaGestionadas ?? []).map((r) => r.empresa_id as string));
+  const empresas = todasEmpresas.filter((e) => !gestionadasSet.has(e.id));
+  console.log("[PRIORIZAR] candidatas:", empresas.length, "| excluidas (ya gestionadas hoy):", gestionadasSet.size);
+
+  if (empresas.length === 0) {
+    return NextResponse.json({
+      prioridades: [],
+      resumen_dia: "¡Ya gestionaste todas tus cuentas prioritarias de hoy! 🎉",
     });
   }
 
@@ -171,6 +192,12 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
   }
 
   // Actualizar scores en la base de datos
+  // Salvaguarda: descartar cualquier sugerencia de una empresa ya gestionada hoy
+  // (por si Claude la devuelve igual pese a no estar entre las candidatas).
+  resultado.prioridades = resultado.prioridades.filter(
+    (p) => !gestionadasSet.has(p.empresa_id)
+  );
+
   await Promise.all(
     resultado.prioridades.map((p) =>
       supabase
@@ -199,8 +226,7 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
     urgencia: normalizeUrgencia(p.urgencia),
   }));
 
-  // Guardar en cache de metricas_diarias para el día actual
-  const hoy = hoyCL();
+  // Guardar en cache de metricas_diarias para el día actual (hoy ya calculado arriba)
   const cache: PrioridadCacheItem[] = resultado.prioridades.map((p) => {
     const emp = empresasMap.get(p.empresa_id);
     return {
