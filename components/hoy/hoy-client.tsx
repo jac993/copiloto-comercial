@@ -234,9 +234,14 @@ export function HoyClient() {
         const generadasHoy = !!data.prioridades_generadas_en &&
           new Date(data.prioridades_generadas_en).toLocaleDateString("en-CA", { timeZone: "America/Santiago" }) === hoyClStr;
 
-        if (!generadasHoy && !autoTriggeredRef.current) {
+        // Segunda línea de defensa: localStorage persiste entre recargas de página.
+        // Cubre el caso en que guardarPrioridadesCache falló en el servidor y
+        // prioridades_generadas_en sigue null, pero ya se llamó a Claude hoy.
+        const yaAutoDisparadoHoy = localStorage.getItem("prioridades_auto_fecha") === hoyClStr;
+        if (!generadasHoy && !autoTriggeredRef.current && !yaAutoDisparadoHoy) {
           if (!esFinDeSemanaCl()) {
             autoTriggeredRef.current = true;
+            localStorage.setItem("prioridades_auto_fecha", hoyClStr);
             void actualizarPrioridades({ auto: true });
           }
         }

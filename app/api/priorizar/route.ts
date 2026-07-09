@@ -237,8 +237,13 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
     empresa: empresasMap.get(p.empresa_id) ?? null,
   }));
 
-  // Guardar cache sin bloquear la respuesta
-  guardarPrioridadesCache(hoy, cache, resultado.resumen_dia).catch(() => {});
+  // Guardar cache antes de responder — awaiteado para garantizar que
+  // prioridades_generadas_en quede persistido y el auto-trigger no se repita.
+  try {
+    await guardarPrioridadesCache(hoy, cache, resultado.resumen_dia);
+  } catch (err) {
+    console.error("[PRIORIZAR] guardarPrioridadesCache falló:", err instanceof Error ? err.message : err);
+  }
 
   return NextResponse.json({
     prioridades: prioridadesEnriquecidas,
