@@ -202,6 +202,19 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
   });
 
   // Persistir en prioridades_diarias para carry-over a "Vencidas" al día siguiente.
+  // Antes de upsert: eliminar filas de hoy que ya no están en el nuevo top-5 y
+  // no fueron ejecutadas — evita que empresas descartadas reaparezcan al recargar.
+  const nuevasEmpresaIds = cache.map((item) => item.empresa_id);
+  const { error: deleteError } = await supabase
+    .from("prioridades_diarias")
+    .delete()
+    .eq("fecha", hoy)
+    .eq("completada", false)
+    .not("empresa_id", "in", `(${nuevasEmpresaIds.join(",")})`);
+  if (deleteError) {
+    console.error("[PRIORIZAR] delete filas obsoletas falló:", deleteError.message);
+  }
+
   // onConflict sin tocar completada/completada_en/interaccion_id: solo actualiza
   // score, razon y urgencia si el usuario recalcula el mismo día.
   const upsertRows = cache.map((item) => ({
@@ -214,10 +227,12 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
     accion_sugerida: item.accion_sugerida,
     urgencia: item.urgencia,
   }));
-  await supabase
+  const { error: upsertError } = await supabase
     .from("prioridades_diarias")
-    .upsert(upsertRows, { onConflict: "fecha,empresa_id" })
-    .then(() => {}, () => {});
+    .upsert(upsertRows, { onConflict: "fecha,empresa_id" });
+  if (upsertError) {
+    console.error("[PRIORIZAR] upsert prioridades_diarias falló:", upsertError.message);
+  }
 
   // Leer los IDs generados para incluirlos en la respuesta (necesarios para el
   // botón "✓ Hecho" que ahora usa prioridad_id en lugar de empresa_id).
