@@ -39,7 +39,11 @@ function construirInteraccion(empresa_id: string, accion_sugerida: string): Inte
     tipo: inferirTipoInteraccion(accion_sugerida),
     fecha: new Date().toISOString(),
     audio_url: null,
-    transcripcion: accion_sugerida,
+    // transcripcion=null: este registro existe solo para métricas (contactos
+    // del día, racha). NO es una interacción que el vendedor ingresó — el
+    // historial oculta filas sin contenido. La acción realizada queda visible
+    // en la pestaña "Realizadas" de Hoy vía prioridades_diarias.
+    transcripcion: null,
     resumen_ia: null,
     compromisos: null,
     sentimiento: null,

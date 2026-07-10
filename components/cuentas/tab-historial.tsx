@@ -182,11 +182,15 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
       }
     }
 
+    // Filas sin contenido (transcripcion y resumen_ia null) no se muestran:
+    // son registros automáticos del botón "✓ Hecho" u otras filas de solo
+    // métricas/tareas — el historial muestra únicamente lo que el vendedor
+    // ingresó manualmente.
     const rootMsgs = lista.filter(
       (i) =>
         i.parent_id == null &&
         !legacyRespIds.has(i.id) &&
-        !(i.transcripcion === null && i.resumen_ia === null && i.proximo_paso !== null)
+        !(i.transcripcion === null && i.resumen_ia === null)
     );
     const legacyMsgs = lista.filter((i) => legacyRespIds.has(i.id));
 
