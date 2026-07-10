@@ -174,13 +174,21 @@ export async function POST(req: NextRequest) {
       const resumenCorto = transcripcionTrimmed.slice(0, 80);
       const proximoPasoAuto = `Seguimiento a ${contactoNombre} — ${resumenCorto}`;
 
+      // Regla de visibilidad en el historial:
+      // • Mensaje real del vendedor (WhatsApp/email/LinkedIn) → conserva su
+      //   transcripcion y aparece como burbuja. La misma fila lleva además
+      //   proximo_paso para la tarea de seguimiento en Hoy (dos vistas, no duplicado).
+      // • "Llamada sin respuesta" (botón "no contestó") → es un marcador de intento
+      //   fallido, no un mensaje: se oculta del historial (transcripcion=null) pero
+      //   conserva su tarea de seguimiento.
+      const esMarcadorSinRespuesta = transcripcionTrimmed === "Llamada sin respuesta";
       await supabase
         .from("interacciones")
         .update({
           proximo_paso: proximoPasoAuto,
           proximo_paso_fecha: fechaSeguimiento,
           resuelta: false,
-          transcripcion: null, // no mostrar en historial — es una tarea, no una interacción real
+          ...(esMarcadorSinRespuesta ? { transcripcion: null } : {}),
         })
         .eq("id", interaccion.id);
 
