@@ -27,6 +27,7 @@ import type {
   Interaccion, BadgeEstado, AnalisisConversacion,
   CorreoDetectado, Contacto, TipoInteraccion, SentimientoInteraccion,
 } from "@/lib/types";
+import { msRespuestaHabil } from "@/lib/fecha";
 
 // ── Visual configs ────────────────────────────────────────────
 
@@ -90,7 +91,10 @@ const RESOLUCION_LABEL: Record<string, { texto: string; positivo: boolean }> = {
 type EstadoCountdown = "amarillo" | "naranja" | "vencida";
 
 function calcCountdown(fechaIso: string, now: number): { estado: EstadoCountdown; texto: string } | null {
-  const ms = now - new Date(fechaIso).getTime();
+  // Tiempo HÁBIL transcurrido: el contador se congela sábado y domingo (hora
+  // Chile) y se reanuda el lunes, para no marcar como vencido lo que el
+  // prospecto no respondió simplemente porque no trabaja el fin de semana.
+  const ms = msRespuestaHabil(new Date(fechaIso).getTime(), now);
   const limite = 48 * 60 * 60 * 1000;
   const restante = limite - ms;
   if (ms < 0) return null;

@@ -44,3 +44,39 @@ export function rangoDiaChileUTC(fecha: string): { desde: string; hasta: string 
   const hasta = new Date(desde.getTime() + 24 * 3600_000);
   return { desde: desde.toISOString(), hasta: hasta.toISOString() };
 }
+
+/** Fecha calendario chilena "YYYY-MM-DD" para un instante epoch (ms). */
+function fechaChileDeMs(ms: number): string {
+  return new Date(ms).toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
+}
+
+/** true si el instante cae en sábado o domingo en hora de Chile. */
+export function esFinDeSemanaChile(ms: number): boolean {
+  const wd = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Santiago",
+    weekday: "short",
+  }).format(new Date(ms));
+  return wd === "Sat" || wd === "Sun";
+}
+
+/**
+ * Milisegundos "hábiles" (lun-vie, hora Chile) transcurridos entre dos instantes.
+ * El contador de respuesta se congela sábado y domingo y se reanuda el lunes:
+ * un mensaje enviado el viernes no acumula tiempo el fin de semana, así no
+ * dispara alertas de "sin respuesta" cuando el prospecto simplemente no trabaja.
+ * Avanza día calendario chileno por iteración (máx. unos pocos ciclos), por lo
+ * que es DST-safe al apoyarse en rangoDiaChileUTC.
+ */
+export function msRespuestaHabil(desdeMs: number, hastaMs: number): number {
+  if (hastaMs <= desdeMs) return 0;
+  let total = 0;
+  let t = desdeMs;
+  while (t < hastaMs) {
+    // Fin del día calendario chileno que contiene a t (siguiente medianoche CL).
+    const finDiaMs = new Date(rangoDiaChileUTC(fechaChileDeMs(t)).hasta).getTime();
+    const segFin = Math.min(finDiaMs, hastaMs);
+    if (!esFinDeSemanaChile(t)) total += segFin - t;
+    t = segFin;
+  }
+  return total;
+}

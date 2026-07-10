@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calcularCadencia, type InteraccionCadencia } from "@/lib/cadencia";
+import { msRespuestaHabil } from "@/lib/fecha";
 import type { InteraccionVencida } from "@/lib/types";
 
 // Sin esto, Next.js puede tratar este GET() sin parámetros como estático
@@ -21,8 +22,13 @@ export async function GET() {
   );
 
   const ahora = Date.now();
+  // Pre-filtro grueso: 48h de reloj crudo. El tiempo hábil siempre es ≤ al
+  // crudo, así que todo lo realmente vencido (48h hábiles) pasa este filtro;
+  // luego se afina en JS congelando el fin de semana. Ventana ampliada a 10
+  // días porque un mensaje del viernes puede tardar más días calendario en
+  // acumular 48h hábiles.
   const limite48h = new Date(ahora - 48 * 60 * 60 * 1000).toISOString();
-  const limite7d  = new Date(ahora - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const limite7d  = new Date(ahora - 10 * 24 * 60 * 60 * 1000).toISOString();
 
   // Obtener IDs de empresas con conversación pausada para excluirlas
   const { data: pausadas } = await supabase
@@ -48,7 +54,15 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const vencidas: InteraccionVencida[] = (data ?? []).map((row) => ({
+  // Afinar: solo son vencidas las que acumularon 48h HÁBILES (el contador se
+  // congela sábado y domingo). Un mensaje del viernes por la tarde no vence
+  // hasta el martes, no el domingo.
+  const CUARENTA_Y_OCHO_H = 48 * 60 * 60 * 1000;
+  const dataVencidas = (data ?? []).filter(
+    (row) => msRespuestaHabil(new Date(row.fecha as string).getTime(), ahora) >= CUARENTA_Y_OCHO_H
+  );
+
+  const vencidas: InteraccionVencida[] = dataVencidas.map((row) => ({
     id: row.id as string,
     empresa_id: row.empresa_id as string,
     empresa_nombre: (row.empresas as unknown as { nombre: string } | null)?.nombre ?? "Empresa",
