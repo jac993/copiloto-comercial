@@ -263,6 +263,76 @@ export async function POST(req: NextRequest) {
       (d) => d.cargo.toLowerCase() === decisorCargo.toLowerCase()
     );
 
+    // ── Temperatura de la conversación ────────────────────────
+    // Explícita para el modelo: quién habló último, hace cuántos días,
+    // y si el prospecto está esperando respuesta o la cuenta se enfría.
+    const { data: ultimaIntRows } = await supabase
+      .from("interacciones")
+      .select("remitente, fecha, tipo")
+      .eq("empresa_id", empresaId)
+      .order("fecha", { ascending: false })
+      .limit(1);
+    const ultimaInt = ultimaIntRows?.[0] ?? null;
+    let temperaturaTexto = "Sin interacciones registradas — cuenta fría, primer contacto.";
+    if (ultimaInt) {
+      const diasDesde = Math.floor((Date.now() - new Date(ultimaInt.fecha as string).getTime()) / 86400000);
+      const cuando = diasDesde === 0 ? "hoy" : diasDesde === 1 ? "hace 1 día" : `hace ${diasDesde} días`;
+      if (ultimaInt.remitente === "prospecto") {
+        temperaturaTexto = `El PROSPECTO envió el último mensaje (${ultimaInt.tipo}) ${cuando} — está esperando tu respuesta. Conversación ACTIVA: responde a lo que él dijo, no reinicies el hilo.`;
+      } else {
+        temperaturaTexto = `El último mensaje lo enviaste TÚ (${ultimaInt.tipo}) ${cuando} y el prospecto no ha respondido.${diasDesde >= 3 ? " La conversación se está enfriando." : ""}`;
+      }
+    }
+
+    // ── Contexto estratégico ──────────────────────────────────
+    // Todo esto ya se carga de Supabase; antes solo llegaba al chat de
+    // Consultar (y parcialmente a llamada). Sin estos datos, el selector
+    // de técnica por estado de SYSTEM_PROMPT_VALE no puede operar.
+    const meddicTexto = empresa.meddic
+      ? [
+          `MEDDIC ${empresa.meddic.score}/12:`,
+          `  • Métricas (${empresa.meddic.metricas.semaforo}): ${empresa.meddic.metricas.texto ?? "Sin info"}`,
+          `  • Comprador Económico (${empresa.meddic.comprador_economico.semaforo}): ${empresa.meddic.comprador_economico.texto ?? "Sin info"}`,
+          `  • Criterios de Decisión (${empresa.meddic.criterios_decision.semaforo}): ${empresa.meddic.criterios_decision.texto ?? "Sin info"}`,
+          `  • Proceso de Decisión (${empresa.meddic.proceso_decision.semaforo}): ${empresa.meddic.proceso_decision.texto ?? "Sin info"}`,
+          `  • Dolor Identificado (${empresa.meddic.dolor_identificado.semaforo}): ${empresa.meddic.dolor_identificado.texto ?? "Sin info"}`,
+          `  • Campeón (${empresa.meddic.campeon.semaforo}): ${empresa.meddic.campeon.texto ?? "Sin info"}`,
+        ].join("\n")
+      : "Sin calificación MEDDIC registrada.";
+
+    const objecionesTexto =
+      ficha?.objeciones_probables && ficha.objeciones_probables.length > 0
+        ? ficha.objeciones_probables
+            .map((o) => `  • "${o.objecion}" → ${o.como_responderla}`)
+            .join("\n")
+        : "  Sin análisis de objeciones.";
+
+    const casosTexto = casosRelevantes.length > 0
+      ? casosRelevantes.map((c) =>
+          `  • Sector: ${c.sector} | Decisor: ${c.cargo_decisor ?? "no especificado"} | Problema: ${c.problema} | Resultado: ${c.resultado}`
+        ).join("\n")
+      : "  Sin casos documentados aún — no inventar referencias.";
+
+    // Parte común (etapa + MEDDIC + técnica + temperatura) — el canal llamada
+    // ya incluye ángulo/objeciones/casos en su propio contexto, así que solo
+    // recibe esta parte; los canales de texto reciben el bloque completo.
+    const estrategiaBase = `
+━━━ CONTEXTO ESTRATÉGICO ━━━
+Etapa del pipeline: ${empresa.estado}
+${meddicTexto}
+Técnica recomendada por la ficha: ${ficha?.tecnica_recomendada ?? "sin definir"}${ficha?.razon_tecnica ? ` — ${ficha.razon_tecnica}` : ""}
+Temperatura de la conversación: ${temperaturaTexto}`.trim();
+
+    const contextoEstrategico = `
+${estrategiaBase}
+Ángulo de entrada: ${ficha?.angulo_entrada ?? "Sin definir."}
+${decisorFicha?.dolor_especifico ? `Dolor específico del decisor (${decisorCargo}): ${decisorFicha.dolor_especifico}` : ""}
+Objeciones probables:
+${objecionesTexto}
+Casos reales de One Label (usar SOLO estos, nunca inventar):
+${casosTexto}
+`.trim();
+
     // ── Construir contextos ────────────────────────────────────
 
     // Llamada: usa el sistema heredado de VALE (pitch de 5 secciones)
@@ -347,7 +417,9 @@ ${ejemplosAprobados}
       });
     }
 
-    // Texto (whatsapp/correo/linkedin): buildPromptBorradores con SYSTEM_PROMPT_VALE
+    // Texto (whatsapp/correo/linkedin): buildPromptBorradores con SYSTEM_PROMPT_VALE.
+    // Ahora recibe el tipo con su instrucción (antes solo la veía llamada) y el
+    // contexto estratégico completo para que el selector de técnica de VALE opere.
     const promptBorradores = canal !== "llamada"
       ? buildPromptBorradores({
           nombre:           empresa.razon_social || empresa.nombre,
@@ -356,6 +428,9 @@ ${ejemplosAprobados}
           decisorNombre:    decisorNombre ?? "No registrado",
           historialReciente: historialTexto || "",
           contextoVendedor: empresa.notas_vendedor?.trim() || "",
+          tipo,
+          instruccionTipo:  INSTRUCCION_TIPO[tipo],
+          contextoEstrategico,
         })
       : null;
 
@@ -366,7 +441,7 @@ ${ejemplosAprobados}
     console.log("[preparacion] prompt incluye rechazados:", rechazadosTexto.includes("RECHAZADOS"));
 
     const userMessage = canal === "llamada"
-      ? contextoLlamada + rechazadosTexto + cadenciaTexto
+      ? contextoLlamada + "\n\n" + estrategiaBase + rechazadosTexto + cadenciaTexto
       : (promptBorradores ?? "") + ejemplosAprobados + rechazadosTexto + cadenciaTexto;
 
     const client = new Anthropic();

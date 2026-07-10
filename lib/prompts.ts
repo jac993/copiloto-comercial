@@ -1053,23 +1053,24 @@ export function buildPromptBorradores(datos: {
   decisorNombre: string
   historialReciente: string
   contextoVendedor: string
+  // Tipo de contacto detectado (apertura/seguimiento/continuacion/reactivacion)
+  // con su instrucción específica — antes solo la recibía el canal llamada.
+  tipo: string
+  instruccionTipo: string
+  // Bloque armado en la ruta: etapa pipeline, MEDDIC, ángulo, dolor del
+  // decisor, técnica recomendada, objeciones, casos reales y temperatura.
+  contextoEstrategico: string
 }): string {
+  const esApertura = datos.tipo === "apertura";
+
   const estadoRelacion = datos.historialReciente && datos.historialReciente !== 'Sin interacciones previas registradas.'
     ? `HISTORIAL REAL:\n${datos.historialReciente}\nEste NO es primer contacto — adecúa el tono al historial.`
     : `Sin historial. Primer contacto en frío.`
 
-  return `Eres José Antonio, KAM de One Label, imprenta industrial de etiquetas autoadhesivas en Chile. Redacta borradores de contacto en frío adaptados a esta empresa.
-
-EMPRESA Y DECISOR:
-- Empresa: ${datos.nombre}
-- Rubro: ${datos.rubro}
-- Cargo del decisor: ${datos.decisorCargo || 'No registrado'}
-- Nombre del decisor: ${datos.decisorNombre && datos.decisorNombre !== 'No registrado' ? datos.decisorNombre : '[Nombre]'}
-${datos.contextoVendedor ? `- Contexto adicional: ${datos.contextoVendedor}` : ''}
-
-${estadoRelacion}
-
-RESTRICCIONES ABSOLUTAS (Predictable Revenue — violarlas invalida el borrador):
+  // Las restricciones Predictable Revenue y los ejemplos de contacto en frío
+  // aplican SOLO a apertura. En los demás tipos, la estructura la dicta la
+  // instrucción del tipo (continuación reconoce la conversación, etc.).
+  const bloqueApertura = `RESTRICCIONES ABSOLUTAS (Predictable Revenue — violarlas invalida el borrador):
 1. LONGITUD: correo máximo 100 palabras · LinkedIn máximo 60 palabras.
 2. APERTURA: la primera línea habla del mundo del prospecto (su empresa, su industria, un problema observable en su sector). NUNCA empieces hablando de One Label, de ti mismo ni de lo que ofreces.
 3. UNA SOLA PREGUNTA: el mensaje termina con exactamente una pregunta abierta. Múltiples preguntas reducen la tasa de respuesta.
@@ -1089,12 +1090,6 @@ José Antonio"
 LINKEDIN EJEMPLO:
 "Hola Christian, estuve revisando la operación de Oxiquim y me surgió una pregunta: en despachos a este volumen, ¿cómo manejan los quiebres o errores de etiquetado? ¿Es algo que les genera paradas?"
 
-LLAMADA EJEMPLO:
-"Hola Christian, te habla José Antonio, de One Label. ¿Cómo estás? Mira, te llamo brevemente porque estuve revisando la operación de Oxiquim y tenía una pregunta puntual sobre el tema de despacho. ¿Tienes dos minutos?
-[Espera respuesta]
-Perfecto. Mi pregunta es simple: en operaciones de despacho a este volumen, ¿cómo están manejando los errores o quiebres de etiquetas? ¿Es algo que les genera paradas o lo tienen bien controlado?
-[Calla y escucha]"
-
 POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
 - Abren con nombre y una frase que muestra que revisaste la empresa — sin presumir
 - Hacen UNA pregunta amplia y abierta — el cliente decide si tiene el problema, tú no se lo dices
@@ -1102,7 +1097,7 @@ POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
 - Sin regulaciones, sin normativas, sin datos específicos inventados
 - CTA de baja fricción: solo quieren saber si hay un problema
 
-REGLAS:
+REGLAS DE APERTURA:
 1. Abre correo y LinkedIn con "Hola [nombre]," — nunca con el cargo
 2. Segunda línea: "Estuve revisando la operación de [empresa] y me surgió una pregunta"
 3. La pregunta de apertura debe apuntar a un PROBLEMA CONCRETO con consecuencia operacional,
@@ -1116,12 +1111,47 @@ REGLAS:
    - Farmacéutico → "¿han tenido rechazos por etiquetas con datos incorrectos o ilegibles en lotes? ¿Es algo que les genera reprocesos?"
    - Alimentos → "¿han tenido problemas con adhesión de etiquetas en cámara de frío o con humedad? ¿Les ha generado devoluciones?"
 
-   NUNCA preguntes por procesos ("¿cómo manejan X?") — pregunta si existe el dolor ("¿han tenido X?").
-4. NUNCA afirmes que el cliente tiene un problema
-5. NUNCA menciones regulaciones, fiscalizaciones, normativas ni datos de tu entrenamiento
-6. Correo: máximo 4 líneas de cuerpo, firma "Saludos, José Antonio — One Label"
-7. LinkedIn: máximo 3 líneas, mismo tono que correo pero más corto
-8. Llamada: incluye los pasos del guión con indicaciones de cuándo callar y escuchar
+   NUNCA preguntes por procesos ("¿cómo manejan X?") — pregunta si existe el dolor ("¿han tenido X?").`;
+
+  const bloqueNoApertura = `RESTRICCIONES GENERALES (aplican a todos los canales):
+1. LONGITUD: WhatsApp máximo 80 palabras · correo máximo 120 palabras · LinkedIn máximo 60 palabras.
+2. UNA SOLA PREGUNTA: el mensaje termina con exactamente una pregunta. Múltiples preguntas reducen la tasa de respuesta.
+3. SIN ADJUNTOS NI LINKS.
+4. CTA DE BAJO COMPROMISO: máximo 15 minutos, o solo una respuesta.
+5. La ESTRUCTURA del mensaje la dicta la INSTRUCCIÓN CRÍTICA de arriba (este NO es un contacto en frío — no uses la apertura "Estuve revisando la operación de..." ni te presentes de nuevo).
+6. Los ejemplos de mensajes aprobados por el vendedor (si existen más abajo) son SOLO referencia de tono y extensión — la estructura la manda la instrucción del tipo.`;
+
+  return `Eres José Antonio, KAM de One Label, imprenta industrial de etiquetas autoadhesivas en Chile. Redacta borradores de contacto adaptados a esta empresa y al estado real de la relación.
+
+TIPO DE BORRADOR: ${datos.tipo.toUpperCase()}
+INSTRUCCIÓN CRÍTICA: ${datos.instruccionTipo}
+
+EMPRESA Y DECISOR:
+- Empresa: ${datos.nombre}
+- Rubro: ${datos.rubro}
+- Cargo del decisor: ${datos.decisorCargo || 'No registrado'}
+- Nombre del decisor: ${datos.decisorNombre && datos.decisorNombre !== 'No registrado' ? datos.decisorNombre : '[Nombre]'}
+${datos.contextoVendedor ? `- Contexto adicional: ${datos.contextoVendedor}` : ''}
+
+${estadoRelacion}
+${datos.contextoEstrategico}
+
+APLICACIÓN DE METODOLOGÍA — OBLIGATORIA:
+Antes de redactar, clasifica el estado de la relación según la metodología del system prompt
+(usa la etapa del pipeline, el MEDDIC, el historial y la temperatura de la conversación) y
+aplica la técnica que corresponde a ese estado. El mensaje debe reflejar esa técnica: por
+ejemplo, si hay un problema identificado sin urgencia, la pregunta debe ser de Implicación
+(costo del problema), no de Situación; si el deal está cotizado, el foco es avanzar la
+decisión, no re-descubrir el dolor.
+
+${esApertura ? bloqueApertura : bloqueNoApertura}
+
+REGLAS FINALES:
+1. NUNCA afirmes que el cliente tiene un problema
+2. NUNCA menciones regulaciones, fiscalizaciones, normativas ni datos de tu entrenamiento
+3. Correo: máximo 4 líneas de cuerpo, firma "Saludos, José Antonio — One Label"
+4. LinkedIn: mismo tono que correo pero más corto
+5. No inventes contexto que no esté en el historial o en el contexto estratégico
 
 Responde ÚNICAMENTE con este JSON en una sola línea sin markdown:
 {"whatsapp":"...","correo":{"asunto":"...","cuerpo":"..."},"linkedin":"...","llamada":"..."}`
