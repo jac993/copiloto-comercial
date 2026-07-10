@@ -47,7 +47,7 @@ const INSTRUCCION_TIPO: Record<TipoBorrador, string> = {
   apertura:
     "PRIMER CONTACTO. Preséntate brevemente y presenta el motivo del contacto. El decisor no te conoce.",
   seguimiento:
-    "YA HUBO CONTACTO PREVIO pero no se llegó a nada concreto. NO te presentes de nuevo. Retoma el hilo reconociendo el contacto anterior y propone un paso concreto.",
+    "YA HUBO CONTACTO PREVIO pero no se llegó a nada concreto. NO te presentes de nuevo. Retoma el hilo reconociendo el contacto anterior y propone un paso concreto. Si el intento anterior no obtuvo respuesta, PROHIBIDO repetir el mismo ángulo o pregunta — revisa los intentos previos del contexto y cambia el enfoque (dolor distinto, caso real, o valor nuevo sin pedir nada).",
   continuacion:
     `TIPO CONTINUACION — YA HUBO CONVERSACIÓN REAL CON ESTE CONTACTO.
 
@@ -120,6 +120,12 @@ PROHIBIDO:
 
 TONO: sin presión, sin urgencia artificial, genuinamente consultivo.
 LONGITUD MÁXIMA: 80 palabras para WhatsApp/LinkedIn, 120 para correo.
+
+REGLA DE ÁNGULO NUEVO: los intentos anteriores no obtuvieron respuesta — PROHIBIDO
+repetir el ángulo, dolor o estructura de pregunta de esos intentos (revísalos en
+"Intentos previos" del contexto). Especialmente si el prospecto VIO el mensaje y no
+respondió: ese ángulo ya falló. Usa un dolor distinto, un caso real con resultado
+concreto, o entrega valor sin pedir nada.
 
 PARA CORREO — asunto sin presión:
 Correcto: "Retomando el tema de etiquetado"
@@ -263,26 +269,91 @@ export async function POST(req: NextRequest) {
       (d) => d.cargo.toLowerCase() === decisorCargo.toLowerCase()
     );
 
-    // ── Temperatura de la conversación ────────────────────────
-    // Explícita para el modelo: quién habló último, hace cuántos días,
-    // y si el prospecto está esperando respuesta o la cuenta se enfría.
-    const { data: ultimaIntRows } = await supabase
+    // ── Temperatura de la conversación e intentos previos ─────
+    // Los marcadores de resolución que registra el vendedor tienen
+    // semántica distinta y la IA debe tratarlos distinto:
+    //   "Vio el mensaje pero no respondió" → leyó y decidió ignorar:
+    //     el ÁNGULO falló, repetirlo es inútil.
+    //   "Sin respuesta tras 48h" → sin evidencia de lectura: puede ser
+    //     timing o canal, no necesariamente el mensaje.
+    //   "Llamada sin respuesta" → no contestó el teléfono.
+    const MARCADORES: Record<string, string> = {
+      "Respondió al contacto": "RESPONDIÓ",
+      "Vio el mensaje pero no respondió": "VIO el mensaje y NO respondió (leyó y decidió ignorar — el ángulo no capturó interés)",
+      "Sin respuesta tras 48h": "sin respuesta tras 48h (sin evidencia de lectura — puede ser timing o canal)",
+      "Llamada sin respuesta": "no contestó la llamada",
+    };
+
+    let qInts = supabase
       .from("interacciones")
-      .select("remitente, fecha, tipo")
+      .select("remitente, fecha, tipo, transcripcion, resumen_ia")
       .eq("empresa_id", empresaId)
       .order("fecha", { ascending: false })
-      .limit(1);
-    const ultimaInt = ultimaIntRows?.[0] ?? null;
+      .limit(10);
+    if (contactoId) qInts = qInts.eq("contacto_id", contactoId);
+    const { data: intsRecientes } = await qInts;
+
+    const diasDesdeF = (f: string) => Math.floor((Date.now() - new Date(f).getTime()) / 86400000);
+    const cuandoF = (f: string) => {
+      const d = diasDesdeF(f);
+      return d === 0 ? "hoy" : d === 1 ? "hace 1 día" : `hace ${d} días`;
+    };
+
+    // Separar mensajes reales de marcadores de resolución
+    const filasRecientes = intsRecientes ?? [];
+    const esMarcador = (t: string | null) => !!t && t in MARCADORES;
+    const ultimoReal = filasRecientes.find((r) => !esMarcador(r.transcripcion as string | null)) ?? null;
+    // Marcador más reciente POSTERIOR al último mensaje real
+    const marcadorPosterior = ultimoReal
+      ? filasRecientes.find(
+          (r) => esMarcador(r.transcripcion as string | null) &&
+            new Date(r.fecha as string) >= new Date(ultimoReal.fecha as string)
+        ) ?? null
+      : filasRecientes.find((r) => esMarcador(r.transcripcion as string | null)) ?? null;
+
     let temperaturaTexto = "Sin interacciones registradas — cuenta fría, primer contacto.";
-    if (ultimaInt) {
-      const diasDesde = Math.floor((Date.now() - new Date(ultimaInt.fecha as string).getTime()) / 86400000);
-      const cuando = diasDesde === 0 ? "hoy" : diasDesde === 1 ? "hace 1 día" : `hace ${diasDesde} días`;
-      if (ultimaInt.remitente === "prospecto") {
-        temperaturaTexto = `El PROSPECTO envió el último mensaje (${ultimaInt.tipo}) ${cuando} — está esperando tu respuesta. Conversación ACTIVA: responde a lo que él dijo, no reinicies el hilo.`;
+    if (ultimoReal) {
+      const cuando = cuandoF(ultimoReal.fecha as string);
+      if (ultimoReal.remitente === "prospecto") {
+        temperaturaTexto = `El PROSPECTO envió el último mensaje (${ultimoReal.tipo}) ${cuando} — está esperando tu respuesta. Conversación ACTIVA: responde a lo que él dijo, no reinicies el hilo.`;
       } else {
-        temperaturaTexto = `El último mensaje lo enviaste TÚ (${ultimaInt.tipo}) ${cuando} y el prospecto no ha respondido.${diasDesde >= 3 ? " La conversación se está enfriando." : ""}`;
+        temperaturaTexto = `El último mensaje lo enviaste TÚ (${ultimoReal.tipo}) ${cuando}.`;
+        if (marcadorPosterior) {
+          // Si el vendedor marcó "Sin respuesta tras 48h" ANTES de que pasaran
+          // 48h desde el mensaje, es porque VIO que el prospecto lo leyó y no
+          // respondió — ignoro deliberado, no falta de lectura.
+          const horasEntre =
+            (new Date(marcadorPosterior.fecha as string).getTime() -
+              new Date(ultimoReal.fecha as string).getTime()) / 3_600_000;
+          const marcadorTxt = marcadorPosterior.transcripcion as string;
+          const semantica =
+            marcadorTxt === "Sin respuesta tras 48h" && horasEntre < 48
+              ? MARCADORES["Vio el mensaje pero no respondió"]
+              : MARCADORES[marcadorTxt];
+          temperaturaTexto += ` El vendedor registró: ${semantica}.`;
+        } else if (diasDesdeF(ultimoReal.fecha as string) >= 3) {
+          temperaturaTexto += " Sin respuesta del prospecto — la conversación se está enfriando.";
+        }
       }
+    } else if (marcadorPosterior) {
+      temperaturaTexto = `Sin mensajes de contenido registrados, pero el vendedor registró: ${MARCADORES[marcadorPosterior.transcripcion as string]} (${cuandoF(marcadorPosterior.fecha as string)}).`;
     }
+
+    // Línea de intentos previos (cronológica) — le da a la IA el ángulo
+    // exacto de cada intento fallido para que NO lo repita.
+    const intentosTexto = filasRecientes.length > 0
+      ? [...filasRecientes]
+          .reverse()
+          .map((r) => {
+            const txt = (r.resumen_ia ?? r.transcripcion ?? "").toString();
+            if (esMarcador(r.transcripcion as string | null)) {
+              return `  → Resolución (${cuandoF(r.fecha as string)}): ${MARCADORES[r.transcripcion as string]}`;
+            }
+            const quien = r.remitente === "prospecto" ? "PROSPECTO" : "vendedor";
+            return `  • ${quien} — ${r.tipo} (${cuandoF(r.fecha as string)}): "${txt.slice(0, 100)}"`;
+          })
+          .join("\n")
+      : "  Sin intentos registrados.";
 
     // ── Contexto estratégico ──────────────────────────────────
     // Todo esto ya se carga de Supabase; antes solo llegaba al chat de
@@ -321,7 +392,9 @@ export async function POST(req: NextRequest) {
 Etapa del pipeline: ${empresa.estado}
 ${meddicTexto}
 Técnica recomendada por la ficha: ${ficha?.tecnica_recomendada ?? "sin definir"}${ficha?.razon_tecnica ? ` — ${ficha.razon_tecnica}` : ""}
-Temperatura de la conversación: ${temperaturaTexto}`.trim();
+Temperatura de la conversación: ${temperaturaTexto}
+Intentos previos con este contacto (cronológico, con su resolución):
+${intentosTexto}`.trim();
 
     const contextoEstrategico = `
 ${estrategiaBase}

@@ -1119,7 +1119,21 @@ REGLAS DE APERTURA:
 3. SIN ADJUNTOS NI LINKS.
 4. CTA DE BAJO COMPROMISO: máximo 15 minutos, o solo una respuesta.
 5. La ESTRUCTURA del mensaje la dicta la INSTRUCCIÓN CRÍTICA de arriba (este NO es un contacto en frío — no uses la apertura "Estuve revisando la operación de..." ni te presentes de nuevo).
-6. Los ejemplos de mensajes aprobados por el vendedor (si existen más abajo) son SOLO referencia de tono y extensión — la estructura la manda la instrucción del tipo.`;
+6. Los ejemplos de mensajes aprobados por el vendedor (si existen más abajo) son SOLO referencia de tono y extensión — la estructura la manda la instrucción del tipo.
+
+REGLA DE ÁNGULO NUEVO — LA MÁS IMPORTANTE DE TODAS:
+Revisa "Intentos previos con este contacto" en el contexto estratégico. Si hay intentos
+anteriores SIN respuesta, identifica qué ángulo/pregunta usaste en cada uno y está
+PROHIBIDO repetir ese ángulo, ese dolor o esa estructura de pregunta. Repetir un ángulo
+ignorado entrena al prospecto a seguir ignorándote. Según la resolución registrada:
+- "VIO el mensaje y NO respondió" → leyó y decidió ignorar: el ángulo FALLÓ. Cambia el
+  enfoque por completo — dolor DISTINTO, o entrega valor sin pedir nada (dato de industria,
+  caso real de One Label con resultado concreto), o formato Challenger (afirmación corta
+  que enseñe algo, no otra pregunta de diagnóstico).
+- "sin respuesta tras 48h" (sin evidencia de lectura) → puede ser timing o canal, no
+  necesariamente el mensaje: re-toque breve y liviano es válido, pero igual con ángulo
+  o formato distinto al anterior.
+- "no contestó la llamada" → cambia de canal y referencia el intento sin presionar.`;
 
   return `Eres José Antonio, KAM de One Label, imprenta industrial de etiquetas autoadhesivas en Chile. Redacta borradores de contacto adaptados a esta empresa y al estado real de la relación.
 
