@@ -651,7 +651,11 @@ export function HoyClient() {
             </span>
           </div>
 
-          {/* Prioridades de IA — siempre primero, orden de oportunidad */}
+          {/* Prioridades de IA — contenido exclusivo de la pestaña "Hoy".
+              Cada pill muestra SOLO su propia información: Vencidas → vencidas,
+              Hoy → prioridades IA + tareas de hoy, Todas → tareas manuales,
+              Realizadas → lo marcado Hecho hoy. */}
+          {filtroTareas === "hoy" && (<>
           <div className="flex items-center justify-between mb-2">
             {cacheTimestamp && !cargandoPrioridades && prioridades.length > 0 && (
               <p className="text-[11px] text-muted-foreground">
@@ -742,6 +746,7 @@ export function HoyClient() {
               )}
             </div>
           )}
+          </>)}
 
           {/* Tareas con fecha + IA vencidas — debajo de las prioridades de IA */}
           {(todasTareas.length > 0 || prioridadesVencidasIA.length > 0 || todasRealizadas.length > 0) && (
