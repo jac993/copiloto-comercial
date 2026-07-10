@@ -391,6 +391,27 @@ export interface TareaPendiente {
   origen?: "ia";
 }
 
+// ─── PANORAMA ─────────────────────────────────────────────────
+// Fila de la tabla /panorama: estado consolidado de cada prospecto
+// activo, calculado sin IA desde datos existentes.
+export interface PanoramaFila {
+  empresa_id: string;
+  nombre: string;
+  estado: EstadoEmpresa;
+  score_meddic: number | null; // 0-12, null si no hay calificación
+  ultima_interaccion: {
+    fecha: string;
+    tipo: TipoInteraccion;
+    contacto_nombre: string | null;
+  } | null;
+  dias_sin_contacto: number | null; // null = nunca contactada
+  proxima_tarea: {
+    texto: string;
+    fecha: string; // YYYY-MM-DD
+  } | null;
+  semaforo: "rojo" | "amarillo" | "verde";
+}
+
 // Interacción cuyo plazo de respuesta de 48h ya venció — usada por la API /vencidas
 export interface InteraccionVencida {
   id: string;
