@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Building2, LayoutGrid, BarChart2, Settings, Bell } from "lucide-react";
+import { Sun, Building2, Radar, BarChart2, Settings, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
@@ -46,7 +46,7 @@ const navItems = [
   {
     href: "/panorama",
     label: "Panorama",
-    icon: LayoutGrid,
+    icon: Radar,
     description: "Vista general de prospectos",
   },
   {

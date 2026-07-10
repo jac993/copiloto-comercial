@@ -410,6 +410,9 @@ export interface PanoramaFila {
     fecha: string; // YYYY-MM-DD
   } | null;
   semaforo: "rojo" | "amarillo" | "verde";
+  // Texto corto que describe qué pasa con esta cuenta, según la causa
+  // del semáforo (ej: "Rodrigo espera tu respuesta hace 3 días")
+  mensaje_accion: string;
 }
 
 // Interacción cuyo plazo de respuesta de 48h ya venció — usada por la API /vencidas
