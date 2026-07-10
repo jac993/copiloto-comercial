@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Cargar contexto completo desde Supabase en paralelo
-    const [empresa, historialTexto, feedbackRows, rechazadosRows, senalesRows, aprendizajes] = await Promise.all([
+    const [empresa, historialTexto, feedbackRows, rechazadosRows, senalesRows, aprendizajes, negativosRows] = await Promise.all([
       getEmpresaCompleta(empresaId),
       getHistorialResumido(empresaId, contactoId),
       // Ejemplos aprobados por el vendedor para este canal — few-shot de estilo
@@ -191,6 +191,17 @@ export async function POST(req: NextRequest) {
         .then((r) => r.data ?? []),
       // Patrones confirmados del vendedor, relevantes al cargo del decisor
       getAprendizajesPorCargo(decisorCargo).catch(() => []),
+      // Razones de rechazo recientes en este canal (cualquier empresa) — lecciones
+      // de estilo globales; el vendedor las escribe al presionar 👎
+      supabase
+        .from("borradores_feedback")
+        .select("version_vendedor")
+        .eq("evaluacion", "negativo")
+        .eq("canal", canal)
+        .not("version_vendedor", "is", null)
+        .order("creado_en", { ascending: false })
+        .limit(3)
+        .then((r) => r.data ?? []),
     ]);
 
     // Bloque few-shot: muestra el texto que el vendedor aprobó (su versión editada si existe)
@@ -203,6 +214,15 @@ export async function POST(req: NextRequest) {
           .map((r) => `${canal} - Razón: ${(r as { feedback_rechazo: string }).feedback_rechazo}`)
           .join("\n") +
         "\nEvita cometer los mismos errores."
+      : "";
+
+    // Lecciones de estilo globales del canal (👎 en cualquier empresa) —
+    // complementan los rechazados, que son solo de este contacto/empresa
+    const negativosTexto = negativosRows.length > 0
+      ? `\n\nFEEDBACK NEGATIVO RECIENTE DEL VENDEDOR EN ESTE CANAL (errores de estilo a evitar):\n` +
+        negativosRows
+          .map((r) => `- "${(r as { version_vendedor: string }).version_vendedor}"`)
+          .join("\n")
       : "";
 
     const ejemplosAprobados = feedbackRows.length > 0
@@ -547,8 +567,8 @@ ${ejemplosAprobados}
     console.log("[preparacion] prompt incluye rechazados:", rechazadosTexto.includes("RECHAZADOS"));
 
     const userMessage = canal === "llamada"
-      ? contextoLlamada + "\n\n" + estrategiaBase + rechazadosTexto + cadenciaTexto
-      : (promptBorradores ?? "") + ejemplosAprobados + rechazadosTexto + cadenciaTexto;
+      ? contextoLlamada + "\n\n" + estrategiaBase + rechazadosTexto + negativosTexto + cadenciaTexto
+      : (promptBorradores ?? "") + ejemplosAprobados + rechazadosTexto + negativosTexto + cadenciaTexto;
 
     const client = new Anthropic();
     const response = await client.messages.create({

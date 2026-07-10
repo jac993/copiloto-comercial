@@ -989,7 +989,7 @@ function PitchLlamadaContent({
 
 // ── Feedback de borrador — trasladado tal cual ─────────────────
 
-type FeedbackEstado = "idle" | "positivo_ok" | "negativo_form" | "guardado";
+type FeedbackEstado = "idle" | "positivo_form" | "positivo_ok" | "negativo_form" | "guardado";
 
 function FeedbackBorrador({
   empresaId,
@@ -1010,11 +1010,21 @@ function FeedbackBorrador({
 }) {
   const [estado, setEstado] = useState<FeedbackEstado>("idle");
   const [motivoRechazo, setMotivoRechazo] = useState("");
+  // Versión que el vendedor realmente envió (editable en el form de 👍).
+  // Si difiere del borrador de la IA, se guarda como version_vendedor y el
+  // few-shot de estilo aprende de TU texto, no del de la IA.
+  const [versionEditada, setVersionEditada] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   const guardar = async (evaluacion: "positivo" | "negativo") => {
     setGuardando(true);
     try {
+      const versionVendedor =
+        evaluacion === "negativo"
+          ? (motivoRechazo.trim() || null)
+          : (versionEditada.trim() && versionEditada.trim() !== borradorIa.trim()
+              ? versionEditada.trim()
+              : null);
       await fetch("/api/borradores-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1025,7 +1035,7 @@ function FeedbackBorrador({
           tipo_borrador: tipo,
           borrador_ia: borradorIa,
           evaluacion,
-          version_vendedor: evaluacion === "negativo" ? (motivoRechazo.trim() || null) : null,
+          version_vendedor: versionVendedor,
         }),
       });
 
@@ -1065,7 +1075,7 @@ function FeedbackBorrador({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">¿Te sirve este borrador?</span>
           <button
-            onClick={() => void guardar("positivo")}
+            onClick={() => { setVersionEditada(borradorIa); setEstado("positivo_form"); }}
             className="text-xs px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-800/40 dark:bg-green-900/15 dark:text-green-400 transition-colors min-h-[32px]"
           >
             👍 Me sirve
@@ -1076,6 +1086,35 @@ function FeedbackBorrador({
           >
             👎 No me sirve
           </button>
+        </div>
+      )}
+      {estado === "positivo_form" && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Si lo editaste antes de enviarlo, deja aquí TU versión final — la IA aprende de tu estilo, no del suyo:
+          </p>
+          <textarea
+            value={versionEditada}
+            onChange={(e) => setVersionEditada(e.target.value)}
+            rows={4}
+            className="w-full text-xs rounded-xl border border-border bg-muted/40 px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-[#F97316] focus:border-[#F97316]"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void guardar("positivo")}
+              disabled={guardando}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#22C55E] text-white font-medium disabled:opacity-50 min-h-[32px]"
+            >
+              {guardando && <Loader2 className="h-3 w-3 animate-spin" />}
+              Guardar
+            </button>
+            <button
+              onClick={() => setEstado("idle")}
+              className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted-foreground min-h-[32px]"
+            >
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
       {estado === "negativo_form" && (
