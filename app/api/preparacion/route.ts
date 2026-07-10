@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
-import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector } from "@/lib/queries";
+import { getEmpresaCompleta, getHistorialResumido, getCasosActivosPorSector, getAprendizajesPorCargo } from "@/lib/queries";
 import { buildPromptBorradorCanal, buildPromptBorradores, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { validarDatosParaGeneracion } from "@/lib/validar-borrador";
 import { calcularCadencia } from "@/lib/cadencia";
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Cargar contexto completo desde Supabase en paralelo
-    const [empresa, historialTexto, feedbackRows, rechazadosRows] = await Promise.all([
+    const [empresa, historialTexto, feedbackRows, rechazadosRows, senalesRows, aprendizajes] = await Promise.all([
       getEmpresaCompleta(empresaId),
       getHistorialResumido(empresaId, contactoId),
       // Ejemplos aprobados por el vendedor para este canal — few-shot de estilo
@@ -180,6 +180,17 @@ export async function POST(req: NextRequest) {
         if (contactoId) q = q.eq("contacto_id", contactoId);
         return q.then((r) => r.data ?? []);
       })(),
+      // Señales frescas sin usar — el mejor gancho posible para un mensaje
+      supabase
+        .from("senales")
+        .select("tipo, descripcion, detectada_en")
+        .eq("empresa_id", empresaId)
+        .eq("usada", false)
+        .order("detectada_en", { ascending: false })
+        .limit(3)
+        .then((r) => r.data ?? []),
+      // Patrones confirmados del vendedor, relevantes al cargo del decisor
+      getAprendizajesPorCargo(decisorCargo).catch(() => []),
     ]);
 
     // Bloque few-shot: muestra el texto que el vendedor aprobó (su versión editada si existe)
@@ -387,6 +398,24 @@ export async function POST(req: NextRequest) {
     // Parte común (etapa + MEDDIC + técnica + temperatura) — el canal llamada
     // ya incluye ángulo/objeciones/casos en su propio contexto, así que solo
     // recibe esta parte; los canales de texto reciben el bloque completo.
+    // Señales frescas: eventos detectados en la empresa que sirven de gancho
+    // ("abrieron planta", "lanzaron producto") — más efectivos que cualquier
+    // pregunta de dolor genérica, especialmente tras un intento ignorado.
+    const senalesTexto = senalesRows.length > 0
+      ? senalesRows
+          .map((s) => `  • [${s.tipo}] ${s.descripcion}`)
+          .join("\n")
+      : "  Sin señales frescas detectadas.";
+
+    // Patrones que el vendedor ya confirmó que funcionan (o no) con este
+    // tipo de decisor — el motor de aprendizaje los genera tras cada análisis.
+    const aprendizajesTexto = aprendizajes.length > 0
+      ? aprendizajes
+          .slice(0, 5)
+          .map((a) => `  • ${a.descripcion}${a.veces_confirmado > 1 ? ` (confirmado ${a.veces_confirmado} veces)` : ""}`)
+          .join("\n")
+      : "  Sin aprendizajes registrados aún.";
+
     const estrategiaBase = `
 ━━━ CONTEXTO ESTRATÉGICO ━━━
 Etapa del pipeline: ${empresa.estado}
@@ -394,7 +423,11 @@ ${meddicTexto}
 Técnica recomendada por la ficha: ${ficha?.tecnica_recomendada ?? "sin definir"}${ficha?.razon_tecnica ? ` — ${ficha.razon_tecnica}` : ""}
 Temperatura de la conversación: ${temperaturaTexto}
 Intentos previos con este contacto (cronológico, con su resolución):
-${intentosTexto}`.trim();
+${intentosTexto}
+Señales frescas de la empresa (si alguna es relevante, ÚSALA como gancho del mensaje — un evento real capta más atención que una pregunta de dolor):
+${senalesTexto}
+Aprendizajes del vendedor para este tipo de decisor (patrones confirmados en la práctica — respétalos):
+${aprendizajesTexto}`.trim();
 
     const contextoEstrategico = `
 ${estrategiaBase}
