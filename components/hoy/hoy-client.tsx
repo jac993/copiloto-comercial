@@ -96,6 +96,14 @@ interface RespuestaPriorizar {
   resumen_dia: string;
 }
 
+// Metadata visual de los canales de tareas de cadencia
+const CANAL_TAREA_META: Record<string, { emoji: string; label: string }> = {
+  whatsapp: { emoji: "📱", label: "WhatsApp" },
+  correo:   { emoji: "📧", label: "Correo" },
+  linkedin: { emoji: "💼", label: "LinkedIn" },
+  llamada:  { emoji: "📞", label: "Llamada" },
+};
+
 // El vendedor solo trabaja de lunes a viernes — evita gastar créditos
 // en auto-generación de prioridades sábado y domingo.
 function esFinDeSemanaCl(): boolean {
@@ -1335,6 +1343,12 @@ function TareaCard({
               IA
             </span>
           )}
+          {/* Badge de canal — solo tareas del sistema de cadencias */}
+          {tarea.canal && (
+            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">
+              {CANAL_TAREA_META[tarea.canal].emoji} {CANAL_TAREA_META[tarea.canal].label}
+            </span>
+          )}
         </button>
 
         {/* Fecha corta */}
@@ -1397,6 +1411,17 @@ function TareaCard({
 
           {/* Descripción de la tarea */}
           <p className="text-xs text-muted-foreground leading-snug">{tarea.proximo_paso}</p>
+
+          {/* Tareas de cadencia: generar borrador en Consultar con canal,
+              decisor e intención del paso preseleccionados (usa IA al pinchar allá) */}
+          {tarea.canal && (
+            <Link
+              href={`/cuentas/${tarea.empresa_id}?tab=consultar&canal=${tarea.canal}${tarea.contacto_id ? `&contactoId=${tarea.contacto_id}` : ""}${tarea.intencion ? `&intencion=${encodeURIComponent(tarea.intencion)}` : ""}`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+            >
+              ⚡ Generar borrador
+            </Link>
+          )}
 
           {/* Fecha + edición inline */}
           {editando ? (

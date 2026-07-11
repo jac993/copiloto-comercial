@@ -60,6 +60,27 @@ export function esFinDeSemanaChile(ms: number): boolean {
 }
 
 /**
+ * Suma N días hábiles (lun-vie) a una fecha calendario "YYYY-MM-DD".
+ * n=0 retorna la misma fecha, salvo que caiga en fin de semana: en ese
+ * caso avanza al lunes siguiente (una tarea nunca debe agendarse en
+ * sábado/domingo). Aritmética en UTC mediodía para evitar saltos DST.
+ */
+export function sumarDiasHabilesDesde(fechaBase: string, n: number): string {
+  const d = new Date(fechaBase + "T12:00:00Z");
+  let restantes = n;
+  while (restantes > 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dia = d.getUTCDay();
+    if (dia !== 0 && dia !== 6) restantes--;
+  }
+  // Si la fecha resultante cae en fin de semana (posible cuando n=0), correr al lunes
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return d.toISOString().split("T")[0];
+}
+
+/**
  * Milisegundos "hábiles" (lun-vie, hora Chile) transcurridos entre dos instantes.
  * El contador de respuesta se congela sábado y domingo y se reanuda el lunes:
  * un mensaje enviado el viernes no acumula tiempo el fin de semana, así no

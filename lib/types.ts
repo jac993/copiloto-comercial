@@ -371,6 +371,9 @@ export interface Interaccion {
   decision_sugerida: string | null;
   resuelta: boolean;
   no_realizada: boolean;
+  // Opcional para no obligar a los insert existentes a declararla:
+  // solo las tareas generadas por el sistema de cadencias la llevan.
+  cadencia_asignacion_id?: string | null;
   creado_en: string;
   actualizado_en: string;
 }
@@ -389,6 +392,53 @@ export interface TareaPendiente {
   // 'ia' cuando proviene de prioridades_diarias (vencida sin ejecutar);
   // undefined para tareas manuales normales.
   origen?: "ia";
+  // Presentes solo en tareas generadas por el sistema de cadencias:
+  // canal del paso (badge en Hoy) + intención (se inyecta al borrador).
+  canal?: CanalCadenciaPaso;
+  cadencia_asignacion_id?: string;
+  intencion?: string;
+  contacto_id?: string;
+}
+
+// ─── CADENCIAS (sistema por reglas — sin IA) ─────────────────
+// Plantillas de secuencias de seguimiento multi-touch. La asignación
+// ancla una cadencia a una empresa + decisor concreto; las tareas de
+// cada paso viven en interacciones (via cadencia_asignacion_id).
+
+export type CanalCadenciaPaso = "whatsapp" | "correo" | "linkedin" | "llamada";
+
+export interface CadenciaPlantilla {
+  id: string;
+  nombre: string;
+  etapa_pipeline: EstadoEmpresa;
+  activa: boolean;
+  creado_en: string;
+}
+
+export interface CadenciaPaso {
+  id: string;
+  cadencia_id: string;
+  orden: number;
+  dia_offset: number; // días hábiles desde el paso anterior
+  canal: CanalCadenciaPaso;
+  canal_fallback: CanalCadenciaPaso[];
+  omitible: boolean;
+  intencion: string;
+}
+
+export type EstadoAsignacion = "activa" | "pausada" | "completada" | "cancelada";
+export type MotivoCierreCadencia = "respondio" | "manual" | "agotada";
+
+export interface CadenciaAsignacion {
+  id: string;
+  empresa_id: string;
+  contacto_id: string;
+  cadencia_id: string;
+  fecha_inicio: string; // YYYY-MM-DD
+  paso_actual: number;
+  estado: EstadoAsignacion;
+  motivo_cierre: MotivoCierreCadencia | null;
+  creado_en: string;
 }
 
 // ─── PANORAMA ─────────────────────────────────────────────────

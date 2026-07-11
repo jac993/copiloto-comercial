@@ -40,6 +40,9 @@ interface PrepararBody {
   decisorCargo: string;
   decisorArea?: string | null;
   contactoId?: string | null;
+  // Intención del paso de cadencia (sistema de cadencias por reglas):
+  // se antepone a la instrucción del tipo en el prompt del borrador.
+  intencion?: string | null;
 }
 
 // Instrucción explícita por tipo para que Claude no meta la pata
@@ -135,7 +138,14 @@ Incorrecto: "Seguimiento pendiente", "¿Pudiste revisar mi mensaje?"`,
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as PrepararBody;
-    const { empresaId, canal, tipo: tipoRaw, decisorNombre, decisorCargo, decisorArea, contactoId } = body;
+    const { empresaId, canal, tipo: tipoRaw, decisorNombre, decisorCargo, decisorArea, contactoId, intencion } = body;
+
+    // La intención del paso de cadencia manda sobre la instrucción genérica
+    // del tipo — se antepone para que el borrador ejecute ESE paso concreto.
+    const conIntencion = (base: string): string =>
+      intencion?.trim()
+        ? `INTENCIÓN DE ESTE PASO DE LA CADENCIA (prioritaria — el mensaje debe ejecutarla): ${intencion.trim()}\n\n${base}`
+        : base;
 
     if (!empresaId || !canal || !decisorCargo) {
       return NextResponse.json(
@@ -485,7 +495,7 @@ ${casosTexto}
 
     const contextoLlamada = `
 TIPO DE BORRADOR: ${tipo.toUpperCase()}
-INSTRUCCIÓN CRÍTICA: ${INSTRUCCION_TIPO[tipo]}
+INSTRUCCIÓN CRÍTICA: ${conIntencion(INSTRUCCION_TIPO[tipo])}
 
 ━━━ EMPRESA ━━━
 Nombre: ${empresa.nombre}
@@ -555,7 +565,7 @@ ${ejemplosAprobados}
           historialReciente: historialTexto || "",
           contextoVendedor: empresa.notas_vendedor?.trim() || "",
           tipo,
-          instruccionTipo:  INSTRUCCION_TIPO[tipo],
+          instruccionTipo:  conIntencion(INSTRUCCION_TIPO[tipo]),
           contextoEstrategico,
         })
       : null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText, Users, Clock, MessageSquare,
@@ -19,6 +19,7 @@ import { TabResumen } from "@/components/cuentas/tab-resumen";
 import { TabDecisores } from "@/components/cuentas/tab-decisores";
 import { TabHistorial } from "@/components/cuentas/tab-historial";
 import { TabChat } from "@/components/cuentas/tab-chat";
+import { CadenciaPanel } from "@/components/cadencias/cadencia-panel";
 import type { EmpresaCompleta, EstadoEmpresa, Interaccion, Contacto } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,15 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
   const { toast } = useToast();
   const [tabActivo, setTabActivo] = useState<TabId>("resumen");
   const [sheetAbierto, setSheetAbierto] = useState(false);
+
+  // Deep-link ?tab=consultar (usado por "⚡ Generar borrador" de las tareas
+  // de cadencia en Hoy). En useEffect para no romper la hidratación SSR.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "consultar" || t === "chat") setTabActivo("chat");
+    else if (t === "historial") setTabActivo("historial");
+    else if (t === "decisores") setTabActivo("decisores");
+  }, []);
 
   // Campos del Sheet de edición — pre-llenados con los datos actuales
   const [editUrl, setEditUrl] = useState(empresa.url ?? "");
@@ -205,6 +215,16 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
 
       {/* Contenido del tab activo */}
       <div className="flex-1 px-4 pt-4">
+        {/* Panel de cadencia — progreso si hay activa, selector si no */}
+        {tabActivo === "resumen" && (
+          <div className="mb-4">
+            <CadenciaPanel
+              empresaId={empresa.id}
+              estado={empresa.estado}
+              contactos={empresa.contactos}
+            />
+          </div>
+        )}
         {tabActivo === "resumen" && ficha && (
           <TabResumen
             ficha={ficha}

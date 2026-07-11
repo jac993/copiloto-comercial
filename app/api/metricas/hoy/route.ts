@@ -9,6 +9,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Empresa, TareaPendiente } from "@/lib/types";
 import { hoyCL, rangoDiaChileUTC } from "@/lib/fecha";
+import { tipoInteraccionACanal } from "@/lib/cadencias";
+import { PREFIJO_CADENCIA } from "@/lib/cadencias-server";
 
 export const dynamic = "force-dynamic";
 // Sin esto, Next.js cachea los fetch() internos de supabase-js (Data Cache)
@@ -111,10 +113,12 @@ export async function GET() {
     .not("fecha_reactivacion", "is", null)
     .order("fecha_reactivacion", { ascending: true });
 
-  // Tareas pendientes: interacciones con proximo_paso y no resueltas
+  // Tareas pendientes: interacciones con proximo_paso y no resueltas.
+  // tipo + cadencia_asignacion_id permiten mostrar badge de canal y
+  // el botón "Generar borrador" en las tareas de cadencia.
   const { data: tareasRaw, error: tareasError } = await supabase
     .from("interacciones")
-    .select("id, empresa_id, contacto_id, proximo_paso, proximo_paso_fecha")
+    .select("id, empresa_id, contacto_id, proximo_paso, proximo_paso_fecha, tipo, cadencia_asignacion_id")
     .not("proximo_paso", "is", null)
     .neq("resuelta", true)             // captura false Y null de rows antiguas
     .order("proximo_paso_fecha", { ascending: true })
@@ -166,14 +170,26 @@ export async function GET() {
     : { data: [] };
   const contactosMap = new Map((contactosRaw ?? []).map((c) => [c.id, c.nombre as string]));
 
-  const tareasPendientes: TareaPendiente[] = (tareasRaw ?? []).map((r) => ({
-    id: r.id as string,
-    empresa_id: r.empresa_id as string,
-    empresa_nombre: empresasMap.get(r.empresa_id as string) ?? "Empresa",
-    contacto_nombre: contactosMap.get(r.contacto_id as string) ?? null,
-    proximo_paso: r.proximo_paso as string,
-    proximo_paso_fecha: r.proximo_paso_fecha as string,
-  }));
+  const tareasPendientes: TareaPendiente[] = (tareasRaw ?? []).map((r) => {
+    const base: TareaPendiente = {
+      id: r.id as string,
+      empresa_id: r.empresa_id as string,
+      empresa_nombre: empresasMap.get(r.empresa_id as string) ?? "Empresa",
+      contacto_nombre: contactosMap.get(r.contacto_id as string) ?? null,
+      proximo_paso: r.proximo_paso as string,
+      proximo_paso_fecha: r.proximo_paso_fecha as string,
+    };
+    // Tareas de cadencia: canal (badge) + intención limpia (sin el prefijo
+    // "[Cadencia X/Y · Canal]") para inyectarla al borrador de Consultar.
+    if (r.cadencia_asignacion_id) {
+      const canal = tipoInteraccionACanal(r.tipo as string);
+      if (canal) base.canal = canal;
+      base.cadencia_asignacion_id = r.cadencia_asignacion_id as string;
+      base.intencion = (r.proximo_paso as string).replace(PREFIJO_CADENCIA, "");
+      if (r.contacto_id) base.contacto_id = r.contacto_id as string;
+    }
+    return base;
+  });
   console.log('[TAREAS_PENDIENTES]', tareasPendientes.length);
 
   // Unificar realizadas manuales + IA al mismo shape que TareaPendiente

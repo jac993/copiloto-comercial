@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { insertInteraccion } from "@/lib/queries";
+import { cerrarPorRespuesta } from "@/lib/cadencias-server";
 import type { TipoInteraccion, InteraccionInsert } from "@/lib/types";
 import { hoyCL } from "@/lib/fecha";
 
@@ -123,6 +124,21 @@ export async function POST(req: NextRequest) {
         .update({ resuelta: true })
         .eq("id", parent_id)
         .neq("resuelta", true);
+    }
+
+    // Cierre automático de cadencia: si el prospecto respondió (mensaje con
+    // remitente=prospecto, o la resolución "Respondió al contacto" desde
+    // /alertas), la cadencia activa de la empresa se completa con motivo
+    // 'respondio' y sus tareas pendientes se cancelan. Es la promesa central
+    // del sistema: respondió → la secuencia muere sola.
+    const esRespuestaProspecto =
+      remitente === "prospecto" || texto?.trim() === "Respondió al contacto";
+    if (esRespuestaProspecto) {
+      try {
+        await cerrarPorRespuesta(supabase, empresa_id);
+      } catch (e) {
+        console.error("[CADENCIA_CIERRE_AUTO]", e instanceof Error ? e.message : e);
+      }
     }
 
     // Tarea de seguimiento automática:

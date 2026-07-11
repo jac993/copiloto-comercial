@@ -42,6 +42,9 @@ export async function GET() {
     .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id, empresas(nombre)")
     .in("tipo", ["whatsapp", "email", "linkedin"])
     .eq("resuelta", false)
+    // Las tareas de cadencia son recordatorios de ENVIAR, no mensajes
+    // enviados esperando respuesta — no deben disparar alertas de 48h.
+    .is("cadencia_asignacion_id", null)
     .lt("fecha", limite48h)
     .gt("fecha", limite7d)
     .order("fecha", { ascending: false });

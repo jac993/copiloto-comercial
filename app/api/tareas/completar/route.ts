@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hoyCL, rangoDiaChileUTC } from "@/lib/fecha";
+import { avanzarCadencia, tipoInteraccionACanal } from "@/lib/cadencias-server";
 
 function getSupabase() {
   return createClient(
@@ -69,6 +70,26 @@ export async function POST(req: NextRequest) {
       .from("interacciones")
       .update({ resuelta: true, no_realizada: false })
       .eq("id", tarea_id);
+
+    // Hook de cadencias: si la tarea completada pertenece a una cadencia,
+    // generar la tarea del siguiente paso con los canales disponibles del
+    // momento (o cerrar la asignación si la secuencia se agotó).
+    const { data: tareaRow } = await supabase
+      .from("interacciones")
+      .select("cadencia_asignacion_id, tipo")
+      .eq("id", tarea_id)
+      .maybeSingle();
+    if (tareaRow?.cadencia_asignacion_id) {
+      try {
+        await avanzarCadencia(
+          supabase,
+          tareaRow.cadencia_asignacion_id as string,
+          tipoInteraccionACanal(tareaRow.tipo as string)
+        );
+      } catch (e) {
+        console.error("[CADENCIA_AVANZAR]", e instanceof Error ? e.message : e);
+      }
+    }
   } else {
     // Vincular la interacción real existente a la prioridad vencida
     await supabase

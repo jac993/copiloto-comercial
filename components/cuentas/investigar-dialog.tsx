@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { CadenciaPanel } from "@/components/cadencias/cadencia-panel";
 
 // Pasos de progreso que muestra la IA al investigar
 const PASOS_PROGRESO = [
@@ -421,6 +422,9 @@ export function InvestigarDialog({ open, onClose }: InvestigarDialogProps) {
                   fue investigada con éxito.
                 </p>
               </div>
+              {/* Iniciar cadencia de seguimiento sin salir del dialog —
+                  carga sus propios contactos (empresa recién creada) */}
+              <CadenciaPanel empresaId={estado.empresaId} estado="prospecto" />
               <Button size="lg" className="w-full" onClick={verFicha}>
                 Ver ficha completa →
               </Button>

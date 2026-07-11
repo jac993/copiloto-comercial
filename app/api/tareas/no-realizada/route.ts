@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { hoyCL, sumarDiasHabilesDesde } from "@/lib/fecha";
 
 function getSupabase() {
   return createClient(
@@ -34,6 +35,25 @@ export async function POST(req: NextRequest) {
   const supabase = getSupabase();
 
   if (origen === "manual") {
+    // Tareas de cadencia NO se descartan: se arrastran al siguiente día
+    // hábil (carry-over) y el paso siguiente no se crea hasta resolverlas.
+    const { data: fila } = await supabase
+      .from("interacciones")
+      .select("cadencia_asignacion_id")
+      .eq("id", tarea_id)
+      .maybeSingle();
+
+    if (fila?.cadencia_asignacion_id) {
+      const { error } = await supabase
+        .from("interacciones")
+        .update({ proximo_paso_fecha: sumarDiasHabilesDesde(hoyCL(), 1) })
+        .eq("id", tarea_id);
+      if (error) {
+        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true, carryOver: true });
+    }
+
     const { error } = await supabase
       .from("interacciones")
       .update({ resuelta: true, no_realizada: true })

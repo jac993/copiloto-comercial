@@ -251,6 +251,25 @@ export function TabChat({
     }
   }, [decisores, decisorActivoId]);
 
+  // Deep-link de tareas de cadencia: ?contactoId=X&canal=Y&intencion=Z
+  // preselecciona el decisor y guarda la intención del paso; se inyecta
+  // al borrador cuando el usuario pincha ese canal (nunca auto-genera).
+  const [cadenciaLink, setCadenciaLink] = useState<{
+    contactoId: string | null;
+    canal: string | null;
+    intencion: string | null;
+  } | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const contactoId = params.get("contactoId");
+    const canal = params.get("canal");
+    const intencion = params.get("intencion");
+    if (canal || intencion) {
+      setCadenciaLink({ contactoId, canal, intencion });
+      if (contactoId) setDecisorActivoId(`c-${contactoId}`);
+    }
+  }, []);
+
   const decisorActivo = decisores.find((d) => d.id === decisorActivoId) ?? null;
   const cadenciaActiva = decisorActivo?.contactoId
     ? calcularCadencia(interacciones, decisorActivo.contactoId)
@@ -359,6 +378,15 @@ export function TabChat({
         }
       }
 
+      // Intención del paso de cadencia: solo si el deep-link coincide con
+      // este canal y decisor (viene del botón "⚡ Generar borrador" de Hoy)
+      const intencionPaso =
+        cadenciaLink?.intencion &&
+        cadenciaLink.canal === canal &&
+        (!cadenciaLink.contactoId || cadenciaLink.contactoId === decisor.contactoId)
+          ? cadenciaLink.intencion
+          : undefined;
+
       const res = await fetch("/api/preparacion", {
         method: "POST",
         cache: "no-store",
@@ -371,6 +399,7 @@ export function TabChat({
           decisorCargo: decisor.cargo,
           decisorArea: decisor.area,
           contactoId: decisor.contactoId,
+          intencion: intencionPaso,
         }),
       });
 
