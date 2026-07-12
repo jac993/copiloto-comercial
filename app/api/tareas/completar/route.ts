@@ -66,25 +66,27 @@ export async function POST(req: NextRequest) {
   const interaccionId = interacciones[0].id as string;
 
   if (origen === "manual") {
-    await supabase
+    // Update CONDICIONAL (idempotencia, Fix 2): solo cambia si aún estaba
+    // sin resolver. .select() devuelve únicamente las filas afectadas — si
+    // otro request simultáneo (doble-tap en móvil) ya la resolvió, viene
+    // vacío y NO avanzamos la cadencia de nuevo (evita crear dos pasos).
+    const { data: updated } = await supabase
       .from("interacciones")
       .update({ resuelta: true, no_realizada: false })
-      .eq("id", tarea_id);
-
-    // Hook de cadencias: si la tarea completada pertenece a una cadencia,
-    // generar la tarea del siguiente paso con los canales disponibles del
-    // momento (o cerrar la asignación si la secuencia se agotó).
-    const { data: tareaRow } = await supabase
-      .from("interacciones")
-      .select("cadencia_asignacion_id, tipo")
       .eq("id", tarea_id)
-      .maybeSingle();
-    if (tareaRow?.cadencia_asignacion_id) {
+      .eq("resuelta", false)
+      .select("cadencia_asignacion_id, tipo");
+
+    const fila = updated?.[0];
+    // Hook de cadencias: si esta tarea (y no un request duplicado) pertenece
+    // a una cadencia, generar la tarea del siguiente paso con los canales
+    // disponibles del momento (o cerrar la asignación si se agotó).
+    if (fila?.cadencia_asignacion_id) {
       try {
         await avanzarCadencia(
           supabase,
-          tareaRow.cadencia_asignacion_id as string,
-          tipoInteraccionACanal(tareaRow.tipo as string)
+          fila.cadencia_asignacion_id as string,
+          tipoInteraccionACanal(fila.tipo as string)
         );
       } catch (e) {
         console.error("[CADENCIA_AVANZAR]", e instanceof Error ? e.message : e);

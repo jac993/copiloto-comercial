@@ -1145,7 +1145,6 @@ EMPRESA Y DECISOR:
 - Rubro: ${datos.rubro}
 - Cargo del decisor: ${datos.decisorCargo || 'No registrado'}
 - Nombre del decisor: ${datos.decisorNombre && datos.decisorNombre !== 'No registrado' ? datos.decisorNombre : '[Nombre]'}
-${datos.contextoVendedor ? `- Contexto adicional: ${datos.contextoVendedor}` : ''}
 
 ${estadoRelacion}
 ${datos.contextoEstrategico}

@@ -32,20 +32,28 @@ export async function GET() {
   const supabase = getSupabase();
   const hoy = hoyCL();
 
-  // Contar todas las interacciones de hoy (cualquier tipo)
+  // Ventana del día calendario CHILENO (Fix 5): sin esto el filtro corría
+  // en UTC y una interacción de las ~21:00 Chile no contaba para hoy.
+  const { desde: diaDesde, hasta: diaHasta } = rangoDiaChileUTC(hoy);
+
+  // Contar interacciones REALES de hoy. Fix 1: excluir las filas de tarea de
+  // cadencia (cadencia_asignacion_id no nulo) — son recordatorios de "enviar",
+  // no contactos; el contacto real es la interacción separada que se registra.
   const { count: contactosHoy } = await supabase
     .from("interacciones")
     .select("*", { count: "exact", head: true })
-    .gte("fecha", `${hoy}T00:00:00`)
-    .lte("fecha", `${hoy}T23:59:59`);
+    .gte("fecha", diaDesde)
+    .lt("fecha", diaHasta)
+    .is("cadencia_asignacion_id", null);
 
-  // Contar llamadas de hoy específicamente
+  // Contar llamadas de hoy específicamente (misma exclusión de cadencia)
   const { count: llamadasHoy } = await supabase
     .from("interacciones")
     .select("*", { count: "exact", head: true })
     .eq("tipo", "llamada")
-    .gte("fecha", `${hoy}T00:00:00`)
-    .lte("fecha", `${hoy}T23:59:59`);
+    .gte("fecha", diaDesde)
+    .lt("fecha", diaHasta)
+    .is("cadencia_asignacion_id", null);
 
   // Contar negocios ganados este mes (en zona horaria Chile)
   const [hoyY, hoyM] = hoy.split("-");

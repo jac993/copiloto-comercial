@@ -16,6 +16,7 @@ import {
 import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { extraerJsonSeguro, sanitizarTexto } from "@/lib/json-parser";
 import { registrarUso } from "@/lib/registrarUso";
+import { hoyCL, sumarDiasHabilesDesde } from "@/lib/fecha";
 import type {
   ResultadoAnalisis,
   TipoInteraccion,
@@ -24,16 +25,10 @@ import type {
 
 export const maxDuration = 60;
 
-// Suma N días hábiles a partir de hoy (excluye sábado y domingo)
+// Suma N días hábiles desde hoy (zona Chile). Fix 4: reemplaza una copia local
+// que usaba new Date() en UTC — desfasaba la fecha +1 día tras las ~20:00 Chile.
 function sumarDiasHabiles(n: number): string {
-  const fecha = new Date();
-  let contados = 0;
-  while (contados < n) {
-    fecha.setDate(fecha.getDate() + 1);
-    const dia = fecha.getDay();
-    if (dia !== 0 && dia !== 6) contados++;
-  }
-  return fecha.toISOString().split("T")[0];
+  return sumarDiasHabilesDesde(hoyCL(), n);
 }
 
 const TIPO_LABEL: Record<TipoInteraccion, string> = {
@@ -130,7 +125,6 @@ export async function POST(req: NextRequest) {
 EMPRESA: ${empresa.nombre}
 INDUSTRIA: ${empresa.industria ?? "No especificada"}
 ESTADO EN EL PIPELINE: ${empresa.estado}
-NOTAS DEL VENDEDOR: ${empresa.notas_vendedor ?? "Ninguna"}
 
 FICHA COMERCIAL:
 ${fichaResumen}

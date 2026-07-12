@@ -203,9 +203,9 @@ export async function POST(request: Request) {
           ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
           : "";
 
-        const contextoBloque = contexto_vendedor?.trim()
-          ? `CONTEXTO PREVIO DEL VENDEDOR:\n${contexto_vendedor.trim()}\n\n`
-          : "";
+        // Fix 3 (H5.1): contexto_vendedor NO viaja al prompt (salida JSON) —
+        // texto libre del vendedor podía inducir campos no autorizados y
+        // romper el parseo de la ficha. Se sigue guardando en notas_vendedor.
 
         const datosExtra = [
           razon_social?.trim() ? `Razón social oficial: ${razon_social.trim()}` : "",
@@ -221,7 +221,7 @@ export async function POST(request: Request) {
         const prompt =
           `${PROMPT_INVESTIGADOR}\n\n` +
           `URL: ${urlLimpia}\nNombre detectado: ${nombreEmpresa}\nDominio: ${dominio}\n\n` +
-          `${datosExtraBloque}${contextoBloque}` +
+          `${datosExtraBloque}` +
           `--- TEXTO DEL SITIO WEB ---\n${textoWeb}` +
           perplexityBloque;
 

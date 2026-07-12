@@ -139,7 +139,6 @@ EMPRESA: ${empresa.nombre}
 INDUSTRIA: ${empresa.industria ?? "No especificada"}
 ESTADO ACTUAL EN CRM: ${empresa.estado}
 SCORE DE PRIORIDAD: ${empresa.score_prioridad}/100
-NOTAS DEL VENDEDOR: ${empresa.notas_vendedor ?? "Ninguna"}
 TOTAL DE INTERACCIONES: ${interacciones.length}
 PRIMERA INTERACCIÓN: ${fmtFechaHora(interacciones[0].fecha)}
 ÚLTIMA INTERACCIÓN: ${fmtFechaHora(interacciones[interacciones.length - 1].fecha)}

@@ -127,9 +127,6 @@ ${decisoresIATexto}
 ━━━ HISTORIAL DE INTERACCIONES (últimas 5) ━━━
 ${historialTexto || "Sin interacciones registradas con esta empresa."}
 
-━━━ LO QUE SABE EL VENDEDOR ━━━
-${empresa.notas_vendedor?.trim() ? empresa.notas_vendedor : "Sin notas del vendedor."}
-
 ━━━ CALIFICACIÓN MEDDIC (score ${empresa.meddic?.score ?? 0}/12) ━━━
 ${empresa.meddic ? [
   `• Métricas (${empresa.meddic.metricas.semaforo}): ${empresa.meddic.metricas.texto ?? "Sin info"}`,

@@ -62,8 +62,7 @@ Industria: ${empresa.ficha_ia.industria}
 Técnica actual: ${empresa.ficha_ia.tecnica_recomendada} — ${empresa.ficha_ia.razon_tecnica}
 Preguntas SPIN actuales: ${JSON.stringify(empresa.ficha_ia.preguntas_spin)}
 
-NOTAS DEL VENDEDOR (úsalas para personalizar el análisis):
-${notasCombinadas || "(el vendedor no ha agregado notas aún — mantén el ángulo pero reescríbelo de forma más directa)"}`,
+Mantén el ángulo pero reescríbelo de forma más directa y accionable.`,
       },
     ],
   });

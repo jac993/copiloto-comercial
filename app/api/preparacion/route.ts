@@ -518,9 +518,6 @@ ${contactosTextoLlamada}
 ━━━ OBJECIONES PROBABLES ━━━
 ${objecionesTextoLlamada}
 
-━━━ CONTEXTO DEL VENDEDOR ━━━
-${empresa.notas_vendedor?.trim() || "Sin notas adicionales."}
-
 ━━━ HISTORIAL DE INTERACCIONES (últimas 5) ━━━
 ${historialTexto || "Sin interacciones previas registradas."}
 
@@ -563,7 +560,9 @@ ${ejemplosAprobados}
           decisorCargo:     decisorCargo,
           decisorNombre:    decisorNombre ?? "No registrado",
           historialReciente: historialTexto || "",
-          contextoVendedor: empresa.notas_vendedor?.trim() || "",
+          // Fix 3 (H5.2): notas_vendedor NO viaja al prompt de borradores
+          // (salida JSON). Se mantiene el parámetro por compatibilidad, vacío.
+          contextoVendedor: "",
           tipo,
           instruccionTipo:  conIntencion(INSTRUCCION_TIPO[tipo]),
           contextoEstrategico,

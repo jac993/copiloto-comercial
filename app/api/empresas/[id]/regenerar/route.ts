@@ -215,9 +215,8 @@ export async function POST(
       ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
       : "";
 
-    const notasBloque = (body.notas_vendedor?.trim() || empresa.notas_vendedor)
-      ? `CONTEXTO PREVIO DEL VENDEDOR:\n${body.notas_vendedor?.trim() || empresa.notas_vendedor}\n\n`
-      : "";
+    // Fix 3 (H5.1): notas_vendedor NO viaja al prompt (salida JSON). Se sigue
+    // persistiendo en la BD, pero no se inyecta para no romper el parseo.
 
     const datosExtra = [
       opcionesExtra.razonSocial ? `Razón social oficial: ${opcionesExtra.razonSocial}` : "",
@@ -232,7 +231,7 @@ export async function POST(
     const prompt =
       `${PROMPT_INVESTIGADOR}\n\n` +
       `URL: ${urlUsada}\nNombre detectado: ${nombreEmpresa}\nDominio: ${dominio}\n\n` +
-      `${datosExtraBloque}${notasBloque}` +
+      `${datosExtraBloque}` +
       `--- TEXTO DEL SITIO WEB ---\n${textoWeb}` +
       perplexityBloque;
 

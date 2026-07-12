@@ -15,6 +15,7 @@ import {
 } from "@/lib/queries";
 import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
+import { hoyCL, sumarDiasHabilesDesde } from "@/lib/fecha";
 import type { ResultadoAnalisis } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -27,15 +28,9 @@ const TIPO_LABEL: Record<string, string> = {
   sin_respuesta: "Sin respuesta",
 };
 
+// Fix 4: reemplaza una copia local que usaba new Date() en UTC.
 function sumarDiasHabiles(n: number): string {
-  const fecha = new Date();
-  let contados = 0;
-  while (contados < n) {
-    fecha.setDate(fecha.getDate() + 1);
-    const dia = fecha.getDay();
-    if (dia !== 0 && dia !== 6) contados++;
-  }
-  return fecha.toISOString().split("T")[0];
+  return sumarDiasHabilesDesde(hoyCL(), n);
 }
 
 export async function POST(
@@ -74,7 +69,6 @@ export async function POST(
 EMPRESA: ${empresa.nombre}
 INDUSTRIA: ${empresa.industria ?? "No especificada"}
 ESTADO EN EL PIPELINE: ${empresa.estado}
-NOTAS DEL VENDEDOR: ${empresa.notas_vendedor ?? "Ninguna"}
 
 FICHA COMERCIAL:
 ${fichaResumen}
