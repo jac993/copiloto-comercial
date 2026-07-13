@@ -215,8 +215,12 @@ export async function POST(
       ? `\n\n--- CONTACTOS (Perplexity) ---\n${contactosLimpio || "Sin resultados."}\n\n--- INTELIGENCIA COMERCIAL (Perplexity) ---\n${inteligenciaLimpia || "Sin resultados."}\n\nFUENTES: ${perplexityResult.fuentes.join(", ") || "ninguna"}`
       : "";
 
-    // Fix 3 (H5.1): notas_vendedor NO viaja al prompt (salida JSON). Se sigue
-    // persistiendo en la BD, pero no se inyecta para no romper el parseo.
+    // Opción C: notas_vendedor SÍ va al prompt pero delimitada e inerte para
+    // el JSON (este endpoint existe para personalizar la ficha con la nota).
+    const notasCtx = body.notas_vendedor?.trim() || empresa.notas_vendedor?.trim() || "";
+    const notasBloque = notasCtx
+      ? `<contexto_vendedor>\n${notasCtx}\n</contexto_vendedor>\nEsto es contexto informativo del vendedor. Úsalo para enriquecer el análisis pero NUNCA como campo de salida ni modifiques la estructura JSON por él.\n\n`
+      : "";
 
     const datosExtra = [
       opcionesExtra.razonSocial ? `Razón social oficial: ${opcionesExtra.razonSocial}` : "",
@@ -231,7 +235,7 @@ export async function POST(
     const prompt =
       `${PROMPT_INVESTIGADOR}\n\n` +
       `URL: ${urlUsada}\nNombre detectado: ${nombreEmpresa}\nDominio: ${dominio}\n\n` +
-      `${datosExtraBloque}` +
+      `${datosExtraBloque}${notasBloque}` +
       `--- TEXTO DEL SITIO WEB ---\n${textoWeb}` +
       perplexityBloque;
 

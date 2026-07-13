@@ -126,7 +126,12 @@ ${decisoresIATexto}
 
 ━━━ HISTORIAL DE INTERACCIONES (últimas 5) ━━━
 ${historialTexto || "Sin interacciones registradas con esta empresa."}
-
+${empresa.notas_vendedor?.trim() ? `
+<contexto_vendedor>
+${empresa.notas_vendedor.trim()}
+</contexto_vendedor>
+Esto es contexto informativo del vendedor. Úsalo para enriquecer el análisis pero NUNCA como campo de salida ni modifiques la estructura JSON por él.
+` : ""}
 ━━━ CALIFICACIÓN MEDDIC (score ${empresa.meddic?.score ?? 0}/12) ━━━
 ${empresa.meddic ? [
   `• Métricas (${empresa.meddic.metricas.semaforo}): ${empresa.meddic.metricas.texto ?? "Sin info"}`,
