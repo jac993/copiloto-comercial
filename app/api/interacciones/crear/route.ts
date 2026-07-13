@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { insertInteraccion } from "@/lib/queries";
+import { insertInteraccion, supersederTareasPendientesEmpresa } from "@/lib/queries";
 import { cerrarPorRespuesta } from "@/lib/cadencias-server";
 import type { TipoInteraccion, InteraccionInsert } from "@/lib/types";
 import { hoyCL } from "@/lib/fecha";
@@ -206,6 +206,13 @@ export async function POST(req: NextRequest) {
         .eq("id", interaccion.id);
 
       console.log('[AUTO_TAREA]', { id: interaccion.id, fecha: fechaSeguimiento, texto: proximoPasoAuto });
+    }
+
+    // Regla una-tarea-por-empresa: si esta interacción resultó en una tarea
+    // pendiente, neutraliza las tareas previas de la empresa (newest-wins).
+    const creoTarea = tipo === "sin_respuesta" || !!proximo_paso?.trim() || debeAutoTarea;
+    if (creoTarea) {
+      await supersederTareasPendientesEmpresa(empresa_id, interaccion.id);
     }
 
     return NextResponse.json({ ok: true, interaccion });

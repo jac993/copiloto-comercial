@@ -12,6 +12,7 @@ import {
   getEmpresaCompleta,
   getHistorialResumido,
   insertInteraccion,
+  supersederTareasPendientesEmpresa,
 } from "@/lib/queries";
 import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { extraerJsonSeguro, sanitizarTexto } from "@/lib/json-parser";
@@ -84,6 +85,8 @@ export async function POST(req: NextRequest) {
         resuelta: false,
         no_realizada: false,
       });
+
+      await supersederTareasPendientesEmpresa(empresa_id, interaccion.id);
 
       return NextResponse.json({ ok: true, interaccion_id: interaccion.id, resultado: null });
     }
@@ -225,6 +228,8 @@ Responde ÚNICAMENTE con el JSON. Sin markdown, sin texto adicional, sin explica
     };
 
     const interaccion = await insertInteraccion(interaccionData);
+
+    await supersederTareasPendientesEmpresa(empresa_id, interaccion.id);
 
     return NextResponse.json({
       ok: true,

@@ -4,6 +4,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import type { TipoInteraccion, SentimientoInteraccion } from "@/lib/types";
+import { supersederTareasPendientesEmpresa } from "@/lib/queries";
 
 const TIPOS_VALIDOS: TipoInteraccion[] = ["llamada", "email", "whatsapp", "linkedin", "reunion", "sin_respuesta"];
 const SENTIMIENTOS_VALIDOS: SentimientoInteraccion[] = ["positivo", "neutro", "negativo", "sin_respuesta"];
@@ -67,6 +68,13 @@ export async function PATCH(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Regla una-tarea-por-empresa: si el PATCH dejó esta fila como tarea
+  // pendiente (recordatorio manual), neutraliza las otras de la empresa.
+  if (data && data.proximo_paso && !data.cadencia_asignacion_id && data.resuelta !== true) {
+    await supersederTareasPendientesEmpresa(data.empresa_id, data.id);
+  }
+
   return NextResponse.json({ ok: true, interaccion: data });
 }
 

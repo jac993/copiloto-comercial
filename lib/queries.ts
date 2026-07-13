@@ -230,6 +230,30 @@ export async function insertInteraccion(interaccion: InteraccionInsert): Promise
   return data;
 }
 
+/**
+ * Regla de negocio: una empresa = máximo UNA tarea pendiente a la vez
+ * (excluyendo tareas de cadencia, que tienen su propia lógica).
+ * Al crear una tarea nueva se llama con exceptoId = id de la fila recién
+ * creada (newest-wins): neutraliza las demás tareas pendientes NO-cadencia
+ * de la empresa nulificando sus campos de tarea. La fila se conserva como
+ * interacción histórica (transcripción/resumen/coaching intactos) y deja de
+ * contar en Hoy, Realizadas y Rendimiento — las tres filtran proximo_paso.
+ */
+export async function supersederTareasPendientesEmpresa(
+  empresaId: string,
+  exceptoId: string
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from("interacciones")
+    .update({ proximo_paso: null, proximo_paso_fecha: null, motivo_fecha_sugerida: null })
+    .eq("empresa_id", empresaId)
+    .neq("id", exceptoId)
+    .neq("resuelta", true)                 // pendientes (false y null)
+    .not("proximo_paso", "is", null)       // solo filas-tarea
+    .is("cadencia_asignacion_id", null);   // cadencia queda fuera de la regla
+  if (error) throw new Error(`supersederTareasPendientesEmpresa: ${error.message}`);
+}
+
 export async function updateInteraccion(id: string, cambios: InteraccionUpdate): Promise<Interaccion> {
   const { data, error } = await getSupabase()
     .from("interacciones")

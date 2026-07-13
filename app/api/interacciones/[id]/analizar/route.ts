@@ -12,6 +12,7 @@ import {
   getEmpresaCompleta,
   getHistorialResumido,
   updateInteraccion,
+  supersederTareasPendientesEmpresa,
 } from "@/lib/queries";
 import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
@@ -138,6 +139,8 @@ ${texto}
       badge_estado: resultado.badge_estado ?? null,
       decision_sugerida: resultado.decision_sugerida ?? null,
     });
+
+    await supersederTareasPendientesEmpresa(interaccion.empresa_id, params.id);
 
     return NextResponse.json({ ok: true, interaccion: actualizada, resultado });
   } catch (err) {
