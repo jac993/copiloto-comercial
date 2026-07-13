@@ -16,7 +16,7 @@ import {
 import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
 import { extraerJsonSeguro } from "@/lib/json-parser";
-import { hoyCL, sumarDiasHabilesDesde } from "@/lib/fecha";
+import { hoyCL, resolverFechaSeguimiento } from "@/lib/fecha";
 import type { ResultadoAnalisis } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -28,11 +28,6 @@ const TIPO_LABEL: Record<string, string> = {
   whatsapp: "Conversación de WhatsApp",
   sin_respuesta: "Sin respuesta",
 };
-
-// Fix 4: reemplaza una copia local que usaba new Date() en UTC.
-function sumarDiasHabiles(n: number): string {
-  return sumarDiasHabilesDesde(hoyCL(), n);
-}
 
 export async function POST(
   _req: NextRequest,
@@ -66,6 +61,11 @@ export async function POST(
         ].join("\n")
       : "Sin ficha de IA disponible.";
 
+    // Ancla temporal: permite a Claude resolver fechas relativas del prospecto
+    // ("el jueves 17", "la próxima semana") contra el día real en Chile.
+    const hoy = hoyCL();
+    const diaSemana = new Date(hoy + "T12:00:00Z").toLocaleDateString("es-CL", { weekday: "long", timeZone: "America/Santiago" });
+
     const mensajeAnalisis = `
 EMPRESA: ${empresa.nombre}
 INDUSTRIA: ${empresa.industria ?? "No especificada"}
@@ -80,6 +80,7 @@ ${historial}
 ---
 TIPO DE INTERACCIÓN: ${TIPO_LABEL[interaccion.tipo] ?? interaccion.tipo}
 FECHA: ${new Date(interaccion.fecha).toLocaleDateString("es-CL", { timeZone: "America/Santiago" })}
+HOY (Chile): ${hoy} (${diaSemana})
 
 CONTENIDO A ANALIZAR:
 ${texto}
@@ -103,9 +104,12 @@ ${texto}
       throw new Error("Error parseando respuesta de IA. Intenta de nuevo.");
     }
 
-    const proximoPasoFecha = resultado.compromisos.length > 0
-      ? sumarDiasHabiles(3)
-      : sumarDiasHabiles(7);
+    const { fecha: proximoPasoFecha, motivo: motivoFechaSugerida } = resolverFechaSeguimiento({
+      fechaMencionada: resultado.fecha_mencionada,
+      diasHabilesSugeridos: resultado.dias_habiles_sugeridos,
+      motivo: resultado.motivo_fecha_sugerida,
+      hayCompromisos: resultado.compromisos.length > 0,
+    });
 
     const proximoPasoTexto = resultado.proximo_paso?.trim()
       || (resultado.compromisos[0]
@@ -130,6 +134,7 @@ ${texto}
       }),
       proximo_paso: proximoPasoTexto,
       proximo_paso_fecha: proximoPasoFecha,
+      motivo_fecha_sugerida: motivoFechaSugerida || null,
       badge_estado: resultado.badge_estado ?? null,
       decision_sugerida: resultado.decision_sugerida ?? null,
     });

@@ -126,6 +126,15 @@ export interface ResultadoAnalisis {
   proximo_paso?: string;
   badge_estado?: BadgeEstado | null;
   decision_sugerida?: string | null;
+  // Fecha de seguimiento (bug + mejora): la IA resuelve UNA de las dos vías.
+  // 1) fecha_mencionada: si el prospecto dio una fecha concreta ("el jueves 17"),
+  //    resuelta a "YYYY-MM-DD" usando hoy como ancla; null si no la mencionó.
+  // 2) dias_habiles_sugeridos: si NO hay fecha explícita, cuántos días hábiles
+  //    esperar según el tono (interesado→2, consulta interna→5, frío→14).
+  // motivo_fecha_sugerida: una línea explicando el porqué de esa fecha.
+  fecha_mencionada?: string | null;
+  dias_habiles_sugeridos?: number | null;
+  motivo_fecha_sugerida?: string;
 }
 
 // Análisis completo de la conversación con una empresa (todos los contactos)
@@ -371,6 +380,8 @@ export interface Interaccion {
   decision_sugerida: string | null;
   resuelta: boolean;
   no_realizada: boolean;
+  // Texto corto con el que la IA justifica proximo_paso_fecha (columna nueva).
+  motivo_fecha_sugerida?: string | null;
   // Opcional para no obligar a los insert existentes a declararla:
   // solo las tareas generadas por el sistema de cadencias la llevan.
   cadencia_asignacion_id?: string | null;

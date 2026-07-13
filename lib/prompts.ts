@@ -632,6 +632,29 @@ REGLAS PARA "proximo_paso" (campo nuevo — MUY IMPORTANTE):
   "Llamar a Fernanda la próxima semana — anotó que tiene reunión de proveedores el jueves"
 - Si no hay nombre conocido: "Buscar al Jefe de Calidad en LinkedIn con query: Jefe Calidad [empresa] Chile"
 
+REGLAS PARA LA FECHA DE SEGUIMIENTO (campos "fecha_mencionada", "dias_habiles_sugeridos", "motivo_fecha_sugerida"):
+En el encabezado del mensaje se te indica "HOY (Chile)" con su día de la semana. Úsalo como ancla.
+Resuelve SIEMPRE UNA de estas dos vías, nunca ambas a la vez:
+
+A) El prospecto mencionó una fecha o momento concreto para el próximo contacto
+   ("el jueves 17", "la próxima semana", "después del 20", "en quincena", "a fin de mes"):
+   - Resuélvela a formato "YYYY-MM-DD" tomando HOY como ancla. Debe ser una fecha futura.
+   - Ponla en "fecha_mencionada" y deja "dias_habiles_sugeridos": null.
+   - Si la referencia es demasiado vaga para fijar una fecha con confianza
+     ("más adelante", "cuando tengamos presupuesto"), trátala como vía B.
+
+B) El prospecto NO fijó fecha: estima cuántos días hábiles esperar según el tono y el contenido:
+   - Interesado / pidió cotización / pidió muestra → 2
+   - Neutral pero abierto / quedó en revisarlo → 5
+   - Lo consultará con su jefe u otra área → 5
+   - No respondió / no contestó la llamada → 3
+   - Frío, evasivo o sin interés real → 14
+   - Pon el entero en "dias_habiles_sugeridos" y deja "fecha_mencionada": null.
+
+"motivo_fecha_sugerida": una sola línea en lenguaje natural explicando el porqué de esa fecha.
+   Ejemplos: "El prospecto pidió retomar el jueves 17" / "Va a consultarlo con Compras, dar una semana" /
+   "Sin interés claro; reintento largo en dos semanas".
+
 REGLAS PARA "borrador_respuesta" (máximo 5 líneas — los mensajes largos no se leen en B2B):
 - Máximo 5 líneas. Si es más largo, el prospecto no lo lee.
 - Debe referenciar algo específico de esta conversación (un dato, una pregunta, un compromiso).
@@ -697,7 +720,10 @@ La estructura EXACTA es:
   },
   "borrador_respuesta": "Máximo 5 líneas. Referencia algo específico de esta conversación. Un solo llamado a la acción. Sin frases genéricas. Tono chileno profesional.",
   "badge_estado": "avanzando|neutral|evaluando|resistente|senal_cierre|sin_respuesta|rechazado",
-  "decision_sugerida": "Una sola línea de acción concreta. Ejemplos: 'Agenda la reunión esta semana — el interés está caliente' / 'Envía comparativa de tiempos de entrega vs competencia' / 'No respondas la objeción de precio — profundiza en el costo del problema actual' / 'Pide la reunión de cierre esta semana, hay señales claras'"
+  "decision_sugerida": "Una sola línea de acción concreta. Ejemplos: 'Agenda la reunión esta semana — el interés está caliente' / 'Envía comparativa de tiempos de entrega vs competencia' / 'No respondas la objeción de precio — profundiza en el costo del problema actual' / 'Pide la reunión de cierre esta semana, hay señales claras'",
+  "fecha_mencionada": "YYYY-MM-DD si el prospecto mencionó una fecha concreta para el próximo contacto, resuelta con HOY como ancla; null si no mencionó ninguna",
+  "dias_habiles_sugeridos": "entero con los días hábiles a esperar si NO hubo fecha explícita (según la tabla por tono); null si usaste fecha_mencionada",
+  "motivo_fecha_sugerida": "Una sola línea: por qué esa fecha de seguimiento"
 }
 
 REGLAS PARA "badge_estado":

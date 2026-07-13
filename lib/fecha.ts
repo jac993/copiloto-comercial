@@ -101,3 +101,43 @@ export function msRespuestaHabil(desdeMs: number, hastaMs: number): number {
   }
   return total;
 }
+
+/**
+ * Resuelve la fecha de seguimiento de una interacción analizada por IA.
+ * Cascada con validación — nunca confía ciegamente en la aritmética de fechas
+ * del modelo:
+ *  1) fecha explícita que mencionó el prospecto (validada: formato YYYY-MM-DD,
+ *     no pasada y dentro de un techo de ~3 meses hábiles).
+ *  2) inferencia por tono (días hábiles, con clamp defensivo 1..20).
+ *  3) fallback a la regla histórica (3 hábiles si hubo compromisos, 7 si no).
+ * Devuelve la fecha "YYYY-MM-DD" y el motivo (texto corto o "").
+ */
+export function resolverFechaSeguimiento(opts: {
+  fechaMencionada?: string | null;
+  diasHabilesSugeridos?: number | null;
+  motivo?: string;
+  hayCompromisos: boolean;
+}): { fecha: string; motivo: string } {
+  const hoy = hoyCL();
+  const { fechaMencionada, diasHabilesSugeridos, motivo, hayCompromisos } = opts;
+  const motivoLimpio = motivo?.trim() || "";
+
+  // 1) Fecha explícita del prospecto — validada.
+  if (
+    fechaMencionada &&
+    /^\d{4}-\d{2}-\d{2}$/.test(fechaMencionada) &&
+    fechaMencionada >= hoy &&                          // no puede ser pasada
+    fechaMencionada <= sumarDiasHabilesDesde(hoy, 66)  // techo ~3 meses: descarta años erróneos
+  ) {
+    return { fecha: fechaMencionada, motivo: motivoLimpio || "Fecha mencionada por el prospecto" };
+  }
+
+  // 2) Inferencia por tono — clamp defensivo por si el modelo devuelve algo absurdo.
+  if (typeof diasHabilesSugeridos === "number" && Number.isFinite(diasHabilesSugeridos) && diasHabilesSugeridos >= 1) {
+    const n = Math.min(Math.max(Math.round(diasHabilesSugeridos), 1), 20);
+    return { fecha: sumarDiasHabilesDesde(hoy, n), motivo: motivoLimpio };
+  }
+
+  // 3) Fallback histórico.
+  return { fecha: sumarDiasHabilesDesde(hoy, hayCompromisos ? 3 : 7), motivo: motivoLimpio };
+}
