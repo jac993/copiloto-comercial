@@ -16,6 +16,7 @@ import { buildPromptBorradorCanal, buildPromptBorradores, SYSTEM_PROMPT_VALE } f
 import { validarDatosParaGeneracion } from "@/lib/validar-borrador";
 import { calcularCadencia } from "@/lib/cadencia";
 import { registrarUso } from "@/lib/registrarUso";
+import { extraerJsonSeguro } from "@/lib/json-parser";
 
 export const maxDuration = 60;
 
@@ -291,7 +292,7 @@ export async function POST(req: NextRequest) {
     if (contactoId) {
       const { data: intsCad } = await supabase
         .from("interacciones")
-        .select("tipo, fecha, remitente, sentimiento, contacto_id")
+        .select("tipo, fecha, remitente, sentimiento, contacto_id, cadencia_asignacion_id, resuelta")
         .eq("empresa_id", empresaId)
         .eq("contacto_id", contactoId)
         .order("fecha", { ascending: true });
@@ -604,17 +605,15 @@ ${ejemplosAprobados}
       return NextResponse.json({ error: "Claude no devolvió contenido", raw: textoRaw }, { status: 500 });
     }
 
-    const jsonMatch = textoRaw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("[preparacion] respuesta sin JSON:", textoRaw.slice(0, 300));
-      return NextResponse.json({ error: "La IA no devolvió un JSON válido", raw: textoRaw.substring(0, 500) }, { status: 500 });
-    }
-
     let borrador: BorradorCanalResult;
 
     if (canal === "llamada") {
       // Llamada: JSON plano con las 5 secciones del pitch
-      const parsed = JSON.parse(jsonMatch[0]) as Record<string, string>;
+      const parsed = extraerJsonSeguro<Record<string, string>>(textoRaw);
+      if (!parsed) {
+        console.error("[preparacion] respuesta sin JSON:", textoRaw.slice(0, 300));
+        return NextResponse.json({ error: "La IA no devolvió un JSON válido", raw: textoRaw.substring(0, 500) }, { status: 500 });
+      }
       if (!parsed.apertura || !parsed.gancho || !parsed.si_positivo || !parsed.si_negativo || !parsed.cierre) {
         return NextResponse.json({ error: "Respuesta incompleta: faltan secciones del pitch" }, { status: 500 });
       }
@@ -634,28 +633,10 @@ ${ejemplosAprobados}
         linkedin: string;
       };
 
-      // Limpiar posibles bloques markdown antes de buscar el JSON
-      const cleaned = textoRaw
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/```\s*$/i, '')
-        .trim();
-
-      const jsonMatchText = cleaned.match(/\{[\s\S]*\}/);
-      if (!jsonMatchText) {
+      const parsed = extraerJsonSeguro<TextResponse>(textoRaw);
+      if (!parsed) {
         console.error("[preparacion] respuesta sin JSON:", textoRaw.slice(0, 300));
         return NextResponse.json({ error: "La IA no devolvió un JSON válido", raw: textoRaw.substring(0, 500) }, { status: 500 });
-      }
-
-      let parsed: TextResponse;
-      try {
-        parsed = JSON.parse(jsonMatchText[0]) as TextResponse;
-      } catch (e) {
-        console.error("[preparacion] JSON parse error borradores:", e, "\nRaw:", textoRaw.slice(0, 400));
-        return NextResponse.json(
-          { error: "Parse failed", raw: textoRaw.substring(0, 500) },
-          { status: 500 }
-        );
       }
 
       if (canal === "correo") {

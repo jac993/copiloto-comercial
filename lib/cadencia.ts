@@ -29,6 +29,10 @@ export interface InteraccionCadencia {
   remitente?: string | null;
   sentimiento?: string | null;
   contacto_id?: string | null;
+  // Para excluir tareas de cadencia pendientes del cálculo de touches:
+  // son recordatorios de "enviar", no intentos salientes reales.
+  cadencia_asignacion_id?: string | null;
+  resuelta?: boolean | null;
 }
 
 export interface Cadencia {
@@ -112,9 +116,14 @@ export function calcularCadencia(
 
   const racha = rel.slice(inicioRacha);
 
-  // Touches = mensajes salientes del vendedor por un canal real
+  // Touches = mensajes salientes del vendedor por un canal real. Se excluyen
+  // las tareas de cadencia pendientes (recordatorios de enviar, aún no
+  // ejecutados): no son intentos salientes y contaminarían el conteo.
   const touches = racha.filter(
-    (i) => (i.remitente ?? "vendedor") === "vendedor" && tipoACanal(i.tipo) !== null
+    (i) =>
+      (i.remitente ?? "vendedor") === "vendedor" &&
+      tipoACanal(i.tipo) !== null &&
+      !(i.cadencia_asignacion_id && i.resuelta === false)
   );
 
   if (touches.length === 0) return null; // no hay intentos pendientes de respuesta

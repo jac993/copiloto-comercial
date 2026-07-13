@@ -13,6 +13,7 @@ import {
   updateRendimientoEjecutivo,
 } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
+import { extraerJsonSeguro } from "@/lib/json-parser";
 import { hoyCL } from "@/lib/fecha";
 import { PROMPT_EVALUAR, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import type { EvaluacionSemanalInsert, MeddicData } from "@/lib/types";
@@ -187,14 +188,11 @@ ${JSON.stringify(contextoSemana, null, 2)}`;
 
   registrarUso({ api: "claude", endpoint: "claude-haiku-4-5-20251001", input_tokens: respuestaAI.usage.input_tokens, output_tokens: respuestaAI.usage.output_tokens });
   const raw = respuestaAI.content[0].type === "text" ? respuestaAI.content[0].text : "";
-  const jsonStr = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-  let resultado: RespuestaEvalIA;
-  try {
-    resultado = JSON.parse(jsonStr) as RespuestaEvalIA;
-  } catch {
+  const resultado = extraerJsonSeguro<RespuestaEvalIA>(raw);
+  if (resultado === null) {
     return NextResponse.json(
-      { error: "Error al parsear respuesta de la IA", raw: jsonStr },
+      { error: "Error al parsear respuesta de la IA", raw: raw.slice(0, 500) },
       { status: 500 }
     );
   }

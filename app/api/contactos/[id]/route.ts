@@ -1,7 +1,9 @@
 // PATCH  /api/contactos/[id] — Actualiza datos de un contacto existente.
 // DELETE /api/contactos/[id] — Elimina un contacto.
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { updateContacto, deleteContacto } from "@/lib/queries";
+import { cerrarAsignacion } from "@/lib/cadencias-server";
 import type { ContactoUpdate, AreaContacto } from "@/lib/types";
 
 export async function PATCH(
@@ -39,6 +41,25 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Antes de borrar: cerrar cualquier cadencia activa de este contacto y
+    // marcar sus tareas pendientes como resueltas/no realizadas. Si no, el
+    // cascade de la FK borra la asignación y deja las tareas huérfanas
+    // (cadencia_asignacion_id=null, resuelta=false) reapareciendo en Hoy.
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+      const { data: activas } = await supabase
+        .from("cadencia_asignaciones")
+        .select("id")
+        .eq("contacto_id", params.id)
+        .eq("estado", "activa");
+      for (const a of activas ?? []) {
+        await cerrarAsignacion(supabase, a.id as string, "manual");
+      }
+    }
+
     await deleteContacto(params.id);
     return NextResponse.json({ ok: true });
   } catch (error) {

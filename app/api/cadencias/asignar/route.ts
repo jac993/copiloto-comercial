@@ -105,6 +105,15 @@ export async function POST(req: NextRequest) {
       .select("id")
       .single();
     if (eAsig || !asignacion) {
+      // Carrera: dos requests simultáneos pasan el pre-check y el segundo choca
+      // con el índice único (una activa por empresa) → Postgres 23505. Devolver
+      // 409 amistoso en vez de 500 crudo.
+      if ((eAsig as { code?: string } | null)?.code === "23505") {
+        return NextResponse.json(
+          { error: "Esta empresa ya tiene una cadencia activa. Deténla antes de iniciar otra." },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: eAsig?.message ?? "No se pudo crear la asignación" }, { status: 500 });
     }
 

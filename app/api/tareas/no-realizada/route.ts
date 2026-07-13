@@ -39,17 +39,22 @@ export async function POST(req: NextRequest) {
     // hábil (carry-over) y el paso siguiente no se crea hasta resolverlas.
     const { data: fila } = await supabase
       .from("interacciones")
-      .select("cadencia_asignacion_id")
+      .select("cadencia_asignacion_id, proximo_paso_fecha")
       .eq("id", tarea_id)
       .maybeSingle();
 
     if (fila?.cadencia_asignacion_id) {
-      const { error } = await supabase
-        .from("interacciones")
-        .update({ proximo_paso_fecha: sumarDiasHabilesDesde(hoyCL(), 1) })
-        .eq("id", tarea_id);
-      if (error) {
-        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      const hoy = hoyCL();
+      // Carry-over SOLO si la tarea vencía hoy o antes. Si su fecha es futura
+      // (aún no llega su turno), no la adelantamos — se queda en su fecha.
+      if (fila.proximo_paso_fecha && (fila.proximo_paso_fecha as string) <= hoy) {
+        const { error } = await supabase
+          .from("interacciones")
+          .update({ proximo_paso_fecha: sumarDiasHabilesDesde(hoy, 1) })
+          .eq("id", tarea_id);
+        if (error) {
+          return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+        }
       }
       return NextResponse.json({ ok: true, carryOver: true });
     }

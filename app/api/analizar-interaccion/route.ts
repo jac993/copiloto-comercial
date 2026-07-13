@@ -134,7 +134,7 @@ ${historial}
 
 ---
 TIPO DE INTERACCIÓN: ${TIPO_LABEL[tipo]}
-FECHA: ${new Date(fecha ?? new Date()).toLocaleString("es-CL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}
+FECHA: ${new Date(fecha ?? new Date()).toLocaleString("es-CL", { timeZone: "America/Santiago", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}
 
 CONTENIDO A ANALIZAR:
 ${encabezadoEmail}${textoSanitizado}

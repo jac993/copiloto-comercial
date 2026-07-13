@@ -625,15 +625,20 @@ export async function getHistorialResumido(empresaId: string, contactoId?: strin
   // Filtrar por contacto si se especifica — para borradores coherentes con esa persona
   let q = getSupabase()
     .from("interacciones")
-    .select("tipo, fecha, resumen_ia, transcripcion, sentimiento, proximo_paso")
+    .select("tipo, fecha, resumen_ia, transcripcion, sentimiento, proximo_paso, cadencia_asignacion_id, resuelta")
     .eq("empresa_id", empresaId);
   if (contactoId) q = q.eq("contacto_id", contactoId);
-  const { data, error } = await q
+  const { data: dataRaw, error } = await q
     .order("fecha", { ascending: false })
     .limit(12); // más registros para poder parear original+resolución
 
   if (error) throw new Error(`getHistorialResumido: ${error.message}`);
-  if (!data || data.length === 0) return "Sin interacciones previas registradas.";
+  // Excluir tareas de cadencia pendientes: son recordatorios de enviar, no
+  // interacciones reales — no deben aparecer en el historial que ven los prompts.
+  const data = (dataRaw ?? []).filter(
+    (r) => !(r.cadencia_asignacion_id && r.resuelta === false)
+  );
+  if (data.length === 0) return "Sin interacciones previas registradas.";
 
   // Ordenar cronológicamente para detectar pares
   const sorted = [...data].sort(
@@ -655,6 +660,7 @@ export async function getHistorialResumido(empresaId: string, contactoId?: strin
     }
 
     const fmtFecha = (iso: string) => new Date(iso).toLocaleString("es-CL", {
+      timeZone: "America/Santiago",
       day: "numeric", month: "short", year: "numeric",
       hour: "2-digit", minute: "2-digit", hour12: false,
     });
@@ -892,17 +898,6 @@ export async function limpiarChatEmpresa(empresaId: string): Promise<void> {
 }
 
 // ─── MISIONES DIARIAS ─────────────────────────────────────────
-
-export async function getMisionesPorFecha(fecha: string): Promise<MisionDiaria[]> {
-  const { data, error } = await getSupabase()
-    .from("misiones_diarias")
-    .select("*, empresas(nombre, industria)")
-    .eq("fecha", fecha)
-    .order("creado_en", { ascending: true });
-
-  if (error) throw new Error(`getMisionesPorFecha: ${error.message}`);
-  return data ?? [];
-}
 
 export async function getMisionesPorEmpresa(empresaId: string, limite = 10): Promise<MisionDiaria[]> {
   const { data, error } = await getSupabase()

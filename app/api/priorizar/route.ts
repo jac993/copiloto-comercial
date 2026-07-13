@@ -11,6 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 import { hoyCL } from "@/lib/fecha";
 import { getEmpresasPriorizadas, getAprendizajesActivos, guardarPrioridadesCache } from "@/lib/queries";
 import { registrarUso } from "@/lib/registrarUso";
+import { extraerJsonSeguro } from "@/lib/json-parser";
 import { PROMPT_PRIORIZAR, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import type { PrioridadCacheItem } from "@/lib/types";
 
@@ -197,14 +198,11 @@ Selecciona máximo 5 empresas, ordenadas de mayor a menor urgencia.
 
   registrarUso({ api: "claude", endpoint: "claude-haiku-4-5-20251001", input_tokens: message.usage.input_tokens, output_tokens: message.usage.output_tokens });
   const raw = message.content[0].type === "text" ? message.content[0].text : "";
-  const jsonStr = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-  let resultado: RespuestaIA;
-  try {
-    resultado = JSON.parse(jsonStr) as RespuestaIA;
-  } catch {
+  const resultado = extraerJsonSeguro<RespuestaIA>(raw);
+  if (resultado === null) {
     return NextResponse.json(
-      { error: "Error al parsear respuesta de la IA", raw: jsonStr },
+      { error: "Error al parsear respuesta de la IA", raw: raw.slice(0, 500) },
       { status: 500 }
     );
   }

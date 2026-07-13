@@ -96,7 +96,14 @@ function fechaHora(isoStr: string): string {
   }).format(new Date(isoStr));
 }
 
-function detectarTipo(ints: Interaccion[]): TipoBorrador {
+// Excluye tareas de cadencia pendientes (recordatorios de enviar, no
+// interacciones reales) del cálculo de tipo y del historial del decisor.
+function esTareaCadenciaPendiente(i: Interaccion): boolean {
+  return !!i.cadencia_asignacion_id && i.resuelta === false;
+}
+
+function detectarTipo(intsRaw: Interaccion[]): TipoBorrador {
+  const ints = intsRaw.filter((i) => !esTareaCadenciaPendiente(i));
   if (ints.length === 0) return "apertura";
   const tienePositiva = ints.some(
     (i) => i.sentimiento === "positivo" || TEXTOS_RESOLUCION_POSITIVA.has(i.transcripcion ?? "")

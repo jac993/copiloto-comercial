@@ -39,7 +39,7 @@ export async function GET() {
 
   let query = supabase
     .from("interacciones")
-    .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id, empresas(nombre)")
+    .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id")
     .in("tipo", ["whatsapp", "email", "linkedin"])
     .eq("resuelta", false)
     // Las tareas de cadencia son recordatorios de ENVIAR, no mensajes
@@ -65,10 +65,18 @@ export async function GET() {
     (row) => msRespuestaHabil(new Date(row.fecha as string).getTime(), ahora) >= CUARENTA_Y_OCHO_H
   );
 
+  // Nombres de empresa en query separada + Map (regla: nunca join de Supabase,
+  // que descarta filas silenciosamente si la relación no matchea).
+  const empresaIds = Array.from(new Set(dataVencidas.map((r) => r.empresa_id as string)));
+  const { data: empresasRows } = empresaIds.length > 0
+    ? await supabase.from("empresas").select("id, nombre").in("id", empresaIds)
+    : { data: [] };
+  const nombreMap = new Map((empresasRows ?? []).map((e) => [e.id as string, e.nombre as string]));
+
   const vencidas: InteraccionVencida[] = dataVencidas.map((row) => ({
     id: row.id as string,
     empresa_id: row.empresa_id as string,
-    empresa_nombre: (row.empresas as unknown as { nombre: string } | null)?.nombre ?? "Empresa",
+    empresa_nombre: nombreMap.get(row.empresa_id as string) ?? "Empresa",
     tipo: row.tipo as InteraccionVencida["tipo"],
     fecha: row.fecha as string,
     transcripcion: row.transcripcion as string | null,
@@ -83,7 +91,7 @@ export async function GET() {
   if (contactoIds.length > 0) {
     const { data: histRows } = await supabase
       .from("interacciones")
-      .select("tipo, fecha, remitente, sentimiento, contacto_id")
+      .select("tipo, fecha, remitente, sentimiento, contacto_id, cadencia_asignacion_id, resuelta")
       .in("contacto_id", contactoIds)
       .order("fecha", { ascending: true });
 

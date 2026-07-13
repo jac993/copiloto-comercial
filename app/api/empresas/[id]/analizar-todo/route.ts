@@ -12,6 +12,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getEmpresaById } from "@/lib/queries";
 import { PROMPT_ANALISIS_CONVERSACION, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
+import { extraerJsonSeguro } from "@/lib/json-parser";
 import type { Interaccion, AnalisisConversacion } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -74,6 +75,7 @@ export async function POST(
 
     // Construir el hilo cronológico completo, agrupando respuestas del prospecto
     const fmtFechaHora = (iso: string) => new Date(iso).toLocaleString("es-CL", {
+      timeZone: "America/Santiago",
       day: "numeric", month: "short", year: "numeric",
       hour: "2-digit", minute: "2-digit", hour12: false,
     });
@@ -161,11 +163,8 @@ ${hiloCompleto}
     if (!textContent || textContent.type !== "text") throw new Error("Claude no devolvió texto");
     registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens, empresa_id: params.id });
 
-    let analisis: AnalisisConversacion;
-    try {
-      const jsonLimpio = textContent.text.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
-      analisis = JSON.parse(jsonLimpio) as AnalisisConversacion;
-    } catch {
+    const analisis = extraerJsonSeguro<AnalisisConversacion>(textContent.text);
+    if (analisis === null) {
       throw new Error("Error parseando respuesta de IA. Intenta de nuevo.");
     }
 

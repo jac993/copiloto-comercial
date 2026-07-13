@@ -15,6 +15,7 @@ import {
 } from "@/lib/queries";
 import { PROMPT_COACH_ESCRITO, SYSTEM_PROMPT_VALE } from "@/lib/prompts";
 import { registrarUso } from "@/lib/registrarUso";
+import { extraerJsonSeguro } from "@/lib/json-parser";
 import { hoyCL, sumarDiasHabilesDesde } from "@/lib/fecha";
 import type { ResultadoAnalisis } from "@/lib/types";
 
@@ -78,7 +79,7 @@ ${historial}
 
 ---
 TIPO DE INTERACCIÓN: ${TIPO_LABEL[interaccion.tipo] ?? interaccion.tipo}
-FECHA: ${new Date(interaccion.fecha).toLocaleDateString("es-CL")}
+FECHA: ${new Date(interaccion.fecha).toLocaleDateString("es-CL", { timeZone: "America/Santiago" })}
 
 CONTENIDO A ANALIZAR:
 ${texto}
@@ -97,11 +98,8 @@ ${texto}
     if (!textContent || textContent.type !== "text") throw new Error("Claude no devolvió texto");
     registrarUso({ api: "claude", endpoint: "claude-sonnet-4-6", input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens, empresa_id: interaccion.empresa_id });
 
-    let resultado: ResultadoAnalisis;
-    try {
-      const jsonLimpio = textContent.text.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
-      resultado = JSON.parse(jsonLimpio) as ResultadoAnalisis;
-    } catch {
+    const resultado = extraerJsonSeguro<ResultadoAnalisis>(textContent.text);
+    if (resultado === null) {
       throw new Error("Error parseando respuesta de IA. Intenta de nuevo.");
     }
 

@@ -7,6 +7,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { getEmpresaById, actualizarCamposRegenerados } from "@/lib/queries";
+import { extraerJsonSeguro } from "@/lib/json-parser";
 import { PROMPT_REGENERAR } from "@/lib/prompts";
 import type { FichaIA } from "@/lib/types";
 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
   const notasExistentes = empresa.notas_vendedor?.trim() ?? "";
   const notasCombinadas = contexto_nuevo?.trim()
     ? notasExistentes
-      ? `${notasExistentes}\n\n[Actualización ${new Date().toLocaleDateString("es-CL")}]: ${contexto_nuevo.trim()}`
+      ? `${notasExistentes}\n\n[Actualización ${new Date().toLocaleDateString("es-CL", { timeZone: "America/Santiago" })}]: ${contexto_nuevo.trim()}`
       : contexto_nuevo.trim()
     : notasExistentes;
 
@@ -78,16 +79,14 @@ Esto es contexto informativo del vendedor. Úsalo para enriquecer el análisis p
   }
 
   // Extraer JSON de la respuesta
-  const jsonMatch = contenido.text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    return Response.json({ error: "No se pudo extraer JSON de la respuesta" }, { status: 500 });
-  }
-
-  const campos = JSON.parse(jsonMatch[0]) as {
+  const campos = extraerJsonSeguro<{
     angulo_entrada: string;
     razon_tecnica: string;
     preguntas_spin: [string, string, string];
-  };
+  }>(contenido.text);
+  if (campos === null) {
+    return Response.json({ error: "No se pudo extraer JSON de la respuesta" }, { status: 500 });
+  }
 
   const empresaActualizada = await actualizarCamposRegenerados(empresaId, campos);
 
