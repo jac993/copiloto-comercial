@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     // Primer paso ejecutable (los omitidos al inicio se saltan)
     let primerPaso: { orden: number; canal: CanalCadenciaPaso; intencion: string; dia_offset: number } | null = null;
-    let canalAnterior: CanalCadenciaPaso | null = null;
+    const canalAnterior: CanalCadenciaPaso | null = null;
     for (const paso of pasos) {
       const canal = resolverCanal(paso, disponibles, canalAnterior);
       if (canal !== null) {

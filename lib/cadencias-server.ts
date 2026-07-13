@@ -106,7 +106,7 @@ export async function avanzarCadencia(
   const totalPasos = pasos.length;
   const pendientes = pasos.filter((p) => p.orden > asignacion.paso_actual);
 
-  let canalAnterior = canalPasoCompletado;
+  const canalAnterior = canalPasoCompletado;
   for (const paso of pendientes) {
     const canal = resolverCanal(paso, disponibles, canalAnterior);
     if (canal === null) continue; // paso omitido — su offset no se acumula
