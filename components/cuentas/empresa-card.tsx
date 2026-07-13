@@ -140,7 +140,7 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
                       width: `${empresa.score_prioridad}%`,
                       background:
                         empresa.score_prioridad >= 70
-                          ? "#7C3AED"
+                          ? "#F97316"
                           : empresa.score_prioridad >= 40
                           ? "#F59E0B"
                           : "#9CA3AF",
@@ -183,7 +183,7 @@ function MeddicBadge({ meddic }: { meddic: MeddicData }) {
   const score = meddic.score;
   let colorClass: string;
   let emoji: string;
-  if (score >= 11)      { colorClass = "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"; emoji = "⭐"; }
+  if (score >= 11)      { colorClass = "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"; emoji = "⭐"; }
   else if (score >= 8)  { colorClass = "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";    emoji = "🟢"; }
   else if (score >= 5)  { colorClass = "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";    emoji = "🟡"; }
   else                  { colorClass = "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400";            emoji = "🔴"; }

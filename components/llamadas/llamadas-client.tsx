@@ -90,7 +90,7 @@ export function LlamadasClient() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="flex h-16 items-center justify-between px-5">
-          <h1 className="text-2xl font-extrabold text-[#7C3AED]">Actividad</h1>
+          <h1 className="text-2xl font-extrabold text-[#F97316]">Actividad</h1>
           <div className="flex items-center gap-2">
             <button
               onClick={cargar}
@@ -113,7 +113,7 @@ export function LlamadasClient() {
                 onClick={() => setFiltroTipo(t)}
                 className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
                   filtroTipo === t
-                    ? "bg-[#7C3AED] text-white border-[#7C3AED]"
+                    ? "bg-[#F97316] text-white border-[#F97316]"
                     : "bg-background text-muted-foreground border-border hover:border-primary/40"
                 }`}
               >
@@ -132,7 +132,7 @@ export function LlamadasClient() {
                   onClick={() => setFiltroBadge(b)}
                   className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
                     filtroBadge === b
-                      ? "bg-[#7C3AED] text-white border-[#7C3AED]"
+                      ? "bg-[#F97316] text-white border-[#F97316]"
                       : "bg-background text-muted-foreground border-border hover:border-primary/40"
                   }`}
                 >
@@ -202,7 +202,7 @@ function FeedItem({ item }: { item: InteraccionFeed }) {
         <div className="flex items-start gap-3 min-w-0">
           <div
             className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center text-base"
-            style={{ backgroundColor: badgeConf?.dot ? `${badgeConf.dot}22` : "#EDE9FE" }}
+            style={{ backgroundColor: badgeConf?.dot ? `${badgeConf.dot}22` : "#FFF7ED" }}
           >
             {tipoConf.emoji}
           </div>
