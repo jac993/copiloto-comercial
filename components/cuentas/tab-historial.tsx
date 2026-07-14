@@ -126,6 +126,7 @@ function esProspectoMsg(i: Interaccion): boolean {
 // vendedor ve aquí solo conversaciones reales, aunque lleven proximo_paso.
 const MARCADORES_OCULTAR = new Set(["Llamada sin respuesta", "Sin respuesta tras 48h"]);
 function esStubDeTarea(i: Interaccion): boolean {
+  if (i.parent_id) return false;
   const t = (i.transcripcion ?? "").trim();
   const sinResumen = !(i.resumen_ia ?? "").trim();
   // Sin resumen de IA y cuyo único "texto" es vacío o un marcador de sistema.
