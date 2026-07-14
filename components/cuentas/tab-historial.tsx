@@ -120,6 +120,18 @@ function esProspectoMsg(i: Interaccion): boolean {
   return i.remitente === "prospecto" || TEXTOS_RESOLUCION.has(i.transcripcion ?? "");
 }
 
+// Marcadores de sistema que NO son conversación real: stubs de estado/tarea
+// ("Llamada sin respuesta", "Sin respuesta tras 48h"). Se ocultan del historial
+// de la ficha — la tarea ya vive en Hoy y el registro sigue en métricas. El
+// vendedor ve aquí solo conversaciones reales, aunque lleven proximo_paso.
+const MARCADORES_OCULTAR = new Set(["Llamada sin respuesta", "Sin respuesta tras 48h"]);
+function esStubDeTarea(i: Interaccion): boolean {
+  const t = (i.transcripcion ?? "").trim();
+  const sinResumen = !(i.resumen_ia ?? "").trim();
+  // Sin resumen de IA y cuyo único "texto" es vacío o un marcador de sistema.
+  return sinResumen && (t === "" || MARCADORES_OCULTAR.has(t));
+}
+
 // ── Data model ────────────────────────────────────────────────
 
 interface TabHistorialProps {
@@ -179,27 +191,23 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
   const [now, setNow] = useState(() => Date.now());
 
   const hilos = useMemo((): Hilo[] => {
+    // Ocultar stubs de tarea/estado; el resto del armado de hilos usa `visibles`.
+    const visibles = lista.filter((i) => !esStubDeTarea(i));
+
     const legacyRespIds = new Set<string>();
-    for (const i of lista) {
+    for (const i of visibles) {
       if (i.parent_id == null && TEXTOS_RESOLUCION.has(i.transcripcion ?? "")) {
         legacyRespIds.add(i.id);
       }
     }
 
-    // Filas sin contenido (transcripcion y resumen_ia null) no se muestran:
-    // son registros automáticos del botón "✓ Hecho" u otras filas de solo
-    // métricas/tareas — el historial muestra únicamente lo que el vendedor
-    // ingresó manualmente.
-    const rootMsgs = lista.filter(
-      (i) =>
-        i.parent_id == null &&
-        !legacyRespIds.has(i.id) &&
-        !(i.transcripcion === null && i.resumen_ia === null)
+    const rootMsgs = visibles.filter(
+      (i) => i.parent_id == null && !legacyRespIds.has(i.id)
     );
-    const legacyMsgs = lista.filter((i) => legacyRespIds.has(i.id));
+    const legacyMsgs = visibles.filter((i) => legacyRespIds.has(i.id));
 
     const childrenByParent = new Map<string, Interaccion[]>();
-    for (const i of lista) {
+    for (const i of visibles) {
       if (i.parent_id) {
         const arr = childrenByParent.get(i.parent_id) ?? [];
         arr.push(i);
