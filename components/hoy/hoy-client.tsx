@@ -155,8 +155,10 @@ export function HoyClient() {
   // noRealizadasVisual eliminado: las tareas manuales desaparecen del estado inmediatamente al marcar "No realizada"
   const [prioridadesNoRealizadasVisual, setPrioridadesNoRealizadasVisual] = useState<Set<string>>(new Set());
   const [marcandoNoRealizadaId, setMarcandoNoRealizadaId] = useState<string | null>(null);
-  // ID de la tarea que muestra el aviso "Registra una interacción hoy para confirmar"
-  const [mensajeVerificacionId, setMensajeVerificacionId] = useState<string | null>(null);
+  // Aviso inline bajo una tarea: guarda id + texto para mostrar mensajes
+  // distintos por motivo (sin_interaccion, no_actualizada). Antes solo
+  // guardaba el id y el texto era fijo en el JSX.
+  const [mensajeVerificacion, setMensajeVerificacion] = useState<{ id: string; texto: string } | null>(null);
   const [dialogReporte, setDialogReporte] = useState(false);
   const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
   const [guardandoReporte, setGuardandoReporte] = useState(false);
@@ -291,6 +293,15 @@ export function HoyClient() {
     return () => window.removeEventListener("focus", onFocus);
   }, [cargarMetricas]);
 
+  // Muestra un aviso inline bajo una tarea y lo limpia solo tras 5s.
+  function mostrarMensajeTarea(id: string, texto: string) {
+    setMensajeVerificacion({ id, texto });
+    setTimeout(
+      () => setMensajeVerificacion((prev) => (prev?.id === id ? null : prev)),
+      5000
+    );
+  }
+
   // Verifica que existe una interacción real hoy para la empresa antes de marcar.
   // Para IA vencidas: actualiza prioridades_diarias. Para manuales: actualiza interacciones.
   async function verificarYCompletarTarea(t: TareaPendiente) {
@@ -313,10 +324,16 @@ export function HoyClient() {
           tareasResueltasRef.current.add(t.id);
         }
       } else if (data.motivo === "sin_interaccion") {
-        setMensajeVerificacionId(t.id);
-        setTimeout(
-          () => setMensajeVerificacionId((prev) => (prev === t.id ? null : prev)),
-          5000
+        mostrarMensajeTarea(
+          t.id,
+          "Para marcar esta tarea como hecha, primero registra el contacto de hoy en la ficha de la empresa."
+        );
+      } else if (data.motivo === "no_actualizada") {
+        // El UPDATE no afectó ninguna fila (409 desde /api/tareas/completar):
+        // la BD no cambió, así que avisamos en vez de tachar en falso.
+        mostrarMensajeTarea(
+          t.id,
+          "No se pudo actualizar la tarea. Intenta de nuevo o recarga la página."
         );
       }
     } finally {
@@ -789,9 +806,7 @@ export function HoyClient() {
                     marcandoNoRealizada={marcandoNoRealizadaId === t.id}
                     onNoRealizada={() => marcarNoRealizada(t)}
                     mensajeVerificacion={
-                      mensajeVerificacionId === t.id
-                        ? "Para marcar esta tarea como hecha, primero registra el contacto de hoy en la ficha de la empresa."
-                        : null
+                      mensajeVerificacion?.id === t.id ? mensajeVerificacion.texto : null
                     }
                     onFechaChange={(nuevaFecha) =>
                       setMetricas((prev) =>
