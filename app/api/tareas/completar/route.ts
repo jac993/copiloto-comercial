@@ -1,15 +1,18 @@
 // =============================================================
 // POST /api/tareas/completar
-// Verifica que existe una interacción real hoy para la empresa,
-// luego marca la tarea/prioridad como completada.
-// Body: { tarea_id: string, empresa_id: string, origen: 'manual' | 'ia' }
-// Response: { ok: true } | { ok: false, motivo: 'sin_interaccion' }
+// Marca una tarea/prioridad como completada.
+// - manual: requiere una interacción real hoy que pruebe el contacto.
+// - ia (prioridad vencida): vincula la interacción real de hoy; si no hay y
+//   el vendedor confirma con confirmar_sin_registro:true, crea un stub.
+// Body: { tarea_id, empresa_id, origen:'manual'|'ia', confirmar_sin_registro? }
+// Response: { ok:true } | { ok:false, motivo:'sin_interaccion'|'no_actualizada' }
 // =============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hoyCL, rangoDiaChileUTC } from "@/lib/fecha";
 import { avanzarCadencia, tipoInteraccionACanal } from "@/lib/cadencias-server";
+import { crearStubInteraccion } from "@/lib/queries";
 
 function getSupabase() {
   return createClient(
@@ -27,8 +30,9 @@ export async function POST(req: NextRequest) {
     tarea_id?: string;
     empresa_id?: string;
     origen?: "manual" | "ia";
+    confirmar_sin_registro?: boolean;
   };
-  const { tarea_id, empresa_id, origen } = body;
+  const { tarea_id, empresa_id, origen, confirmar_sin_registro } = body;
 
   if (!tarea_id || !empresa_id || !origen) {
     return NextResponse.json(
@@ -58,21 +62,26 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: interacciones } = await query.limit(1);
-
-  if (!interacciones || interacciones.length === 0) {
-    return NextResponse.json({ ok: false, motivo: "sin_interaccion" });
-  }
-
-  const interaccionId = interacciones[0].id as string;
+  const hayInteraccion = !!(interacciones && interacciones.length > 0);
 
   if (origen === "manual") {
+    // Manual: el botón "Hecho" SIEMPRE requiere una interacción real hoy que
+    // pruebe el contacto. Sin ella no se marca (la UI pide registrarla).
+    if (!hayInteraccion) {
+      return NextResponse.json({ ok: false, motivo: "sin_interaccion" });
+    }
+
     // Update CONDICIONAL (idempotencia, Fix 2): solo cambia si aún estaba
     // sin resolver. .select() devuelve únicamente las filas afectadas — si
     // otro request simultáneo (doble-tap en móvil) ya la resolvió, viene
     // vacío y NO avanzamos la cadencia de nuevo (evita crear dos pasos).
+    // actualizado_en explícito (fix P2): la pestaña "Realizadas" filtra por
+    // actualizado_en = hoy. Si el trigger BEFORE UPDATE existe lo sobrescribe
+    // con now() (inofensivo); si no existe, este valor mantiene la tarea
+    // visible en "Realizadas".
     const { data: updated } = await supabase
       .from("interacciones")
-      .update({ resuelta: true, no_realizada: false })
+      .update({ resuelta: true, no_realizada: false, actualizado_en: new Date().toISOString() })
       .eq("id", tarea_id)
       // Filas antiguas (previas a agregar la columna) tienen resuelta=NULL, no
       // false. En PostgreSQL NULL != false, así que .eq("resuelta", false) NO
@@ -109,7 +118,33 @@ export async function POST(req: NextRequest) {
       }
     }
   } else {
-    // Vincular la interacción real existente a la prioridad vencida
+    // origen === "ia" (prioridad vencida). Resolver qué interacción vincular:
+    let interaccionId: string;
+    if (hayInteraccion) {
+      // Hay contacto real hoy → se vincula (comportamiento original).
+      interaccionId = interacciones![0].id as string;
+    } else if (confirmar_sin_registro) {
+      // El vendedor confirmó "Sí, realicé este contacto" sin registro previo:
+      // creamos un stub con los datos de la prioridad para no perder la métrica.
+      const { data: prioridad } = await supabase
+        .from("prioridades_diarias")
+        .select("empresa_id, accion_sugerida")
+        .eq("id", tarea_id)
+        .maybeSingle();
+      if (!prioridad) {
+        return NextResponse.json({ ok: false, motivo: "no_actualizada" }, { status: 409 });
+      }
+      const stub = await crearStubInteraccion(
+        prioridad.empresa_id as string,
+        prioridad.accion_sugerida as string
+      );
+      interaccionId = stub.id;
+    } else {
+      // Sin interacción y sin confirmación → la UI abre el diálogo de confirmación.
+      return NextResponse.json({ ok: false, motivo: "sin_interaccion" });
+    }
+
+    // Vincular la interacción (real o stub) a la prioridad vencida.
     await supabase
       .from("prioridades_diarias")
       .update({

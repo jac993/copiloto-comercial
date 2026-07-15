@@ -11,52 +11,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { insertInteraccion } from "@/lib/queries";
-import type { TipoInteraccion, InteraccionInsert } from "@/lib/types";
+import { crearStubInteraccion } from "@/lib/queries";
 
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-}
-
-// Infiere el canal a partir del texto de la acción sugerida
-function inferirTipoInteraccion(texto: string): TipoInteraccion {
-  const t = texto.toLowerCase();
-  if (t.includes("email") || t.includes("correo")) return "email";
-  if (t.includes("whatsapp")) return "whatsapp";
-  if (t.includes("linkedin")) return "linkedin";
-  if (t.includes("reunión") || t.includes("reunion")) return "reunion";
-  return "llamada";
-}
-
-function construirInteraccion(empresa_id: string, accion_sugerida: string): InteraccionInsert {
-  return {
-    empresa_id,
-    contacto_id: null,
-    parent_id: null,
-    tipo: inferirTipoInteraccion(accion_sugerida),
-    fecha: new Date().toISOString(),
-    audio_url: null,
-    // transcripcion=null: este registro existe solo para métricas (contactos
-    // del día, racha). NO es una interacción que el vendedor ingresó — el
-    // historial oculta filas sin contenido. La acción realizada queda visible
-    // en la pestaña "Realizadas" de Hoy vía prioridades_diarias.
-    transcripcion: null,
-    resumen_ia: null,
-    compromisos: null,
-    sentimiento: null,
-    tecnica_usada: null,
-    coaching_ia: null,
-    proximo_paso: null,
-    proximo_paso_fecha: null,
-    badge_estado: null,
-    decision_sugerida: null,
-    remitente: "vendedor",
-    resuelta: true,
-    no_realizada: false,
-  };
 }
 
 export async function POST(req: NextRequest) {
@@ -84,11 +45,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Prioridad no encontrada" }, { status: 404 });
       }
 
-      const interaccion = await insertInteraccion(
-        construirInteraccion(
-          prioridad.empresa_id as string,
-          prioridad.accion_sugerida as string
-        )
+      const interaccion = await crearStubInteraccion(
+        prioridad.empresa_id as string,
+        prioridad.accion_sugerida as string
       );
 
       // Marcar como completada en prioridades_diarias
@@ -106,8 +65,9 @@ export async function POST(req: NextRequest) {
 
     if (body.empresa_id && body.accion_sugerida) {
       // ── Flujo legacy: solo crea interacción (sin prioridades_diarias) ──
-      const interaccion = await insertInteraccion(
-        construirInteraccion(body.empresa_id, body.accion_sugerida)
+      const interaccion = await crearStubInteraccion(
+        body.empresa_id,
+        body.accion_sugerida
       );
       return NextResponse.json({ ok: true, interaccion });
     }

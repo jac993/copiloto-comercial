@@ -159,6 +159,9 @@ export function HoyClient() {
   // distintos por motivo (sin_interaccion, no_actualizada). Antes solo
   // guardaba el id y el texto era fijo en el JSX.
   const [mensajeVerificacion, setMensajeVerificacion] = useState<{ id: string; texto: string } | null>(null);
+  // Tarea IA vencida sin interacción hoy: abre el diálogo "¿Realizaste este
+  // contacto hoy?" en vez del aviso bloqueante (Opción C, bug P1).
+  const [confirmarContacto, setConfirmarContacto] = useState<TareaPendiente | null>(null);
   const [dialogReporte, setDialogReporte] = useState(false);
   const [resultados, setResultados] = useState<Record<string, ResultadoMision>>({});
   const [guardandoReporte, setGuardandoReporte] = useState(false);
@@ -304,6 +307,18 @@ export function HoyClient() {
 
   // Verifica que existe una interacción real hoy para la empresa antes de marcar.
   // Para IA vencidas: actualiza prioridades_diarias. Para manuales: actualiza interacciones.
+  // Optimista compartido: deja la tarjeta tachada (verde) en su lugar y evita
+  // que el próximo GET la resucite. El GET la excluye de pendientes y la trae
+  // en tareas_realizadas. Lo reusan "Hecho" directo y la confirmación del diálogo.
+  function aplicarTareaHecha(t: TareaPendiente) {
+    setTareasHechasVisual((prev) => new Set(Array.from(prev).concat(t.id)));
+    if (t.origen === "ia") {
+      prioridadesResueltasRef.current.add(t.id);
+    } else {
+      tareasResueltasRef.current.add(t.id);
+    }
+  }
+
   async function verificarYCompletarTarea(t: TareaPendiente) {
     setMarcandoId(t.id);
     try {
@@ -315,19 +330,18 @@ export function HoyClient() {
       });
       const data = await res.json() as { ok: boolean; motivo?: string };
       if (data.ok) {
-        // Dejar la tarjeta tachada en su lugar (verde) en vez de eliminarla.
-        // El próximo GET la excluye de pendientes y la trae en tareas_realizadas.
-        setTareasHechasVisual((prev) => new Set(Array.from(prev).concat(t.id)));
-        if (t.origen === "ia") {
-          prioridadesResueltasRef.current.add(t.id);
-        } else {
-          tareasResueltasRef.current.add(t.id);
-        }
+        aplicarTareaHecha(t);
       } else if (data.motivo === "sin_interaccion") {
-        mostrarMensajeTarea(
-          t.id,
-          "Para marcar esta tarea como hecha, primero registra el contacto de hoy en la ficha de la empresa."
-        );
+        if (t.origen === "ia") {
+          // Vencida IA sin registro hoy: en vez del aviso bloqueante, preguntar
+          // si realizó el contacto. "Sí" crea un stub; "No" la marca no realizada.
+          setConfirmarContacto(t);
+        } else {
+          mostrarMensajeTarea(
+            t.id,
+            "Para marcar esta tarea como hecha, primero registra el contacto de hoy en la ficha de la empresa."
+          );
+        }
       } else if (data.motivo === "no_actualizada") {
         // El UPDATE no afectó ninguna fila (409 desde /api/tareas/completar):
         // la BD no cambió, así que avisamos en vez de tachar en falso.
@@ -338,6 +352,37 @@ export function HoyClient() {
       }
     } finally {
       setMarcandoId(null);
+    }
+  }
+
+  // El vendedor confirmó en el diálogo que sí realizó el contacto de una tarea
+  // IA vencida sin registro previo. Reenvía con confirmar_sin_registro:true
+  // para que el backend cree el stub y marque la prioridad como completada.
+  async function confirmarContactoRealizado(t: TareaPendiente) {
+    setMarcandoId(t.id);
+    try {
+      const res = await fetch("/api/tareas/completar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tarea_id: t.id,
+          empresa_id: t.empresa_id,
+          origen: "ia",
+          confirmar_sin_registro: true,
+        }),
+      });
+      const data = await res.json() as { ok: boolean; motivo?: string };
+      if (data.ok) {
+        aplicarTareaHecha(t);
+      } else {
+        mostrarMensajeTarea(
+          t.id,
+          "No se pudo registrar el contacto. Intenta de nuevo o recarga la página."
+        );
+      }
+    } finally {
+      setMarcandoId(null);
+      setConfirmarContacto(null);
     }
   }
 
@@ -963,6 +1008,64 @@ export function HoyClient() {
                 {guardandoReporte ? "Analizando tu día... ⚡" : "Guardar resultados"}
               </Button>
             ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: confirmar contacto de una tarea IA vencida sin registro previo.
+          Reemplaza el aviso bloqueante — el vendedor puede haber hablado con la
+          cuenta sin registrarlo en la app (Opción C, bug P1). */}
+      <Dialog
+        open={!!confirmarContacto}
+        onOpenChange={(open) => { if (!open) setConfirmarContacto(null); }}
+      >
+        <DialogContent className="max-w-sm mx-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardCheck className="h-5 w-5 text-primary" />
+              ¿Realizaste este contacto hoy?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-1 space-y-2">
+            <p className="text-sm text-muted-foreground">
+              No encontramos una interacción registrada hoy para{" "}
+              <span className="font-semibold text-foreground">
+                {confirmarContacto?.empresa_nombre}
+              </span>.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Si ya hablaste con esta cuenta, la marcamos como hecha. Si no, la
+              movemos a &ldquo;no realizada&rdquo;.
+            </p>
+          </div>
+          <DialogFooter>
+            <div className="flex flex-col gap-2 w-full">
+              <Button
+                className="w-full gap-2 bg-[#22C55E] hover:bg-[#16a34a] text-white"
+                disabled={marcandoId === confirmarContacto?.id}
+                onClick={() => { if (confirmarContacto) void confirmarContactoRealizado(confirmarContacto); }}
+              >
+                {marcandoId === confirmarContacto?.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                Sí, lo realicé
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                disabled={marcandoId === confirmarContacto?.id}
+                onClick={() => {
+                  const t = confirmarContacto;
+                  setConfirmarContacto(null);
+                  if (t) void marcarNoRealizada(t);
+                }}
+              >
+                <XCircle className="h-4 w-4" />
+                No lo realicé
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

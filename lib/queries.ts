@@ -36,6 +36,7 @@ import type {
   Interaccion,
   InteraccionInsert,
   InteraccionUpdate,
+  TipoInteraccion,
   Senal,
   SenalInsert,
   Aprendizaje,
@@ -228,6 +229,53 @@ export async function insertInteraccion(interaccion: InteraccionInsert): Promise
 
   if (error) throw new Error(`insertInteraccion: ${error.message}`);
   return data;
+}
+
+// Infiere el canal a partir del texto de la acción sugerida por la IA.
+// El stub necesita un `tipo` válido del enum aunque no haya conversación real.
+function inferirTipoInteraccion(texto: string): TipoInteraccion {
+  const t = texto.toLowerCase();
+  if (t.includes("email") || t.includes("correo")) return "email";
+  if (t.includes("whatsapp")) return "whatsapp";
+  if (t.includes("linkedin")) return "linkedin";
+  if (t.includes("reunión") || t.includes("reunion")) return "reunion";
+  return "llamada";
+}
+
+/**
+ * Crea un "stub" de interacción: registro SIN conversación real (transcripción/
+ * resumen/coaching en null) que existe solo para alimentar métricas (contactos
+ * del día, racha) y dejar constancia de que el vendedor ejecutó la acción
+ * sugerida. El historial de la ficha lo oculta (no hay contenido que mostrar);
+ * la acción queda visible en "Realizadas" de Hoy vía prioridades_diarias.
+ * Se usa cuando el vendedor confirma "Sí, realicé este contacto" sin haber
+ * registrado la interacción a mano.
+ */
+export async function crearStubInteraccion(
+  empresa_id: string,
+  accion_sugerida: string
+): Promise<Interaccion> {
+  return insertInteraccion({
+    empresa_id,
+    contacto_id: null,
+    parent_id: null,
+    tipo: inferirTipoInteraccion(accion_sugerida),
+    fecha: new Date().toISOString(),
+    audio_url: null,
+    transcripcion: null,
+    resumen_ia: null,
+    compromisos: null,
+    sentimiento: null,
+    tecnica_usada: null,
+    coaching_ia: null,
+    proximo_paso: null,
+    proximo_paso_fecha: null,
+    badge_estado: null,
+    decision_sugerida: null,
+    remitente: "vendedor",
+    resuelta: true,
+    no_realizada: false,
+  });
 }
 
 /**

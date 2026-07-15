@@ -1,84 +1,227 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: sesión de limpieza de hallazgos medios/cosméticos
-de la auditoría (posterior a los 5 críticos, commits `a84ab08` + `bc32811`).
+Última actualización: sesión de corrección de 5 bugs (build, fechas, tareas
+duplicadas, historial stubs, botón "No contestó"). Commits `8c086b3`–`a5d9d7f`.
 
-## Contexto
+---
 
-Se corrió una auditoría completa (Fable 5) sobre el código. Los 5 hallazgos
-críticos/altos ya se resolvieron en `a84ab08` (5 fixes) y `bc32811`
-(opción C: notas_vendedor delimitada en los 3 endpoints de personalización).
-Esta sesión atacó los hallazgos medios/cosméticos restantes (Fix A–G).
+## Commits de esta sesión
 
-## Resuelto en esta sesión (Fix A–G)
+| Hash | Descripción |
+|------|-------------|
+| `8c086b3` | fix: corregir prefer-const que bloqueaba build en Vercel |
+| `8a93e6f` | fix: detectar fechas mencionadas por prospecto e inferir seguimiento por tono |
+| `f14be7e` | fix: una empresa = máximo una tarea pendiente (supersederTareasPendientesEmpresa) |
+| `bc611ab` | fix: ocultar stubs de tarea/estado del historial de la ficha |
+| `a5d9d7f` | fix: boton No contesto ahora actualiza la UI (esStubDeTarea respeta parent_id) |
 
-- **Fix A — parseo JSON de IA**: 7 sitios migrados de `JSON.parse` ad-hoc a
-  `extraerJsonSeguro()` de `lib/json-parser.ts`, conservando su fallback
-  (500 o throw): priorizar, rendimiento/evaluar, preparacion (2 ramas:
-  llamada + texto), investigar/regenerar, empresas/[id]/analizar-todo,
-  interacciones/[id]/analizar.
-- **Fix B — joins de Supabase**:
-  - `interacciones/vencidas`: se quitó `empresas(nombre)` del select →
-    query separada de nombres + Map.
-  - `getMisionesPorFecha` (lib/queries.ts): **borrada** (código muerto sin
-    consumidores; el flujo de misiones/reportar-día usa queries inline en
-    misiones/feedback y rendimiento/evaluar, no ese helper).
-- **Fix C — cadencias huérfanas al borrar contacto**: `DELETE /api/contactos/[id]`
-  ahora cierra las asignaciones activas del contacto (`cerrarAsignacion`, marca
-  tareas pendientes `resuelta=true/no_realizada=true`) ANTES de borrar. Verificado
-  end-to-end: sin tareas huérfanas tras el borrado.
-- **Fix D — carry-over**: `tareas/no-realizada` solo arrastra la tarea de cadencia
-  a `hoyCL()+1` hábil si su fecha era HOY o anterior; si es futura, la deja intacta.
-  Verificado: futura (2026-12-31) intacta, pasada (2026-07-06) avanzó a 2026-07-13.
-- **Fix E — heurística/historial contaminados**: se excluyen filas con
-  `cadencia_asignacion_id != null && resuelta=false` en: cálculo de touches
-  (`lib/cadencia.ts` + selects de vencidas y preparacion), `detectarTipo`
-  (tab-chat.tsx) y `getHistorialResumido` (lib/queries.ts).
-- **Fix F — 409 amistoso**: `cadencias/asignar` captura el unique violation
-  (Postgres 23505) del índice de asignación activa y devuelve 409 en español.
-  Verificado: dos asignaciones simultáneas → un 200, un 409.
-- **Fix G (solo servidor)**: `timeZone: "America/Santiago"` en los 5
-  `toLocaleString`/`toLocaleDateString` de servidor que alimentan prompts o
-  notas: analizar-interaccion, analizar-todo, interacciones/[id]/analizar,
-  getHistorialResumido, investigar/regenerar.
+Rama: `main`. Sincronizado con `origin/main` (0 commits adelante).
 
-Typecheck completo limpio. Datos de prueba revertidos en Supabase.
+---
 
-## Pendiente / observaciones para próximas sesiones
+## Bugs resueltos en esta sesión
 
-- **Fix G cliente (diferido, cosmético)**: los `toLocaleString` de componentes
-  cliente (alertas, configuracion, panorama, tab-historial, hoy-client,
-  vista-kanban, llamadas, costos) NO llevan `timeZone`. Corren en el navegador
-  del vendedor (Chile), así que hoy son correctos; agregar el timeZone solo
-  daría determinismo entre dispositivos. Baja prioridad.
-- **Fix E — matiz no cubierto (por spec)**: las tareas de cadencia YA resueltas
-  siguen contando como touch en la heurística. Como completarlas exige una
-  interacción real separada, podría haber un leve doble-conteo. La spec pidió
-  excluir solo `resuelta=false`; decidir en el futuro si excluir también las
-  resueltas.
-- **Fix C — residual menor**: al borrar un contacto con cadencia activa, el
-  cascade de la FK pone `cadencia_asignacion_id=null` en sus tareas (ya
-  resueltas). Si la fecha de creación de esa tarea es HOY, podría sumar una vez
-  a `contactos_hoy` (el filtro de exclusión de Fix 1 es `cadencia_asignacion_id
-  IS NULL`). Caso muy raro (borrar contacto el mismo día que arrancó su cadencia).
-- **Código muerto no tocado (fuera de alcance de Fix B)**: `getMisionesPorEmpresa`
-  e `insertMision` en lib/queries.ts tampoco tienen consumidores. No se borraron
-  porque no eran parte de la auditoría de joins. Candidatos a limpieza futura.
-- **SQL viejo sin confirmar (arrastrado de sesiones previas)**:
-  `UPDATE contactos SET nombre = NULL WHERE cargo = nombre AND verificado = false;`
-  — el usuario nunca confirmó haberlo ejecutado. Verificar si sigue siendo relevante.
+### 1. Build de Vercel bloqueado (`prefer-const`) — `8c086b3`
+- **Síntoma:** todos los deploys fallaban desde el commit del sistema de cadencias.
+- **Causa:** dos variables declaradas con `let` que nunca se reasignaban.
+- **Fix:** `let canalAnterior` → `const` en:
+  - `app/api/cadencias/asignar/route.ts` (línea 79)
+  - `lib/cadencias-server.ts` (línea 109)
+
+### 2. Fecha de seguimiento ignoraba lo que decía el prospecto — `8a93e6f`
+- **Síntoma:** `proximo_paso_fecha` siempre se calculaba como +3 o +7 días hábiles,
+  ignorando frases como "hablemos el jueves 17".
+- **Arquitectura:**
+  - Nueva función `resolverFechaSeguimiento()` en `lib/fecha.ts` con cascada de 3 niveles:
+    1. Fecha explícita del prospecto (validada: formato YYYY-MM-DD, no pasada, ≤66 días hábiles)
+    2. Inferencia por tono: interesado/cotización→2 días, neutral/consulta jefe→5, no respondió→3, frío→14
+    3. Fallback: `hayCompromisos ? 3 : 7` días hábiles
+  - 3 nuevos campos en `ResultadoAnalisis` y en la tabla `interacciones`:
+    `fecha_mencionada`, `dias_habiles_sugeridos`, `motivo_fecha_sugerida`
+  - Migración ejecutada: `supabase/migrations/20260713_motivo_fecha_sugerida.sql`
+  - Prompt actualizado en `lib/prompts.ts` (`PROMPT_COACH_ESCRITO`): Claude resuelve
+    la fecha en 2 vías excluyentes (A: fecha explícita → YYYY-MM-DD; B: sin fecha → días hábiles)
+  - Endpoints actualizados: `analizar-interaccion/route.ts` y `interacciones/[id]/analizar/route.ts`
+  - Ancla de fecha HOY (Chile, día de la semana) inyectada en el mensaje a Claude
+- **Nota:** `motivo_fecha_sugerida` se guarda correctamente en BD pero aún no se
+  muestra en la UI (card de Hoy ni historial). Pendiente baja prioridad.
+
+### 3. Una empresa acumulaba múltiples tareas pendientes — `f14be7e`
+- **Síntoma:** G&N Brands aparecía 4 veces en Hoy (fechas 19/20/21 jul) porque cada
+  interacción nueva creaba su propia tarea sin cancelar las anteriores.
+- **Regla:** una empresa = máximo una tarea pendiente activa (excluye cadencias).
+- **Arquitectura:**
+  - Nueva función `supersederTareasPendientesEmpresa(empresaId, exceptoId)` en `lib/queries.ts`:
+    nulifica `proximo_paso`, `proximo_paso_fecha`, `motivo_fecha_sugerida` en las
+    filas previas (no las marca `resuelta=true`) para que desaparezcan de Hoy,
+    Realizadas y Rendimiento sin contaminar métricas.
+  - Semántica "newest-wins": la nueva tarea siempre gana. La que conserva entre
+    las existentes es la de fecha más próxima a hoy (más urgente).
+  - Llamada añadida en: `analizar-interaccion`, `interacciones/[id]/analizar`,
+    `interacciones/crear` (post-auto-tarea), `interacciones/[id]` PATCH.
+  - SQL de limpieza puntual ejecutado en Supabase para nulificar los 4 duplicados
+    de G&N: conservó la fila con `proximo_paso_fecha` más cercana a hoy.
+
+### 4. Historial de la ficha mostraba stubs de tarea/estado — `bc611ab`
+- **Síntoma:** burbujas naranjas "Llamada sin respuesta" aparecían mezcladas con
+  conversaciones reales en el historial.
+- **Causa:** esas filas existen en BD para crear tareas en Hoy, no para mostrar
+  conversación. No son `transcripcion=null` puro — tienen texto marcador.
+- **Fix:** función `esStubDeTarea()` en `components/cuentas/tab-historial.tsx`:
+  oculta filas SIN `resumen_ia` cuyo texto es vacío o coincide con los marcadores
+  `MARCADORES_OCULTAR = ["Llamada sin respuesta", "Sin respuesta tras 48h"]`.
+  Los registros se filtran de `visibles` antes de construir los hilos.
+  Las filas siguen en BD, aparecen en Hoy y en métricas — solo se ocultan del historial.
+
+### 5. Botón "No contestó" no actualizaba la UI — `a5d9d7f`
+- **Síntoma:** al presionar "❌ No contestó" en el historial, no pasaba nada
+  visualmente. El botón seguía ahí. El vendedor de CCU lo presionó 7 veces.
+- **Causa:** el fix anterior de los stubs (commit `bc611ab`) también ocultaba los
+  mensajes de resolución del botón ("Sin respuesta tras 48h") porque comparten
+  el mismo texto. Pero estos mensajes SÍ tienen `parent_id` (son hijos del mensaje
+  original), mientras que los stubs standalone NO lo tienen.
+- **Fix:** en `esStubDeTarea()`, añadir `if (i.parent_id) return false;` como
+  primera guarda. Mensajes con `parent_id` = resoluciones reales → siempre visibles.
+  Resultado: presionar el botón muestra la burbuja "❌ Sin respuesta tras 48h" en el
+  hilo y los botones de respuesta desaparecen (porque ya hay un mensaje del prospecto).
+- **Efecto secundario cosmético:** en CCU (hilo de John Velásquez, LinkedIn) aparecen
+  7 burbujas "❌ Sin respuesta tras 48h" del 14 jul — los 7 clicks previos que se
+  guardaron pero no eran visibles. Son datos reales en BD; se pueden eliminar
+  una a una con el ícono de basura de cada burbuja.
+
+---
+
+## Bugs pendientes
+
+### Cosmético — duplicados históricos de "No contestó" en CCU
+- Empresa: CCU S.A., contacto John Velásquez (LinkedIn)
+- 7 burbujas "❌ Sin respuesta tras 48h" del 14 jul visibles ahora que el fix aplicó.
+- No afecta funcionalidad. Se pueden borrar manualmente desde el historial.
+
+### Cosmético — `motivo_fecha_sugerida` no se muestra en UI
+- La columna se guarda correctamente en BD (desde `8a93e6f`).
+- No se muestra en la card de Hoy ni en el detalle del historial.
+- Baja prioridad. Implementar si se quiere que el vendedor vea el "por qué" de la fecha.
+
+### Cosmético — `toLocaleString` sin `timeZone` en componentes cliente
+- Archivos: alertas, configuracion, panorama, tab-historial, hoy-client,
+  vista-kanban, llamadas, costos.
+- Corren en el navegador del vendedor (Chile) → actualmente correctos.
+- Solo daría determinismo entre dispositivos. Baja prioridad.
+
+---
+
+## Features pendientes (en orden de prioridad)
+
+1. **Prompt 2 — días en etapa + alertas de enfriamiento**
+   - Mostrar cuántos días lleva una cuenta en su etapa actual del pipeline.
+   - Alertas cuando una cuenta lleva demasiado tiempo sin avanzar.
+
+2. **Prompt 3 — razones de pérdida**
+   - Al marcar un negocio como perdido, capturar la razón (precio, competidor,
+     no hay necesidad, timing, etc.).
+   - Alimentar análisis de patrones de pérdida.
+
+3. **Prompt 4 — montos en pipeline**
+   - Campo de monto estimado por oportunidad.
+   - Vista de pipeline con valor total por etapa.
+
+4. **Prompt 7 — resumen Panorama**
+   - Resumen semanal/mensual generado por IA con las métricas de Panorama.
+   - Estado de la cartera, tendencias, alertas.
+
+5. **Prompt 5 — sugerencia de movimiento en pipeline**
+   - IA sugiere cuándo avanzar una cuenta de etapa basada en señales de la
+     conversación y tiempo en etapa.
+
+6. **Prompt 6 — preparador de reuniones**
+   - Antes de una reunión, generar un briefing: contexto del prospecto,
+     objetivos, preguntas clave, posibles objeciones.
+
+7. **Prompt 10 — cosméticos fecha cliente**
+   - Mejoras visuales en la presentación de fechas en la ficha del cliente.
+
+---
+
+## Decisiones arquitectónicas tomadas en esta sesión
+
+### Nulificación vs. marcado `resuelta=true` para superseder tareas
+- **Decisión:** nulificar `proximo_paso`, `proximo_paso_fecha` y `motivo_fecha_sugerida`
+  (en lugar de marcar `resuelta=true`).
+- **Razón:** las 3 vistas de métricas (Hoy, Realizadas, Rendimiento) filtran por
+  `proximo_paso IS NOT NULL`. Nulificar hace desaparecer las filas de todas las vistas
+  sin afectar `resuelta` ni `no_realizada`, que alimentan métricas de actividad real.
+
+### Conservar tarea más próxima al hoy (no la más reciente)
+- **Decisión:** cuando hay múltiples tareas pendientes al crear una nueva,
+  conservar la con `proximo_paso_fecha` más cercana a hoy (inclusive vencidas).
+- **Razón:** la más urgente es la que el vendedor necesita ver primero.
+- **Excepción:** newest-wins se mantiene para tareas creadas en tiempo real
+  (la nueva tarea siempre supersede a las anteriores).
+
+### Detección de fechas: cascada de 3 niveles
+- **Decisión:** `resolverFechaSeguimiento()` aplica: fecha explícita → inferencia
+  por tono → fallback histórico. Nunca usa ambas a la vez.
+- **Razón:** evita contradicciones y mantiene comportamiento predecible. La función
+  vive en `lib/fecha.ts` (source of truth para lógica de fechas en Chile).
+
+### Stubs de sistema: ocultar del historial, no borrar
+- **Decisión:** los registros de sistema (stubs de tarea sin conversación real)
+  se ocultan en la vista del historial pero no se eliminan de BD.
+- **Razón:** siguen siendo necesarios en Hoy (como tareas) y en métricas (como
+  registros de actividad). El historial es solo una vista filtrada.
+
+### Discriminador `parent_id` para resoluciones vs. stubs
+- **Decisión:** `esStubDeTarea()` respeta `parent_id`: un mensaje con `parent_id`
+  es una resolución real (botón "No contestó"), no un stub autónomo.
+- **Razón:** ambos tipos comparten el mismo texto marcador ("Sin respuesta tras 48h"),
+  pero su semántica es diferente. `parent_id` es el discriminador correcto.
+
+---
 
 ## Notas de entorno (siguen vigentes)
 
-- **OneDrive restaura archivos borrados**: el proyecto vive en carpeta
-  sincronizada. Si un archivo borrado con `rm` reaparece, es OneDrive — borrar
-  de nuevo y verificar con `git status` antes de commitear.
-- **`.next` y `tsconfig.tsbuildinfo` se corrompen** (`EBUSY`/`EINVAL` de OneDrive).
-  Si `tsc`/`build` fallan con errores raros de módulos, correr
-  `rm -rf .next tsconfig.tsbuildinfo` y reintentar antes de asumir bug real.
+- **OneDrive restaura archivos borrados**: el proyecto vive en carpeta sincronizada.
+  Si un archivo borrado con `rm` reaparece, es OneDrive. Borrar con PowerShell
+  `Remove-Item -Recurse -Force` para mayor fuerza.
+- **`.next` se corrompe con OneDrive** (`EBUSY`/`EINVAL`): si el dev server y
+  `npm run build` corren al mismo tiempo, o si OneDrive sincroniza `.next`, el
+  compilador falla con errores raros de módulos. Solución:
+  1. Detener el dev server
+  2. `Remove-Item -Recurse -Force .next` (PowerShell)
+  3. `npm run build` o reiniciar dev server
+- **SWC (dev server) puede mostrar errores HMR stale**: si `tsc --noEmit` pasa
+  limpio pero el dev server muestra "Syntax Error", es el caché de HMR. Hacer
+  el ciclo de limpiar `.next` siempre resuelve.
 - **Data Cache de Next.js**: toda ruta GET que lea la BD necesita
-  `export const fetchCache = "force-no-store"` además de `dynamic = "force-dynamic"`
-  (ver memoria del proyecto). Sin esto, supabase-js sirve datos viejos.
+  `export const fetchCache = "force-no-store"` además de `dynamic = "force-dynamic"`.
+  Sin esto, supabase-js sirve datos viejos.
 - **Fechas siempre con `lib/fecha.ts`** (`hoyCL`, `nowChileLocal`,
-  `sumarDiasHabilesDesde`, `rangoDiaChileUTC`, `msRespuestaHabil`): Vercel corre
-  en UTC, Chile es UTC-3/UTC-4.
+  `sumarDiasHabilesDesde`, `resolverFechaSeguimiento`, `rangoDiaChileUTC`,
+  `msRespuestaHabil`): Vercel corre en UTC, Chile es UTC-3/UTC-4.
+
+---
+
+## Resuelto en sesiones anteriores (referencia rápida)
+
+### Fix A–G de auditoría (`a397a7c`)
+- Fix A: parseo JSON de IA con `extraerJsonSeguro()` en 7 sitios.
+- Fix B: joins de Supabase — vencidas usa query separada; borrada `getMisionesPorFecha`.
+- Fix C: cadencias huérfanas al borrar contacto.
+- Fix D: carry-over solo si fecha era HOY o anterior.
+- Fix E: tareas de cadencia excluidas de heurística/historial.
+- Fix F: 409 amistoso en `cadencias/asignar`.
+- Fix G servidor: `timeZone: "America/Santiago"` en 5 `toLocaleString` de servidor.
+
+### Código muerto (no borrado, candidatos a limpieza futura)
+- `getMisionesPorEmpresa` e `insertMision` en `lib/queries.ts`: sin consumidores.
+
+### SQL viejo sin confirmar (arrastrado de sesiones anteriores)
+- `UPDATE contactos SET nombre = NULL WHERE cargo = nombre AND verificado = false;`
+  — el usuario nunca confirmó haberlo ejecutado. Verificar si sigue siendo relevante.
+
+### CRÍTICO PENDIENTE — Rotar `service_role` key de Supabase
+- La key quedó expuesta en `.claude/settings.local.json` (ya gitignoreado).
+- La key sigue en el historial de git. **Debe rotarse en Supabase dashboard →
+  Project Settings → API → Reset service_role key**, luego actualizar `.env.local`
+  y las variables de entorno en Vercel.
