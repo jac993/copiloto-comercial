@@ -74,10 +74,26 @@ export async function POST(req: NextRequest) {
       .from("interacciones")
       .update({ resuelta: true, no_realizada: false })
       .eq("id", tarea_id)
-      .eq("resuelta", false)
+      // Filas antiguas (previas a agregar la columna) tienen resuelta=NULL, no
+      // false. En PostgreSQL NULL != false, así que .eq("resuelta", false) NO
+      // las matcheaba: el UPDATE afectaba 0 filas pero igual retornábamos
+      // ok:true, la UI la tachaba en verde y al próximo GET reaparecía como
+      // vencida. .or(...) captura NULL Y false y mantiene la idempotencia
+      // (una fila ya resuelta=true no vuelve a matchear → no reavanza cadencia).
+      .or("resuelta.is.null,resuelta.eq.false")
       .select("cadencia_asignacion_id, tipo");
 
-    const fila = updated?.[0];
+    // Si no se afectó ninguna fila, el UPDATE no encontró la tarea pendiente
+    // (id inexistente o ya resuelta por un request previo). No mentir ok:true:
+    // el frontend debe saber que la BD no cambió para no tachar en falso.
+    if (!updated || updated.length === 0) {
+      return NextResponse.json(
+        { ok: false, motivo: "no_actualizada" },
+        { status: 409 }
+      );
+    }
+
+    const fila = updated[0];
     // Hook de cadencias: si esta tarea (y no un request duplicado) pertenece
     // a una cadencia, generar la tarea del siguiente paso con los canales
     // disponibles del momento (o cerrar la asignación si se agotó).
