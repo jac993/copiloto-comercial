@@ -1227,8 +1227,10 @@ function ResultadoBtn({
 // ── Tarjeta de tarea pendiente ───────────────────────────────
 
 function formatearVencimiento(fechaIso: string): { texto: string; color: string } {
-  const hoyStr = new Date().toISOString().split("T")[0];
-  const mananaStr = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+  // Hoy/mañana en huso Chile, no UTC: con toISOString() el texto "Venció"
+  // aparecia de noche (hora Chile) en tareas que aun eran de hoy.
+  const hoyStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
+  const mananaStr = new Date(Date.now() + 86400000).toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
 
   const soloFecha = fechaIso.split("T")[0];
   const tieneHora = fechaIso.includes("T");
@@ -1279,7 +1281,11 @@ function TareaCard({
   onNoRealizada?: () => void;
   mensajeVerificacion?: string | null;
 }) {
-  const hoy = new Date().toISOString().split("T")[0];
+  // "Hoy" en huso horario de Chile, no UTC. Con toISOString() (UTC) despues
+  // de las ~20:00 hora Chile el dia ya avanzaba y las tareas de hoy pasaban a
+  // mostrarse como vencidas. en-CA da formato YYYY-MM-DD, comparable con
+  // proximo_paso_fecha, y consistente con el resto del componente.
+  const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
   const vencida = tarea.proximo_paso_fecha < hoy;
   const esHoy = tarea.proximo_paso_fecha.startsWith(hoy);
   const { texto: textoVencimiento, color: colorVencimiento } = formatearVencimiento(tarea.proximo_paso_fecha);
