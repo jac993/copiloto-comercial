@@ -790,7 +790,7 @@ export function HoyClient() {
                     onNoRealizada={() => marcarNoRealizada(t)}
                     mensajeVerificacion={
                       mensajeVerificacionId === t.id
-                        ? "Registra una interacción hoy para confirmar"
+                        ? "Para marcar esta tarea como hecha, primero registra el contacto de hoy en la ficha de la empresa."
                         : null
                     }
                     onFechaChange={(nuevaFecha) =>
