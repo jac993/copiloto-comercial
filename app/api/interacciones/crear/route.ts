@@ -106,7 +106,13 @@ export async function POST(req: NextRequest) {
         .eq("empresa_id", empresa_id)
         .neq("resuelta", true)           // captura false Y null heredados
         .neq("id", interaccion.id)       // excluir la recién creada
-        .is("proximo_paso", null)        // NUNCA auto-resolver tareas con seguimiento; solo mensajes de espera
+        // Solo cerrar mensajes de espera tipo alerta (whatsapp/email/linkedin):
+        // al registrar una interacción nueva, esos mensajes previos ya no esperan
+        // respuesta. Antes se filtraba .is("proximo_paso", null) para no tocar
+        // tareas con seguimiento, pero eso dejaba ABIERTAS las alertas de mensajes
+        // que sí tenían proximo_paso (auto-tarea) — Bug 2. Limitar por tipo cierra
+        // las alertas sin afectar tareas manuales (llamada/reunión) ni sin_respuesta.
+        .in("tipo", ["whatsapp", "email", "linkedin"])
         .lt("fecha", new Date().toISOString()),
       supabase
         .from("empresas")

@@ -30,12 +30,16 @@ export async function GET() {
   const limite48h = new Date(ahora - 48 * 60 * 60 * 1000).toISOString();
   const limite7d  = new Date(ahora - 10 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Obtener IDs de empresas con conversación pausada para excluirlas
-  const { data: pausadas } = await supabase
-    .from("empresas")
-    .select("id")
-    .not("conversacion_pausada_at", "is", null);
-  const idsPausadas = (pausadas ?? []).map((e) => e.id as string);
+  // Obtener IDs de empresas FUERA del pipeline activo para excluirlas:
+  // conversación pausada, o estado 'perdido' (ya no se les hace seguimiento).
+  const [{ data: pausadas }, { data: perdidas }] = await Promise.all([
+    supabase.from("empresas").select("id").not("conversacion_pausada_at", "is", null),
+    supabase.from("empresas").select("id").eq("estado", "perdido"),
+  ]);
+  const idsExcluidas = Array.from(new Set([
+    ...(pausadas ?? []).map((e) => e.id as string),
+    ...(perdidas ?? []).map((e) => e.id as string),
+  ]));
 
   let query = supabase
     .from("interacciones")
@@ -49,8 +53,8 @@ export async function GET() {
     .gt("fecha", limite7d)
     .order("fecha", { ascending: false });
 
-  if (idsPausadas.length > 0) {
-    query = query.not("empresa_id", "in", `(${idsPausadas.join(",")})`);
+  if (idsExcluidas.length > 0) {
+    query = query.not("empresa_id", "in", `(${idsExcluidas.join(",")})`);
   }
 
   const { data, error } = await query;
