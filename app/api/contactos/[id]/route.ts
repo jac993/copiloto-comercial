@@ -12,7 +12,7 @@ export async function PATCH(
 ) {
   try {
     const body = await req.json() as Record<string, unknown>;
-    const { nombre, cargo, area, email, telefono, linkedin_url, notas_ia, verificado } = body;
+    const { nombre, cargo, area, email, telefono, linkedin_url, notas_ia, verificado, es_decisor } = body;
 
     const cambios: ContactoUpdate = {};
     if (typeof nombre       === "string")  cambios.nombre       = nombre;
@@ -23,6 +23,8 @@ export async function PATCH(
     if (typeof linkedin_url === "string")  cambios.linkedin_url = linkedin_url || null;
     if (typeof notas_ia     === "string")  cambios.notas_ia     = notas_ia     || null;
     if (typeof verificado   === "boolean") cambios.verificado   = verificado;
+    // Derivación: el contacto resultó no ser el decisor y derivó a otra persona
+    if (typeof es_decisor   === "boolean") cambios.es_decisor   = es_decisor;
 
     if (Object.keys(cambios).length === 0) {
       return NextResponse.json({ error: "Sin campos para actualizar" }, { status: 400 });

@@ -1,9 +1,11 @@
 // =============================================================
 // POST /api/tareas/completar
 // Marca una tarea/prioridad como completada.
-// - manual: requiere una interacción real hoy que pruebe el contacto.
-// - ia (prioridad vencida): vincula la interacción real de hoy; si no hay y
-//   el vendedor confirma con confirmar_sin_registro:true, crea un stub.
+// Ambos orígenes: si no hay interacción real hoy, la UI pregunta "¿Realizaste
+// este contacto hoy?" y reenvía con confirmar_sin_registro:true → se crea un
+// stub de interacción para que el contacto cuente en las métricas del día.
+// - manual: marca interacciones.resuelta=true (+ stub si fue confirmación).
+// - ia (prioridad vencida): vincula la interacción real de hoy o el stub.
 // Body: { tarea_id, empresa_id, origen:'manual'|'ia', confirmar_sin_registro? }
 // Response: { ok:true } | { ok:false, motivo:'sin_interaccion'|'no_actualizada' }
 // =============================================================
@@ -65,9 +67,11 @@ export async function POST(req: NextRequest) {
   const hayInteraccion = !!(interacciones && interacciones.length > 0);
 
   if (origen === "manual") {
-    // Manual: el botón "Hecho" SIEMPRE requiere una interacción real hoy que
-    // pruebe el contacto. Sin ella no se marca (la UI pide registrarla).
-    if (!hayInteraccion) {
+    // Manual sin interacción real hoy: igual que en la rama IA, la UI abre el
+    // diálogo "¿Realizaste este contacto hoy?". Solo se marca si el vendedor
+    // confirma explícitamente (confirmar_sin_registro) — en ese caso se crea
+    // un stub más abajo para que el contacto cuente en las métricas del día.
+    if (!hayInteraccion && !confirmar_sin_registro) {
       return NextResponse.json({ ok: false, motivo: "sin_interaccion" });
     }
 
@@ -90,7 +94,7 @@ export async function POST(req: NextRequest) {
       // vencida. .or(...) captura NULL Y false y mantiene la idempotencia
       // (una fila ya resuelta=true no vuelve a matchear → no reavanza cadencia).
       .or("resuelta.is.null,resuelta.eq.false")
-      .select("cadencia_asignacion_id, tipo");
+      .select("cadencia_asignacion_id, tipo, proximo_paso");
 
     // Si no se afectó ninguna fila, el UPDATE no encontró la tarea pendiente
     // (id inexistente o ya resuelta por un request previo). No mentir ok:true:
@@ -103,6 +107,22 @@ export async function POST(req: NextRequest) {
     }
 
     const fila = updated[0];
+
+    // Confirmación sin registro: crear el stub DESPUÉS del update condicional
+    // (si el update afectó 0 filas ya retornamos 409 — un doble-tap no puede
+    // crear dos stubs). Si el stub falla, la tarea igual quedó resuelta: solo
+    // se pierde el contacto en la métrica del día, no rompemos el flujo.
+    if (!hayInteraccion && confirmar_sin_registro) {
+      try {
+        await crearStubInteraccion(
+          empresa_id,
+          (fila.proximo_paso as string | null) ?? "llamada"
+        );
+      } catch (e) {
+        console.error("[STUB_CONFIRMAR_MANUAL]", e instanceof Error ? e.message : e);
+      }
+    }
+
     // Hook de cadencias: si esta tarea (y no un request duplicado) pertenece
     // a una cadencia, generar la tarea del siguiente paso con los canales
     // disponibles del momento (o cerrar la asignación si se agotó).

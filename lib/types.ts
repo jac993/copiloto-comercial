@@ -474,6 +474,11 @@ export interface PanoramaFila {
   // Texto corto que describe qué pasa con esta cuenta, según la causa
   // del semáforo (ej: "Rodrigo espera tu respuesta hace 3 días")
   mensaje_accion: string;
+  // Historial acumulado: total de interacciones con la empresa y desglose
+  // por contacto (los 3 con más interacciones), para la línea
+  // "12 interacciones · Juan (8) · María (4)" en Panorama.
+  total_interacciones: number;
+  interacciones_por_contacto: { nombre: string; count: number }[];
 }
 
 // Interacción cuyo plazo de respuesta de 48h ya venció — usada por la API /vencidas

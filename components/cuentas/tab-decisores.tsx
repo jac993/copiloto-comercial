@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2, CheckCheck, ShieldCheck, ChevronDown } from "lucide-react";
+import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2, CheckCheck, ShieldCheck, ChevronDown, CornerUpRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -207,6 +207,61 @@ function ContactoCard({
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [guardandoOtro, setGuardandoOtro] = useState(false);
   const [errorOtro, setErrorOtro] = useState<string | null>(null);
+  // Derivación: este contacto dijo que no es la persona a cargo y derivó a otra
+  const [derivando, setDerivando] = useState(false);
+  const [nombreDerivado, setNombreDerivado] = useState("");
+  const [guardandoDerivacion, setGuardandoDerivacion] = useState(false);
+  const [errorDerivacion, setErrorDerivacion] = useState<string | null>(null);
+
+  // "Me derivó a otra persona": crea a la persona nueva como decisor del mismo
+  // cargo/área, desmarca es_decisor del contacto original y deja rastro de la
+  // derivación en sus notas (primera línea, visible en la card).
+  const derivarA = async () => {
+    if (!nombreDerivado.trim() || !empresaId) return;
+    setGuardandoDerivacion(true);
+    setErrorDerivacion(null);
+    try {
+      // 1. Crear la persona nueva PRIMERO (si falla, no se tocó al original)
+      const res = await fetch("/api/contactos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          nombre:     nombreDerivado.trim(),
+          cargo:      datos.cargo,
+          area:       datos.area,
+          es_decisor: true,
+        }),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar");
+      const nuevo = (await res.json()) as Contacto;
+
+      // 2. Desmarcar al original y registrar la derivación en sus notas
+      const fechaStr = new Date().toLocaleDateString("es-CL", {
+        day: "numeric", month: "short", year: "numeric", timeZone: "America/Santiago",
+      });
+      const nota = `↪ Derivó a ${nombreDerivado.trim()} — ${fechaStr}`;
+      const resPatch = await fetch(`/api/contactos/${datos.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          es_decisor: false,
+          notas_ia: datos.notas_ia ? `${nota}\n${datos.notas_ia}` : nota,
+        }),
+      });
+      if (!resPatch.ok) throw new Error("No se pudo actualizar");
+      const actualizado = (await resPatch.json()) as Contacto;
+
+      setDatos(actualizado);
+      onContactoAgregado?.(nuevo);
+      setNombreDerivado("");
+      setDerivando(false);
+    } catch {
+      setErrorDerivacion("Error al registrar la derivación. Intenta de nuevo.");
+    } finally {
+      setGuardandoDerivacion(false);
+    }
+  };
 
   const guardarOtro = async () => {
     if (!nuevoNombre.trim() || !empresaId) return;
@@ -520,11 +575,59 @@ function ContactoCard({
             </div>
           ) : (
             <button
-              onClick={() => setAgregandoOtro(true)}
+              onClick={() => { setAgregandoOtro(true); setDerivando(false); }}
               className="w-full mt-2 text-xs text-muted-foreground hover:text-primary flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-border hover:border-primary transition-colors"
             >
               <UserPlus className="h-3 w-3" />
               + Agregar otro con este cargo
+            </button>
+          )
+        )}
+
+        {/* Botón "Me derivó a otra persona" — el contacto dijo no ser quien
+            decide. Crea a la persona correcta como decisor y desmarca a este. */}
+        {empresaId && onContactoAgregado && (
+          derivando ? (
+            <div className="mt-2 space-y-2 border-t border-dashed border-border pt-2">
+              <p className="text-[11px] text-muted-foreground">
+                Se agregará como decisor con el mismo cargo, y {datos.nombre ?? "este contacto"} dejará de aparecer como decisor.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="¿A quién te derivó? *"
+                  value={nombreDerivado}
+                  onChange={(e) => setNombreDerivado(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void derivarA();
+                    if (e.key === "Escape") { setDerivando(false); setNombreDerivado(""); setErrorDerivacion(null); }
+                  }}
+                  className="flex-1 h-8 px-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  autoFocus
+                />
+                <button
+                  onClick={() => void derivarA()}
+                  disabled={!nombreDerivado.trim() || guardandoDerivacion}
+                  className="h-8 px-3 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-50 flex items-center"
+                >
+                  {guardandoDerivacion ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓"}
+                </button>
+                <button
+                  onClick={() => { setDerivando(false); setNombreDerivado(""); setErrorDerivacion(null); }}
+                  className="h-8 px-2 rounded-lg border border-border text-muted-foreground text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              {errorDerivacion && <p className="text-xs text-red-500">{errorDerivacion}</p>}
+            </div>
+          ) : (
+            <button
+              onClick={() => { setDerivando(true); setAgregandoOtro(false); }}
+              className="w-full mt-2 text-xs text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-border hover:border-amber-400 transition-colors"
+            >
+              <CornerUpRight className="h-3 w-3" />
+              Me derivó a otra persona
             </button>
           )
         )}

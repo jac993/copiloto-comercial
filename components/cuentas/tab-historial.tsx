@@ -120,17 +120,29 @@ function esProspectoMsg(i: Interaccion): boolean {
   return i.remitente === "prospecto" || TEXTOS_RESOLUCION.has(i.transcripcion ?? "");
 }
 
-// Marcadores de sistema que NO son conversación real: stubs de estado/tarea
-// ("Llamada sin respuesta", "Sin respuesta tras 48h"). Se ocultan del historial
-// de la ficha — la tarea ya vive en Hoy y el registro sigue en métricas. El
-// vendedor ve aquí solo conversaciones reales, aunque lleven proximo_paso.
-const MARCADORES_OCULTAR = new Set(["Llamada sin respuesta", "Sin respuesta tras 48h"]);
+// Marcadores de sistema que NO son conversación real y se OCULTAN del
+// historial: filas vacías (stubs de métricas del botón "✓ Hecho") y
+// "Sin respuesta tras 48h" standalone (stub de tarea, sin parent_id).
+// OJO: "Llamada sin respuesta" NO va aquí — el vendedor la ingresa a mano
+// desde el sheet ("No contestó") y ocultarla parecía pérdida de datos
+// (regresión de bc611ab). Se muestra como evento compacto de sistema.
+const MARCADORES_OCULTAR = new Set(["Sin respuesta tras 48h"]);
+const MARCADOR_LLAMADA_SIN_RESPUESTA = "Llamada sin respuesta";
+
 function esStubDeTarea(i: Interaccion): boolean {
   if (i.parent_id) return false;
   const t = (i.transcripcion ?? "").trim();
   const sinResumen = !(i.resumen_ia ?? "").trim();
   // Sin resumen de IA y cuyo único "texto" es vacío o un marcador de sistema.
   return sinResumen && (t === "" || MARCADORES_OCULTAR.has(t));
+}
+
+// Registro real del vendedor pero sin contenido conversacional: se renderiza
+// como línea de evento (📞 Llamada sin respuesta · fecha), no como burbuja.
+function esEventoSistema(i: Interaccion): boolean {
+  if (i.parent_id) return false;
+  const t = (i.transcripcion ?? "").trim();
+  return !(i.resumen_ia ?? "").trim() && t === MARCADOR_LLAMADA_SIN_RESPUESTA;
 }
 
 // ── Data model ────────────────────────────────────────────────
@@ -591,7 +603,9 @@ function TarjetaHilo({
   const contacto = contactos.find((c) => c.id === hilo.contactoId);
   const tieneAlgunEliminado = hilo.todosLosIds.some((id) => eliminandoIds.has(id));
 
-  const ultimoMsj = [...hilo.todosMensajes].reverse().find((m) => !esProspectoMsg(m)) ?? null;
+  // Excluye eventos de sistema: sus badges (sentimiento neutro) no deben
+  // pisar el encabezado del hilo.
+  const ultimoMsj = [...hilo.todosMensajes].reverse().find((m) => !esProspectoMsg(m) && !esEventoSistema(m)) ?? null;
   const badgeConf = ultimoMsj?.badge_estado ? BADGE_CONF[ultimoMsj.badge_estado] : null;
   const sentimientoConf =
     ultimoMsj?.sentimiento && ultimoMsj.sentimiento !== "sin_respuesta"
@@ -905,6 +919,29 @@ function TarjetaHilo({
               const estaBorrando = eliminandoMsgId === msg.id;
               const estaEditando = editandoMsg?.id === msg.id;
               const msgFecha = fechaCorta(msg.fecha, msg.creado_en);
+
+              if (esEventoSistema(msg)) {
+                // ── Evento de sistema (centrado, compacto) ──
+                // Registro real del vendedor sin contenido de conversación.
+                return (
+                  <div key={msg.id} className="flex items-center justify-center gap-1.5 py-0.5 group">
+                    <p className="text-[11px] text-muted-foreground bg-muted/60 border border-border/50 rounded-full px-3 py-1">
+                      📞 Llamada sin respuesta · {msgFecha}
+                    </p>
+                    <button
+                      onClick={() => solicitarEliminarMensaje(msg.id)}
+                      disabled={estaBorrando}
+                      title="Eliminar registro"
+                      className="shrink-0 h-6 w-6 rounded-full flex items-center justify-center opacity-30 sm:opacity-0 sm:group-hover:opacity-100 hover:opacity-100 hover:bg-destructive/10 transition-opacity disabled:opacity-20"
+                    >
+                      {estaBorrando
+                        ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                        : <Trash2 className="h-3 w-3 text-destructive/70" />
+                      }
+                    </button>
+                  </div>
+                );
+              }
 
               if (esProsp) {
                 // ── Burbuja prospecto (izquierda) ──

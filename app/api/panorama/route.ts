@@ -112,6 +112,21 @@ export async function GET() {
     }
   }
 
+  // Conteo de interacciones por empresa y por contacto ("cuántas llevo y
+  // con quiénes"). Cuenta TODO el historial — la query 2 ya lo trae completo.
+  const conteoPorEmpresa = new Map<string, number>();
+  const conteoPorContacto = new Map<string, Map<string, number>>(); // eid → (contacto_id → n)
+  for (const r of interaccionesRaw ?? []) {
+    const eid = r.empresa_id as string;
+    conteoPorEmpresa.set(eid, (conteoPorEmpresa.get(eid) ?? 0) + 1);
+    const cid = r.contacto_id as string | null;
+    if (cid) {
+      const sub = conteoPorContacto.get(eid) ?? new Map<string, number>();
+      sub.set(cid, (sub.get(cid) ?? 0) + 1);
+      conteoPorContacto.set(eid, sub);
+    }
+  }
+
   // Tarea pendiente más cercana por empresa
   const tareaPorEmpresa = new Map<string, { texto: string; fecha: string }>();
   for (const r of tareasRaw ?? []) {
@@ -136,12 +151,14 @@ export async function GET() {
     }
   }
 
-  // Nombres de contactos de las últimas interacciones y de las vencidas (solo los necesarios)
+  // Nombres de contactos: últimas interacciones, vencidas y el desglose
+  // de conteos por contacto (una sola query .in con todos los necesarios)
   const contactoIds = Array.from(
     new Set(
       [
         ...Array.from(ultimaPorEmpresa.values()).map((u) => u.contacto_id),
         ...Array.from(vencidaPorEmpresa.values()).map((v) => v.contacto_id),
+        ...Array.from(conteoPorContacto.values()).flatMap((sub) => Array.from(sub.keys())),
       ].filter((id): id is string => !!id)
     )
   );
@@ -196,6 +213,12 @@ export async function GET() {
 
     const meddic = e.meddic as MeddicData | null;
 
+    // Desglose por contacto: los 3 con más interacciones, nombre resuelto
+    const porContacto = Array.from(conteoPorContacto.get(eid)?.entries() ?? [])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cid, count]) => ({ nombre: contactosMap.get(cid) ?? "Sin nombre", count }));
+
     return {
       empresa_id: eid,
       nombre: e.nombre as string,
@@ -212,6 +235,8 @@ export async function GET() {
       proxima_tarea: tarea,
       semaforo,
       mensaje_accion: mensaje,
+      total_interacciones: conteoPorEmpresa.get(eid) ?? 0,
+      interacciones_por_contacto: porContacto,
     };
   });
 

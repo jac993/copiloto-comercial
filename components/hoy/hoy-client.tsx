@@ -332,16 +332,9 @@ export function HoyClient() {
       if (data.ok) {
         aplicarTareaHecha(t);
       } else if (data.motivo === "sin_interaccion") {
-        if (t.origen === "ia") {
-          // Vencida IA sin registro hoy: en vez del aviso bloqueante, preguntar
-          // si realizó el contacto. "Sí" crea un stub; "No" la marca no realizada.
-          setConfirmarContacto(t);
-        } else {
-          mostrarMensajeTarea(
-            t.id,
-            "Para marcar esta tarea como hecha, primero registra el contacto de hoy en la ficha de la empresa."
-          );
-        }
+        // Sin registro hoy (manual o IA): en vez del aviso bloqueante, preguntar
+        // si realizó el contacto. "Sí" crea un stub; "No" la marca no realizada.
+        setConfirmarContacto(t);
       } else if (data.motivo === "no_actualizada") {
         // El UPDATE no afectó ninguna fila (409 desde /api/tareas/completar):
         // la BD no cambió, así que avisamos en vez de tachar en falso.
@@ -356,8 +349,8 @@ export function HoyClient() {
   }
 
   // El vendedor confirmó en el diálogo que sí realizó el contacto de una tarea
-  // IA vencida sin registro previo. Reenvía con confirmar_sin_registro:true
-  // para que el backend cree el stub y marque la prioridad como completada.
+  // (manual o IA) sin registro previo. Reenvía con confirmar_sin_registro:true
+  // para que el backend cree el stub y marque la tarea como completada.
   async function confirmarContactoRealizado(t: TareaPendiente) {
     setMarcandoId(t.id);
     try {
@@ -367,7 +360,7 @@ export function HoyClient() {
         body: JSON.stringify({
           tarea_id: t.id,
           empresa_id: t.empresa_id,
-          origen: "ia",
+          origen: t.origen === "ia" ? "ia" : "manual",
           confirmar_sin_registro: true,
         }),
       });

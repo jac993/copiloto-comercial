@@ -249,6 +249,18 @@ export default function PanoramaPage() {
                       {color === "verde" && <>✓ {f.mensaje_accion}</>}
                     </div>
                     <div className="meta">{metaUltimoContacto(f)}</div>
+                    {/* Historial acumulado: cuántas interacciones y con quiénes */}
+                    {f.total_interacciones > 0 && (
+                      <div className="meta">
+                        {f.total_interacciones}{" "}
+                        {f.total_interacciones === 1 ? "interacción" : "interacciones"}
+                        {f.interacciones_por_contacto.length > 0 &&
+                          " · " +
+                            f.interacciones_por_contacto
+                              .map((c) => `${c.nombre} (${c.count})`)
+                              .join(" · ")}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

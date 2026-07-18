@@ -40,8 +40,17 @@ const API_LABELS: Record<string, { label: string; color: string }> = {
   whisper:    { label: "Whisper (OpenAI)",   color: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300" },
 };
 
+// Cards de resumen: montos mensuales redondeados a centavos — mismo formato
+// y mismo ancho en todas las cards para que los números queden alineados.
+function formatUsdResumen(value: number) {
+  if (value === 0) return "$0.00";
+  if (value < 0.01) return "< $0.01";
+  return `$${value.toFixed(2)}`;
+}
+
+// Tabla de llamadas: costos unitarios ínfimos, 4 decimales fijos.
 function formatUsd(value: number) {
-  if (value < 0.001) return "< $0.001";
+  if (value > 0 && value < 0.0001) return "< $0.0001";
   return `$${value.toFixed(4)}`;
 }
 
@@ -89,11 +98,14 @@ export function CostosPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Cards de APIs + Total */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <div className="col-span-2 md:col-span-1 rounded-2xl bg-[#F97316] text-white p-4 shadow-sm shadow-orange-400/30 flex flex-col justify-between min-h-[100px]">
+      {/* Cards de APIs + Total. Misma estructura y tamaño de número en TODAS
+          (antes el total usaba text-3xl + justify-between y los montos quedaban
+          a alturas distintas → "casillas descuadradas"). En pantallas < lg el
+          total ocupa la fila completa y las 4 APIs quedan en 2x2 parejas. */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="col-span-2 lg:col-span-1 rounded-2xl bg-[#F97316] text-white p-4 shadow-sm shadow-orange-400/30 min-h-[100px]">
           <p className="text-xs font-medium opacity-80 uppercase tracking-wide">Total del mes</p>
-          <p className="text-3xl font-bold mt-2">{formatUsd(data.totalMes)}</p>
+          <p className="text-2xl font-bold tabular-nums mt-2">{formatUsdResumen(data.totalMes)}</p>
           <p className="text-xs opacity-70 mt-1">{data.totalLlamadas > 0 ? `${data.totalLlamadas} llamadas` : "Sin datos aún"}</p>
         </div>
 
@@ -101,10 +113,10 @@ export function CostosPanel() {
           const datos = resumenMap.get(api);
           const meta = API_LABELS[api];
           return (
-            <div key={api} className="rounded-2xl bg-white dark:bg-card border border-border p-4 shadow-sm flex flex-col justify-between min-h-[100px]">
+            <div key={api} className="rounded-2xl bg-white dark:bg-card border border-border p-4 shadow-sm min-h-[100px]">
               <p className="text-xs text-muted-foreground font-medium">{meta.label}</p>
-              <p className="text-2xl font-bold text-foreground mt-2">
-                {datos ? formatUsd(datos.total_usd) : "$0"}
+              <p className="text-2xl font-bold text-foreground tabular-nums mt-2">
+                {datos ? formatUsdResumen(datos.total_usd) : "$0.00"}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {datos ? `${datos.llamadas} llamadas` : "Sin uso este mes"}
@@ -170,16 +182,16 @@ export function CostosPanel() {
                       <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
                         {row.endpoint ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right text-xs text-muted-foreground hidden md:table-cell">
+                      <td className="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums hidden md:table-cell">
                         {row.input_tokens?.toLocaleString("es-CL") ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right text-xs text-muted-foreground hidden md:table-cell">
+                      <td className="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums hidden md:table-cell">
                         {row.output_tokens?.toLocaleString("es-CL") ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right text-xs text-muted-foreground hidden md:table-cell">
+                      <td className="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums hidden md:table-cell">
                         {row.audio_seconds != null ? row.audio_seconds.toFixed(1) : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-foreground">
+                      <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">
                         {row.costo_usd != null ? formatUsd(row.costo_usd) : "—"}
                       </td>
                     </tr>
