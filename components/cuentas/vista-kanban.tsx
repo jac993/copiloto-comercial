@@ -429,11 +429,20 @@ function KanbanCardStatic({
   const dotColor = tecnica ? (TECNICA_DOT[tecnica] ?? "bg-gray-300") : "bg-gray-300";
   const reac = esPerdido ? labelReactivacion(empresa.fecha_reactivacion) : null;
 
+  const cardBorderFondo =
+    empresa.estado === "ganado"
+      ? "border-l-[3px] border-l-[#22C55E] bg-green-50/60 dark:bg-green-900/10 border-t border-r border-b border-border"
+      : empresa.estado === "perdido"
+      ? "border-l-[3px] border-l-gray-300 dark:border-l-gray-600 bg-gray-50/60 dark:bg-gray-900/20 opacity-70 border-t border-r border-b border-border"
+      : vencida
+      ? "border border-red-300 dark:border-red-800/50"
+      : "border border-border";
+
   return (
     <div
-      className={`relative group rounded-xl border bg-card p-3 cursor-pointer
+      className={`relative group rounded-xl bg-card p-3 cursor-pointer
         hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98]
-        ${vencida ? "border-red-300 dark:border-red-800/50" : "border-border"}
+        ${cardBorderFondo}
         ${isOverlay ? "shadow-lg rotate-1 scale-105" : ""}`}
       onClick={() => !isOverlay && router.push(`/cuentas/${empresa.id}`)}
     >

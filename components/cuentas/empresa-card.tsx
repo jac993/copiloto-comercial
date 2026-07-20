@@ -86,9 +86,16 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
   const iniciales = getIniciales(empresa.nombre);
   const avatarColor = getAvatarColor(empresa.score_prioridad);
 
+  const cardBorderFondo =
+    empresa.estado === "ganado"
+      ? "border-l-[3px] border-l-[#22C55E] hover:border-l-[#22C55E]"
+      : empresa.estado === "perdido"
+      ? "border-l-[3px] border-l-gray-300 dark:border-l-gray-600 opacity-75 hover:border-l-gray-300"
+      : "";
+
   return (
     <Link href={`/cuentas/${empresa.id}`} className="block">
-      <Card className="border hover:border-primary/30 hover:shadow-md transition-all active:scale-[0.98]">
+      <Card className={`border hover:border-primary/30 hover:shadow-md transition-all active:scale-[0.98] ${cardBorderFondo}`}>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             {/* Avatar con iniciales */}

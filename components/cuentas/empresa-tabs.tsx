@@ -134,10 +134,17 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
     }
   };
 
+  const headerBg =
+    empresa.estado === "ganado"
+      ? "bg-[#22C55E]"
+      : empresa.estado === "perdido"
+      ? "bg-gray-600 dark:bg-gray-700"
+      : "gradient-hoy";
+
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Header con gradiente */}
-      <div className="gradient-hoy px-5 pt-4 pb-6 relative">
+      {/* Header: gradiente violeta en pipeline activo, verde en ganado, gris en perdido */}
+      <div className={`${headerBg} px-5 pt-4 pb-6 relative`}>
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => router.back()}
