@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Sun, Zap, Target, TrendingUp, RefreshCw,
-  ChevronRight, ChevronDown, Building2, AlertCircle, CheckCircle2,
+  ChevronDown, AlertCircle, CheckCircle2,
   XCircle, MinusCircle, ClipboardCheck, Loader2, Pencil,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -113,26 +113,6 @@ function esFinDeSemanaCl(): boolean {
   return diaSemanaCl === 0 || diaSemanaCl === 6;
 }
 
-// ── Colores de urgencia ──────────────────────────────────────
-
-const URGENCIA_CONFIG = {
-  alta: {
-    badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    borde: "border-l-4 border-l-red-500",
-    label: "Urgente",
-  },
-  media: {
-    badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    borde: "border-l-4 border-l-amber-400",
-    label: "Esta semana",
-  },
-  baja: {
-    badge: "bg-muted text-muted-foreground",
-    borde: "border-l-4 border-l-border",
-    label: "Cuando puedas",
-  },
-};
-
 // ── Componente principal ─────────────────────────────────────
 
 export function HoyClient() {
@@ -144,16 +124,15 @@ export function HoyClient() {
   const [errorPrioridades, setErrorPrioridades] = useState<string | null>(null);
   const [cacheTimestamp, setCacheTimestamp] = useState<string | null>(null);
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
-  // Tracks el ID (prioridades_diarias.id) del item de IA marcándose
-  const [marcandoPrioridadId, setMarcandoPrioridadId] = useState<string | null>(null);
   // Prioridades vencidas de días anteriores (prioridades_diarias con fecha < hoy y completada=false)
   const [prioridadesVencidasIA, setPrioridadesVencidasIA] = useState<TareaPendiente[]>([]);
-  const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "hoy" | "todas" | "realizadas">("hoy");
+  // Sub-pestañas simplificadas: Vencidas / Tareas (hoy+futuras) / Realizadas.
+  const [filtroTareas, setFiltroTareas] = useState<"vencidas" | "tareas" | "realizadas">("tareas");
+  // Máximo 10 tareas visibles por pill; "Ver más" despliega el resto.
+  const [mostrarTodas, setMostrarTodas] = useState(false);
   // Tareas marcadas "Hecho" en esta sesión: quedan tachadas en su lugar
   // (verde) hasta el próximo GET, que las mueve a la pestaña "Realizadas".
   const [tareasHechasVisual, setTareasHechasVisual] = useState<Set<string>>(new Set());
-  // noRealizadasVisual eliminado: las tareas manuales desaparecen del estado inmediatamente al marcar "No realizada"
-  const [prioridadesNoRealizadasVisual, setPrioridadesNoRealizadasVisual] = useState<Set<string>>(new Set());
   const [marcandoNoRealizadaId, setMarcandoNoRealizadaId] = useState<string | null>(null);
   // Aviso inline bajo una tarea: guarda id + texto para mostrar mensajes
   // distintos por motivo (sin_interaccion, no_actualizada). Antes solo
@@ -379,29 +358,6 @@ export function HoyClient() {
     }
   }
 
-  // Marca como hecha una prioridad de HOY. Usa prioridad_id para actualizar
-  // prioridades_diarias; el coaching de fin de día vive en "Reportar mi día".
-  async function marcarHechaPrioridad(p: PrioridadIA) {
-    const key = p.id ?? p.empresa_id; // fallback a empresa_id si la tabla no existe aún
-    setMarcandoPrioridadId(key);
-    try {
-      const body = p.id
-        ? { prioridad_id: p.id }
-        : { empresa_id: p.empresa_id, accion_sugerida: p.accion_sugerida };
-      const res = await fetch("/api/prioridades/completar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        prioridadesResueltasRef.current.add(key);
-        setPrioridades((prev) => prev.filter((x) => (x.id ?? x.empresa_id) !== key));
-      }
-    } finally {
-      setMarcandoPrioridadId(null);
-    }
-  }
-
   // Marca una tarea/prioridad como "No realizada" — permanece tachada ese día,
   // desaparece en el próximo GET (resuelta/completada=true filtra del servidor).
   async function marcarNoRealizada(t: TareaPendiente) {
@@ -416,8 +372,10 @@ export function HoyClient() {
       const data = await res.json() as { ok: boolean };
       if (data.ok) {
         if (t.origen === "ia") {
-          // Vencida de IA: sacar de la lista y prevenir que el próximo GET la reviva
+          // IA (hoy o vencida): sacar de ambas listas y prevenir que el próximo
+          // GET la reviva. La de hoy vive en `prioridades`; la vencida en `prioridadesVencidasIA`.
           prioridadesResueltasRef.current.add(t.id);
+          setPrioridades((prev) => prev.filter((x) => (x.id ?? "") !== t.id));
           setPrioridadesVencidasIA((prev) => prev.filter((x) => x.id !== t.id));
         } else {
           // Tarea manual: sacar de la lista y prevenir que el próximo GET la reviva
@@ -428,28 +386,6 @@ export function HoyClient() {
               : prev
           );
         }
-      }
-    } finally {
-      setMarcandoNoRealizadaId(null);
-    }
-  }
-
-  // Marca una prioridad de HOY (PrioridadCard) como "No realizada".
-  async function marcarNoRealizadaPrioridad(p: PrioridadIA) {
-    if (!p.id) return;
-    setMarcandoNoRealizadaId(p.id);
-    try {
-      const res = await fetch("/api/tareas/no-realizada", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tarea_id: p.id, origen: "ia" }),
-      });
-      const data = await res.json() as { ok: boolean };
-      if (data.ok) {
-        // Mostrar visualmente como "no realizada" hasta el próximo GET
-        setPrioridadesNoRealizadasVisual((prev) => new Set(Array.from(prev).concat(p.id!)));
-        // Agregar al ref para que el próximo GET no la resucite
-        prioridadesResueltasRef.current.add(p.id!);
       }
     } finally {
       setMarcandoNoRealizadaId(null);
@@ -496,37 +432,60 @@ export function HoyClient() {
   const hoyStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
   const todasTareas = metricas?.tareas_pendientes ?? [];
 
+  // Prioridades de IA de HOY mapeadas al shape unificado TareaPendiente.
+  // origen:"ia" enruta Hecho/No-realizado a los endpoints que operan sobre
+  // prioridades_diarias por id (los mismos que usan las IA vencidas).
+  // fecha = hoy → caen en la pestaña "Tareas" con borde verde.
+  const iaHoyTareas: TareaPendiente[] = prioridades
+    .filter((p) => p.id != null)
+    .map((p) => ({
+      id: p.id as string,
+      empresa_id: p.empresa_id,
+      empresa_nombre: p.empresa?.nombre ?? "Empresa",
+      contacto_nombre: null,
+      proximo_paso: p.accion_sugerida,
+      proximo_paso_fecha: hoyStr,
+      origen: "ia" as const,
+      razon_ia: p.razon,
+    }));
+
+  // Lista única de pendientes: IA de hoy + manuales + IA vencidas.
+  const pendientesUnificadas = [...iaHoyTareas, ...todasTareas, ...prioridadesVencidasIA];
+
   // Tareas realizadas hoy (servidor) + las marcadas Hecho en esta sesión que
-  // aún figuran en pendientes/vencidas (evita duplicados por id).
+  // aún figuran en pendientes (evita duplicados por id).
   const realizadasServidor = metricas?.tareas_realizadas ?? [];
   const realizadasIds = new Set(realizadasServidor.map((t) => t.id));
-  const realizadasLocales = [...todasTareas, ...prioridadesVencidasIA].filter(
+  const realizadasLocales = pendientesUnificadas.filter(
     (t) => tareasHechasVisual.has(t.id) && !realizadasIds.has(t.id)
   );
   const todasRealizadas = [...realizadasLocales, ...realizadasServidor];
 
-  // Tareas que muestra el filtro activo:
-  // • Vencidas: manuales vencidas + IA vencidas mezcladas y ordenadas por fecha
-  // • Hoy: solo manuales con fecha = hoy
-  // • Todas: todas las manuales (cualquier fecha), sin IA vencidas (están en Vencidas)
-  // • Realizadas: marcadas "Hecho" hoy (manuales + IA), tachadas en verde
-  const tareasAMostrar = (() => {
-    if (filtroTareas === "vencidas") {
-      const manualVencidas = todasTareas.filter((t) => t.proximo_paso_fecha < hoyStr);
-      return [...manualVencidas, ...prioridadesVencidasIA].sort((a, b) =>
-        a.proximo_paso_fecha.localeCompare(b.proximo_paso_fecha)
-      );
-    }
-    if (filtroTareas === "hoy") return todasTareas.filter((t) => t.proximo_paso_fecha === hoyStr);
-    if (filtroTareas === "realizadas") return todasRealizadas;
-    return todasTareas; // todas (solo manuales)
-  })();
+  // Filtro por fecha, ascendente:
+  // • Vencidas: fecha < hoy (manuales + IA)
+  // • Tareas: fecha >= hoy (IA de hoy + manuales de hoy/futuras)
+  // • Realizadas: marcadas Hecho hoy
+  const porFecha = (a: TareaPendiente, b: TareaPendiente) =>
+    a.proximo_paso_fecha.localeCompare(b.proximo_paso_fecha);
+  const listaVencidas = pendientesUnificadas
+    .filter((t) => t.proximo_paso_fecha < hoyStr)
+    .sort(porFecha);
+  const listaTareas = pendientesUnificadas
+    .filter((t) => t.proximo_paso_fecha >= hoyStr)
+    .sort(porFecha);
 
-  // Incluye IA vencidas en el badge del pill "Vencidas"
-  const countVencidas =
-    todasTareas.filter((t) => t.proximo_paso_fecha < hoyStr).length +
-    prioridadesVencidasIA.length;
-  const countHoy = todasTareas.filter((t) => t.proximo_paso_fecha === hoyStr).length;
+  const tareasAMostrar =
+    filtroTareas === "vencidas" ? listaVencidas
+    : filtroTareas === "realizadas" ? todasRealizadas
+    : listaTareas;
+
+  // Máximo 10 visibles (no aplica a Realizadas: son filas de una línea).
+  const aplicaCap = filtroTareas !== "realizadas";
+  const tareasVisibles = aplicaCap && !mostrarTodas ? tareasAMostrar.slice(0, 10) : tareasAMostrar;
+  const tareasOcultas = tareasAMostrar.length - tareasVisibles.length;
+
+  const countVencidas = listaVencidas.length;
+  const countTareas = listaTareas.length;
   const countRealizadas = todasRealizadas.length;
 
   const contactos = metricas?.contactos_hoy ?? 0;
@@ -655,11 +614,11 @@ export function HoyClient() {
         <section>
           <div className="flex items-center gap-1.5 mb-3 flex-wrap">
             <Target className="h-4 w-4 text-primary shrink-0" />
-            <h2 className="font-semibold text-base shrink-0">Tareas de hoy</h2>
-            {/* Pills de filtro inline con el título */}
+            <h2 className="font-semibold text-base shrink-0">Tareas</h2>
+            {/* Pills de filtro: Vencidas / Tareas / Realizadas */}
             <div className="flex gap-1 ml-0.5">
               <button
-                onClick={() => setFiltroTareas("vencidas")}
+                onClick={() => { setFiltroTareas("vencidas"); setMostrarTodas(false); }}
                 className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
                   filtroTareas === "vencidas"
                     ? countVencidas > 0
@@ -673,31 +632,17 @@ export function HoyClient() {
                 Vencidas{countVencidas > 0 ? ` (${countVencidas})` : ""}
               </button>
               <button
-                onClick={() => setFiltroTareas("hoy")}
+                onClick={() => { setFiltroTareas("tareas"); setMostrarTodas(false); }}
                 className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                  filtroTareas === "hoy"
-                    ? countHoy > 0
-                      ? "bg-green-600 text-white border-green-600"
-                      : "bg-primary text-white border-primary"
-                    : countHoy > 0
-                      ? "bg-green-50 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                }`}
-              >
-                Hoy{countHoy > 0 ? ` (${countHoy})` : ""}
-              </button>
-              <button
-                onClick={() => setFiltroTareas("todas")}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                  filtroTareas === "todas"
+                  filtroTareas === "tareas"
                     ? "bg-primary text-white border-primary"
                     : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                 }`}
               >
-                Todas
+                Tareas{countTareas > 0 ? ` (${countTareas})` : ""}
               </button>
               <button
-                onClick={() => setFiltroTareas("realizadas")}
+                onClick={() => { setFiltroTareas("realizadas"); setMostrarTodas(false); }}
                 className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
                   filtroTareas === "realizadas"
                     ? "bg-green-600 text-white border-green-600"
@@ -710,130 +655,95 @@ export function HoyClient() {
               </button>
             </div>
             <span className="ml-auto text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full shrink-0">
-              {prioridades.length + todasTareas.length + prioridadesVencidasIA.length}
+              {countVencidas + countTareas}
             </span>
           </div>
 
-          {/* Prioridades de IA — contenido exclusivo de la pestaña "Hoy".
-              Cada pill muestra SOLO su propia información: Vencidas → vencidas,
-              Hoy → prioridades IA + tareas de hoy, Todas → tareas manuales,
-              Realizadas → lo marcado Hecho hoy. */}
-          {filtroTareas === "hoy" && (<>
-          <div className="flex items-center justify-between mb-2">
-            {cacheTimestamp && !cargandoPrioridades && prioridades.length > 0 && (
-              <p className="text-[11px] text-muted-foreground">
-                Actualizado a las {formatearHora(cacheTimestamp)}
-              </p>
-            )}
-            <Badge variant="ai" className="text-xs ml-auto">
-              <Zap className="h-3 w-3 mr-1" /> usa IA
-            </Badge>
-          </div>
-
-          {cargandoPrioridades ? (
-            <SkeletonPrioridades mensaje={autoPreparando ? "Preparando tu día..." : undefined} />
-          ) : prioridades.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="pt-8 pb-8 flex flex-col items-center text-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center">
-                  <TrendingUp className="h-8 w-8 text-muted-foreground" />
-                </div>
-                {esFinDeSemanaCl() ? (
-                  <div className="space-y-1.5 max-w-xs">
-                    <p className="font-semibold">Es fin de semana 🎉</p>
-                    <p className="text-sm text-muted-foreground">
-                      Las prioridades se generan de lunes a viernes. Si igual quieres
-                      trabajar hoy, recalcula manualmente.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-w-xs">
-                    <p className="font-semibold">Sin prioridades aún</p>
-                    <p className="text-sm text-muted-foreground">
-                      La IA analizará tus cuentas y te dirá con quién hablar hoy
-                      y por qué, en orden de oportunidad.
-                    </p>
-                  </div>
-                )}
-                {errorPrioridades && (
-                  <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2.5 max-w-xs">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    {errorPrioridades}
-                  </div>
-                )}
-                <button
-                  onClick={() => void actualizarPrioridades()}
-                  className="mt-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  ↻ Recalcular
-                </button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3 mb-1">
-              {prioridades.map((p, i) => (
-                <PrioridadCard
-                  key={p.empresa_id}
-                  prioridad={p}
-                  posicion={i + 1}
-                  marcando={marcandoPrioridadId === (p.id ?? p.empresa_id)}
-                  onMarcar={() => marcarHechaPrioridad(p)}
-                  noRealizada={prioridadesNoRealizadasVisual.has(p.id ?? "")}
-                  marcandoNoRealizada={marcandoNoRealizadaId === p.id}
-                  onNoRealizada={() => marcarNoRealizadaPrioridad(p)}
-                />
-              ))}
-              <div className="flex gap-2 mt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onClick={() => void actualizarPrioridades()}
-                  disabled={cargandoPrioridades}
-                >
-                  <Zap className="h-3.5 w-3.5" />
-                  Recalcular
-                </Button>
-                <Button
-                  size="sm"
-                  className="flex-1 gap-1.5 bg-[#22C55E] hover:bg-[#16a34a] text-white"
-                  onClick={abrirDialogReporte}
-                >
-                  <ClipboardCheck className="h-3.5 w-3.5" />
-                  Reportar mi día
-                </Button>
-              </div>
-              {errorPrioridades && (
-                <p className="text-xs text-destructive text-center">{errorPrioridades}</p>
+          {/* Barra IA (timestamp + chip "usa IA") — solo en la pestaña Tareas */}
+          {filtroTareas === "tareas" && (
+            <div className="flex items-center justify-between mb-2">
+              {cacheTimestamp && !cargandoPrioridades && (
+                <p className="text-[11px] text-muted-foreground">
+                  Actualizado a las {formatearHora(cacheTimestamp)}
+                </p>
               )}
+              <Badge variant="ai" className="text-xs ml-auto">
+                <Zap className="h-3 w-3 mr-1" /> usa IA
+              </Badge>
             </div>
           )}
-          </>)}
 
-          {/* Tareas con fecha + IA vencidas — debajo de las prioridades de IA */}
-          {(todasTareas.length > 0 || prioridadesVencidasIA.length > 0 || todasRealizadas.length > 0) && (
-            <div className="mt-4">
-              <div className="space-y-2">
-                {/* Pestaña Realizadas: filas compactas — solo el nombre, tachado */}
-                {filtroTareas === "realizadas" ? (
-                  <div className="rounded-2xl border border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/10 divide-y divide-green-100 dark:divide-green-900/30">
-                    {tareasAMostrar.map((t) => (
-                      <div key={t.id} className="flex items-center gap-2 px-3 py-1.5">
-                        <span className="text-green-600 dark:text-green-400 text-xs shrink-0">✓</span>
-                        <span className="text-sm line-through text-muted-foreground truncate">
-                          {t.empresa_nombre}
-                        </span>
-                        {t.origen === "ia" && (
-                          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
-                            IA
-                          </span>
-                        )}
-                      </div>
-                    ))}
+          {/* Cuerpo: skeleton (recalculando IA) / vacío contextual / lista */}
+          {filtroTareas === "tareas" && cargandoPrioridades ? (
+            <SkeletonPrioridades mensaje={autoPreparando ? "Preparando tu día..." : undefined} />
+          ) : tareasAMostrar.length === 0 ? (
+            filtroTareas === "tareas" ? (
+              <Card className="border-dashed">
+                <CardContent className="pt-8 pb-8 flex flex-col items-center text-center gap-4">
+                  <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center">
+                    <TrendingUp className="h-8 w-8 text-muted-foreground" />
                   </div>
-                ) : (
-                tareasAMostrar.map((t) => (
+                  {esFinDeSemanaCl() ? (
+                    <div className="space-y-1.5 max-w-xs">
+                      <p className="font-semibold">Es fin de semana 🎉</p>
+                      <p className="text-sm text-muted-foreground">
+                        Las prioridades se generan de lunes a viernes. Si igual quieres
+                        trabajar hoy, recalcula manualmente.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-w-xs">
+                      <p className="font-semibold">Sin tareas pendientes</p>
+                      <p className="text-sm text-muted-foreground">
+                        La IA analizará tus cuentas y te dirá con quién hablar hoy
+                        y por qué, en orden de oportunidad.
+                      </p>
+                    </div>
+                  )}
+                  {errorPrioridades && (
+                    <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2.5 max-w-xs">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {errorPrioridades}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => void actualizarPrioridades()}
+                    className="mt-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    ↻ Recalcular
+                  </button>
+                </CardContent>
+              </Card>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                {filtroTareas === "realizadas"
+                  ? "Aún no marcas tareas como hechas hoy"
+                  : "✅ Sin tareas vencidas"}
+              </p>
+            )
+          ) : filtroTareas === "realizadas" ? (
+            /* Realizadas: filas compactas — solo el nombre, tachado */
+            <div className="rounded-2xl border border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/10 divide-y divide-green-100 dark:divide-green-900/30">
+              {tareasAMostrar.map((t) => (
+                <div key={t.id} className="flex items-center gap-2 px-3 py-1.5">
+                  <span className="text-green-600 dark:text-green-400 text-xs shrink-0">✓</span>
+                  <span className="text-sm line-through text-muted-foreground truncate">
+                    {t.empresa_nombre}
+                  </span>
+                  {t.origen === "ia" && (
+                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+                      IA
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* Vencidas y Tareas: tarjetas compactas unificadas + "Ver más" */
+            <>
+              <div className="space-y-2">
+                {tareasVisibles.map((t) => (
                   <TareaCard
                     key={t.id}
                     tarea={t}
@@ -859,17 +769,44 @@ export function HoyClient() {
                       )
                     }
                   />
-                ))
-                )}
-                {tareasAMostrar.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    {filtroTareas === "realizadas"
-                      ? "Aún no marcas tareas como hechas hoy"
-                      : "✅ Sin tareas pendientes para este filtro"}
-                  </p>
-                )}
+                ))}
               </div>
+              {tareasOcultas > 0 && (
+                <button
+                  onClick={() => setMostrarTodas(true)}
+                  className="mt-2 w-full py-2 rounded-xl border border-border text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+                >
+                  Ver {tareasOcultas} {tareasOcultas === 1 ? "tarea más" : "tareas más"}
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Recalcular + Reportar mi día — solo en Tareas con prioridades cargadas */}
+          {filtroTareas === "tareas" && !cargandoPrioridades && prioridades.length > 0 && (
+            <div className="flex gap-2 mt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5"
+                onClick={() => void actualizarPrioridades()}
+                disabled={cargandoPrioridades}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Recalcular
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1 gap-1.5 bg-[#22C55E] hover:bg-[#16a34a] text-white"
+                onClick={abrirDialogReporte}
+              >
+                <ClipboardCheck className="h-3.5 w-3.5" />
+                Reportar mi día
+              </Button>
             </div>
+          )}
+          {filtroTareas === "tareas" && errorPrioridades && tareasAMostrar.length > 0 && (
+            <p className="text-xs text-destructive text-center mt-2">{errorPrioridades}</p>
           )}
         </section>
 
@@ -1063,125 +1000,6 @@ export function HoyClient() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-// ── Tarjeta de prioridad ─────────────────────────────────────
-
-function PrioridadCard({
-  prioridad,
-  posicion,
-  marcando,
-  onMarcar,
-  noRealizada = false,
-  marcandoNoRealizada = false,
-  onNoRealizada,
-}: {
-  prioridad: PrioridadIA;
-  posicion: number;
-  marcando: boolean;
-  onMarcar: () => void;
-  noRealizada?: boolean;
-  marcandoNoRealizada?: boolean;
-  onNoRealizada?: () => void;
-}) {
-  const conf = URGENCIA_CONFIG[prioridad.urgencia];
-  const empresa = prioridad.empresa;
-
-  return (
-    <Card className={`overflow-hidden ${conf.borde} ${noRealizada ? "opacity-60" : ""}`}>
-      <CardContent className="pt-4 pb-4">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="flex items-start gap-2.5 flex-1 min-w-0">
-            {/* Número de posición */}
-            <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <span className="text-sm font-bold text-primary">{posicion}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className={`font-semibold text-sm leading-tight ${noRealizada ? "line-through" : ""}`}>
-                  {empresa?.nombre ?? "Empresa"}
-                </p>
-                {noRealizada ? (
-                  <span className="text-[11px] font-semibold text-red-500 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-900 shrink-0">
-                    No realizada
-                  </span>
-                ) : (
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${conf.badge}`}>
-                    {conf.label}
-                  </span>
-                )}
-              </div>
-              {empresa?.industria && (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {empresa.industria}
-                </p>
-              )}
-            </div>
-          </div>
-          {/* Score */}
-          <div className="shrink-0 text-right">
-            <p className="text-lg font-bold text-primary">{prioridad.score}</p>
-            <div className="flex items-center justify-end -mt-0.5">
-              <p className="text-xs text-muted-foreground">score</p>
-              <HelpTooltip
-                titulo="Score de prioridad"
-                explicacion="Qué tan urgente es hablar con esta empresa hoy, del 0 al 100, según señales de la IA."
-                ejemplo=""
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Razón de prioridad */}
-        <div className="bg-muted/50 rounded-xl px-3 py-2.5 mb-2.5">
-          <p className="text-xs leading-relaxed text-foreground/80">{prioridad.razon}</p>
-        </div>
-
-        {/* Acción sugerida */}
-        <div className="flex items-start gap-1.5 mb-3">
-          <span className="text-primary font-bold text-xs shrink-0 mt-0.5">→</span>
-          <p className="text-xs text-foreground font-medium leading-relaxed">
-            {prioridad.accion_sugerida}
-          </p>
-        </div>
-
-        {/* Botones: ver ficha + hecho + no realizada */}
-        {!noRealizada ? (
-          <div className="flex gap-2">
-            <Link
-              href={`/cuentas/${prioridad.empresa_id}`}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-border
-                text-xs font-medium hover:border-primary/40 hover:bg-primary/5 transition-all"
-            >
-              <Building2 className="h-3.5 w-3.5" />
-              Ver ficha completa
-              <ChevronRight className="h-3.5 w-3.5 ml-auto" />
-            </Link>
-            <button
-              onClick={onMarcar}
-              disabled={marcando || marcandoNoRealizada}
-              className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl border border-green-300 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50 dark:bg-green-950/20 dark:border-green-800 dark:text-green-400"
-            >
-              {marcando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "✓ Hecho"}
-            </button>
-            <button
-              onClick={onNoRealizada}
-              disabled={marcandoNoRealizada || marcando}
-              className="shrink-0 flex items-center gap-1 px-2.5 py-2 rounded-xl border border-red-200 bg-red-50/80 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-50 dark:bg-red-950/20 dark:border-red-900 dark:text-red-400"
-              title="No realizado"
-            >
-              {marcandoNoRealizada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "No realizado"}
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-1.5 py-1.5">
-            <XCircle className="h-3.5 w-3.5 text-red-400" />
-            <p className="text-xs text-red-500 font-medium">No realizada — desaparecerá mañana</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -1433,8 +1251,20 @@ function TareaCard({
     }
   };
 
+  // Diferenciación visual por borde izquierdo: hoy → verde, vencida → rojo,
+  // futura → apagada. hecha/no-realizada conservan su tratamiento previo.
+  const borde = hecha
+    ? "border border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/10"
+    : noRealizada
+    ? "border border-red-200/60 dark:border-red-900/30"
+    : vencida
+    ? "border border-l-4 border-l-red-500 border-red-200 dark:border-red-900/40"
+    : esHoy
+    ? "border border-l-4 border-l-green-500 border-border"
+    : "border border-l-4 border-l-border border-border opacity-75"; // futura
+
   return (
-    <div className={`rounded-2xl border bg-card transition-colors ${hecha ? "border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/10" : vencida && !noRealizada ? "border-red-200 dark:border-red-900/40" : noRealizada ? "border-red-200/60 dark:border-red-900/30" : "border-border"}`}>
+    <div className={`rounded-2xl bg-card transition-colors ${borde}`}>
 
       {/* ── Fila colapsada (siempre visible) ── */}
       <div className={`flex items-center gap-2 px-3 py-2.5 ${noRealizada ? "opacity-50" : hecha ? "opacity-70" : ""}`}>
@@ -1519,11 +1349,16 @@ function TareaCard({
 
       {/* ── Detalle expandido ── */}
       <div className={`overflow-hidden transition-all duration-200 ${expandida ? "max-h-64" : "max-h-0"}`}>
-        <div className="px-4 pb-3 pt-0 border-t border-border/50 space-y-2">
+        <div className="px-4 pb-3 pt-2 border-t border-border/50 space-y-2">
 
           {/* Contacto */}
           {tarea.contacto_nombre && (
-            <p className="text-xs text-muted-foreground pt-2">👤 {tarea.contacto_nombre}</p>
+            <p className="text-xs text-muted-foreground">👤 {tarea.contacto_nombre}</p>
+          )}
+
+          {/* Razón de la IA — por qué es prioridad hoy (solo tareas origen:"ia") */}
+          {tarea.razon_ia && (
+            <p className="text-xs italic text-muted-foreground/80 leading-snug">💡 {tarea.razon_ia}</p>
           )}
 
           {/* Descripción de la tarea */}

@@ -409,6 +409,9 @@ export interface TareaPendiente {
   // 'ia' cuando proviene de prioridades_diarias (vencida sin ejecutar);
   // undefined para tareas manuales normales.
   origen?: "ia";
+  // Razón generada por la IA (por qué es prioridad hoy). Solo tareas origen:"ia".
+  // Se muestra como línea gris al expandir la tarjeta en la pantalla Hoy.
+  razon_ia?: string;
   // Presentes solo en tareas generadas por el sistema de cadencias:
   // canal del paso (badge en Hoy) + intención (se inyecta al borrador).
   canal?: CanalCadenciaPaso;
