@@ -10,8 +10,9 @@ import { useState, useEffect, useCallback } from "react";
 import {
   BarChart2, Zap, TrendingUp, Award, Target,
   ChevronDown, ChevronUp, AlertCircle, Loader2,
-  CheckCircle2, MinusCircle,
+  CheckCircle2, MinusCircle, Banknote,
 } from "lucide-react";
+import { formatCLP } from "@/lib/moneda";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,10 +29,16 @@ interface CumplimientoTareas {
   porcentaje: number | null;
 }
 
+interface MontosPipeline {
+  ganado_mes: number;
+  pipeline_abierto: number;
+}
+
 interface RespuestaRendimiento {
   rendimiento: RendimientoEjecutivo | null;
   evaluaciones: EvaluacionSemanal[];
   cumplimiento_tareas: CumplimientoTareas;
+  montos: MontosPipeline;
 }
 
 interface RespuestaEvaluar {
@@ -106,6 +113,7 @@ export default function RendimientoPage() {
   const r = data?.rendimiento;
   const evaluaciones = data?.evaluaciones ?? [];
   const ct = data?.cumplimiento_tareas;
+  const montos = data?.montos;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -212,6 +220,56 @@ export default function RendimientoPage() {
             )}
           </section>
         ) : null}
+
+        {/* Montos del pipeline — cero IA, calculado desde valor_estimado_clp */}
+        {!cargando && montos && (
+          <section>
+            <h2 className="font-semibold text-base mb-3 flex items-center gap-2">
+              <Banknote className="h-4 w-4 text-primary" />
+              Montos
+              <span className="text-xs font-normal text-muted-foreground">(valores estimados)</span>
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <p className="text-xl font-bold text-[#22C55E] tabular-nums break-all">
+                    {montos.ganado_mes > 0 ? formatCLP(montos.ganado_mes) : "$0"}
+                  </p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <p className="text-xs text-muted-foreground leading-tight">Ganado este mes</p>
+                    <HelpTooltip
+                      titulo="Ganado este mes"
+                      explicacion="Suma de los montos estimados de los negocios que pasaste a Ganado durante el mes actual."
+                      ejemplo=""
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <p className="text-xl font-bold text-primary tabular-nums break-all">
+                    {montos.pipeline_abierto > 0 ? formatCLP(montos.pipeline_abierto) : "$0"}
+                  </p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <p className="text-xs text-muted-foreground leading-tight">En pipeline abierto</p>
+                    <HelpTooltip
+                      titulo="En pipeline abierto"
+                      explicacion="Suma de los montos estimados de todas las oportunidades activas (excluye ganadas y perdidas). Captura los montos al cotizar o desde la ficha de cada empresa."
+                      ejemplo=""
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            {montos.ganado_mes === 0 && montos.pipeline_abierto === 0 && (
+              <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Aún no hay montos registrados. Al mover una empresa a &quot;Cotizado&quot; la app te
+                preguntará el valor del negocio.
+              </p>
+            )}
+          </section>
+        )}
 
         {/* Métricas ejecutivas globales — siempre visibles; "—" hasta que haya evaluaciones */}
         {!cargando && (

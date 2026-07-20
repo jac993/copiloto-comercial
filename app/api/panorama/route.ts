@@ -71,7 +71,7 @@ export async function GET() {
     // 1. Empresas activas (con conversacion_pausada_at para excluir del semáforo rojo)
     supabase
       .from("empresas")
-      .select("id, nombre, estado, estado_desde, meddic, conversacion_pausada_at")
+      .select("id, nombre, estado, estado_desde, meddic, conversacion_pausada_at, valor_estimado_clp")
       .not("estado", "in", "(ganado,perdido)"),
     // 2. Todas las interacciones, más reciente primero → Map conserva la primera por empresa.
     // cadencia_asignacion_id + resuelta permiten distinguir las tareas de cadencia
@@ -301,6 +301,7 @@ export async function GET() {
       enfriada: enfriamiento.enfriada,
       dias_sin_movimiento: enfriamiento.dias_sin_movimiento,
       sugerencia_enfriamiento: sugerencia,
+      monto_estimado: (e.valor_estimado_clp as number | null) ?? null,
     };
   });
 

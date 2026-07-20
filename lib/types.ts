@@ -322,6 +322,9 @@ export interface Empresa {
   meddic: MeddicData | null;
   razon_perdido: string | null;
   fecha_reactivacion: string | null;
+  // Valor económico estimado del negocio en CLP (entero). Se captura al
+  // pasar a "cotizado" (dialog de rangos) o manualmente desde la ficha.
+  valor_estimado_clp: number | null;
   conversacion_pausada_at: string | null; // ISO timestamp — null = activa
   busqueda_web_raw: BusquedaWebRaw | null;
   busqueda_web_analisis: AnalisisWeb | null;
@@ -490,6 +493,9 @@ export interface PanoramaFila {
   enfriada: boolean;
   dias_sin_movimiento: number;
   sugerencia_enfriamiento: string | null;
+  // Valor estimado del negocio en CLP — ordena cada grupo de semáforo
+  // de mayor a menor (los sin monto van al final).
+  monto_estimado: number | null;
 }
 
 // Interacción cuyo plazo de respuesta de 48h ya venció — usada por la API /vencidas

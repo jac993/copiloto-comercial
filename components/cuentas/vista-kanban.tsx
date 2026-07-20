@@ -23,8 +23,10 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { PerdidoDialog } from "@/components/cuentas/perdido-dialog";
+import { MontoDialog } from "@/components/cuentas/monto-dialog";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { construirBorradorCaso, BORRADOR_CASO_STORAGE_KEY } from "@/lib/borradorCaso";
+import { formatCLP, formatCLPCompacto } from "@/lib/moneda";
 import type { Empresa, EstadoEmpresa } from "@/lib/types";
 
 // Columnas visibles en orden (excluye "perdido" — tiene sección aparte)
@@ -71,6 +73,8 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // Empresa recién movida a "ganado" → sugerencia no bloqueante de agregar caso
   const [sugerenciaCaso, setSugerenciaCaso] = useState<Empresa | null>(null);
+  // Empresa recién movida a "cotizado" sin monto → dialog de captura de valor
+  const [montoEmpresa, setMontoEmpresa] = useState<Empresa | null>(null);
 
   const vencidasSet = new Set(empresasVencidasIds);
 
@@ -123,6 +127,11 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
       if (!res.ok) throw new Error("PATCH fallido");
       // Al cerrar un negocio, sugerir (sin forzar) documentarlo como caso
       if (nuevoEstado === "ganado") setSugerenciaCaso(empresa);
+      // Al cotizar, capturar el valor del negocio — solo si aún no tiene
+      // (si ya tiene monto, se edita desde la ficha)
+      if (nuevoEstado === "cotizado" && empresa.valor_estimado_clp === null) {
+        setMontoEmpresa(empresa);
+      }
     } catch {
       // Revertir si falla
       setEmpresas((prev) =>
@@ -232,6 +241,23 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
         </DragOverlay>
       </DndContext>
 
+      {/* Captura de valor al pasar a cotizado — actualización local del monto */}
+      {montoEmpresa && (
+        <MontoDialog
+          empresaId={montoEmpresa.id}
+          empresaNombre={montoEmpresa.nombre}
+          open={!!montoEmpresa}
+          onClose={() => setMontoEmpresa(null)}
+          onGuardado={(monto) =>
+            setEmpresas((prev) =>
+              prev.map((e) =>
+                e.id === montoEmpresa.id ? { ...e, valor_estimado_clp: monto } : e
+              )
+            )
+          }
+        />
+      )}
+
       {dialogEmpresa && (
         <PerdidoDialog
           empresa={dialogEmpresa}
@@ -305,12 +331,20 @@ function KanbanColumna({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: colId });
 
+  // Suma de montos de la etapa — compacta para caber en 220px
+  const totalMonto = items.reduce((acc, e) => acc + (e.valor_estimado_clp ?? 0), 0);
+
   return (
     <div className="flex-none w-[220px]">
       <div className="flex items-center gap-2 mb-3">
         <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${accentColor}`} />
         <span className="text-xs font-semibold text-foreground leading-none">{label}</span>
-        <span className="ml-auto text-xs font-bold text-muted-foreground">{items.length}</span>
+        <span className="ml-auto text-xs font-bold text-muted-foreground">
+          {totalMonto > 0 && (
+            <span className="text-[#22C55E] mr-1.5">{formatCLPCompacto(totalMonto)}</span>
+          )}
+          {items.length}
+        </span>
       </div>
 
       <div
@@ -413,6 +447,12 @@ function KanbanCardStatic({
       {empresa.industria && (
         <p className="text-xs text-muted-foreground mt-1 pl-4 line-clamp-1">
           {empresa.industria}
+        </p>
+      )}
+
+      {empresa.valor_estimado_clp !== null && (
+        <p className="text-xs font-semibold text-[#22C55E] mt-1 pl-4 tabular-nums">
+          {formatCLP(empresa.valor_estimado_clp)}
         </p>
       )}
 

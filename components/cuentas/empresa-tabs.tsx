@@ -15,6 +15,8 @@ import {
   SheetClose,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
+import { MontoDialog } from "@/components/cuentas/monto-dialog";
+import { formatCLP } from "@/lib/moneda";
 import { TabResumen } from "@/components/cuentas/tab-resumen";
 import { TabDecisores } from "@/components/cuentas/tab-decisores";
 import { TabHistorial } from "@/components/cuentas/tab-historial";
@@ -52,6 +54,10 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
   const { toast } = useToast();
   const [tabActivo, setTabActivo] = useState<TabId>("resumen");
   const [sheetAbierto, setSheetAbierto] = useState(false);
+  // Valor estimado del negocio — estado local para reflejar el guardado
+  // del dialog sin refetch del Server Component
+  const [montoDialogAbierto, setMontoDialogAbierto] = useState(false);
+  const [monto, setMonto] = useState<number | null>(empresa.valor_estimado_clp ?? null);
 
   // Deep-link ?tab=consultar (usado por "⚡ Generar borrador" de las tareas
   // de cadencia en Hoy). En useEffect para no romper la hidratación SSR.
@@ -175,6 +181,15 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
           </div>
         </div>
 
+        {/* Valor estimado del negocio — chip de un clic, editable siempre */}
+        <button
+          onClick={() => setMontoDialogAbierto(true)}
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold
+            bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-full transition-colors"
+        >
+          💰 {monto !== null ? formatCLP(monto) : "Agregar monto"}
+        </button>
+
         {/* Score */}
         <div className="mt-4">
           <div className="flex justify-between text-white/70 text-xs mb-1">
@@ -270,6 +285,16 @@ export function EmpresaTabs({ empresa, interacciones }: EmpresaTabsProps) {
           />
         )}
       </div>
+
+      {/* Dialog de captura/edición del valor estimado */}
+      <MontoDialog
+        empresaId={empresa.id}
+        empresaNombre={empresa.nombre}
+        montoActual={monto}
+        open={montoDialogAbierto}
+        onClose={() => setMontoDialogAbierto(false)}
+        onGuardado={setMonto}
+      />
 
       {/* Sheet: editar datos y reinvestigar */}
       <Sheet open={sheetAbierto} onOpenChange={setSheetAbierto}>

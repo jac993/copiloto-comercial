@@ -87,14 +87,18 @@ export default function PanoramaPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Dentro de cada grupo: más días sin contacto primero (null = nunca → primero)
+  // Dentro de cada grupo: monto estimado descendente primero (los negocios
+  // grandes arriba); sin monto van después, ordenados por días sin contacto
+  // descendente (null = nunca → primero), como antes.
   const porColor = useMemo(() => {
     const mapa: Record<Color, PanoramaFila[]> = { rojo: [], amarillo: [], verde: [] };
     for (const f of filas ?? []) mapa[f.semaforo].push(f);
     for (const color of Object.keys(mapa) as Color[]) {
-      mapa[color].sort(
-        (a, b) => (b.dias_sin_contacto ?? 1e9) - (a.dias_sin_contacto ?? 1e9)
-      );
+      mapa[color].sort((a, b) => {
+        const montoDiff = (b.monto_estimado ?? 0) - (a.monto_estimado ?? 0);
+        if (montoDiff !== 0) return montoDiff;
+        return (b.dias_sin_contacto ?? 1e9) - (a.dias_sin_contacto ?? 1e9);
+      });
     }
     return mapa;
   }, [filas]);
@@ -137,6 +141,7 @@ export default function PanoramaPage() {
         .pan .nombre{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
         .pan .etapa{font-size:10.5px;padding:2px 8px;border-radius:99px;background:var(--orange-soft);color:var(--orange);font-weight:600}
         .pan .frio{font-size:10.5px;padding:2px 8px;border-radius:99px;background:rgba(56,189,248,.14);color:#38BDF8;font-weight:600;white-space:nowrap}
+        .pan .monto{font-size:11px;color:var(--green);font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
         .pan .sugerencia{grid-column:1/-1;font-size:12px;color:#38BDF8;font-weight:600;display:flex;align-items:center;gap:6px}
         .pan .meddic{font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;align-self:start;text-align:right}
         .pan .meddic b{color:var(--txt)}
@@ -232,6 +237,11 @@ export default function PanoramaPage() {
                   >
                     <div className="nombre">
                       {f.nombre} <span className="etapa">{ESTADO_LABEL[f.estado]}</span>
+                      {f.monto_estimado !== null && (
+                        <span className="monto">
+                          ${f.monto_estimado.toLocaleString("es-CL")}
+                        </span>
+                      )}
                       {/* Enfriamiento silencioso: superó el umbral de su etapa */}
                       {f.enfriada && (
                         <span className="frio">

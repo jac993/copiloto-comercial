@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { MontoDialog } from "@/components/cuentas/monto-dialog";
 import type { ResultadoAnalisis } from "@/lib/types";
 
 const SENTIMIENTO_CONFIG = {
@@ -41,6 +42,8 @@ export function ResultadoAnalisisView({
   const [confirmandoEstado, setConfirmandoEstado] = useState(false);
   const [estadoConfirmado, setEstadoConfirmado] = useState(false);
   const [estadoDescartado, setEstadoDescartado] = useState(false);
+  // Al confirmar el paso a "cotizado" → capturar el valor del negocio
+  const [capturandoMonto, setCapturandoMonto] = useState(false);
 
   const sentConf = SENTIMIENTO_CONFIG[resultado.sentimiento_prospecto] ?? SENTIMIENTO_CONFIG.neutro;
 
@@ -60,6 +63,8 @@ export function ResultadoAnalisisView({
         body: JSON.stringify({ estado: resultado.estado_sugerido.estado }),
       });
       setEstadoConfirmado(true);
+      // Al cotizar, preguntar el valor del negocio (un clic, nunca bloquea)
+      if (resultado.estado_sugerido.estado === "cotizado") setCapturandoMonto(true);
       router.refresh();
     } finally {
       setConfirmandoEstado(false);
@@ -309,6 +314,15 @@ export function ResultadoAnalisisView({
           ← Nueva interacción
         </Button>
       </div>
+
+      {/* Captura del valor del negocio al confirmar el paso a "cotizado" */}
+      <MontoDialog
+        empresaId={empresaId}
+        empresaNombre="Negocio cotizado"
+        open={capturandoMonto}
+        onClose={() => setCapturandoMonto(false)}
+        onGuardado={() => router.refresh()}
+      />
     </div>
   );
 }

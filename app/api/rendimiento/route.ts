@@ -25,19 +25,28 @@ export async function GET() {
   // • tareas manuales (interacciones con proximo_paso)
   // • prioridades de IA (prioridades_diarias)
   // No depende de evaluaciones_semanales, así que siempre hay datos útiles.
-  const [rendimiento, evaluaciones, { data: tareasRaw }, { data: prioRaw }] = await Promise.all([
-    getRendimientoEjecutivo(),
-    getEvaluacionesSemana(8),
-    supabase
-      .from("interacciones")
-      .select("resuelta, no_realizada")
-      .not("proximo_paso", "is", null)
-      .gte("proximo_paso_fecha", hace30Str),
-    supabase
-      .from("prioridades_diarias")
-      .select("completada, no_realizada")
-      .gte("fecha", hace30Str),
-  ]);
+  // Primer día del mes actual (calendario chileno) — ventana de "ganado este mes"
+  const inicioMes = hoyCL().slice(0, 8) + "01";
+
+  const [rendimiento, evaluaciones, { data: tareasRaw }, { data: prioRaw }, { data: empresasRaw }] =
+    await Promise.all([
+      getRendimientoEjecutivo(),
+      getEvaluacionesSemana(8),
+      supabase
+        .from("interacciones")
+        .select("resuelta, no_realizada")
+        .not("proximo_paso", "is", null)
+        .gte("proximo_paso_fecha", hace30Str),
+      supabase
+        .from("prioridades_diarias")
+        .select("completada, no_realizada")
+        .gte("fecha", hace30Str),
+      // Montos del pipeline: estado_desde registra cuándo entró a "ganado"
+      supabase
+        .from("empresas")
+        .select("estado, estado_desde, valor_estimado_clp")
+        .not("valor_estimado_clp", "is", null),
+    ]);
 
   const manualTotal = tareasRaw?.length ?? 0;
   const manualHechas = (tareasRaw ?? []).filter(
@@ -62,5 +71,20 @@ export async function GET() {
     porcentaje: total > 0 ? Math.round((resueltas / total) * 100) : null,
   };
 
-  return NextResponse.json({ rendimiento, evaluaciones, cumplimiento_tareas });
+  // Montos: ganado este mes (entró a "ganado" desde el día 1) vs pipeline
+  // abierto (todas las etapas activas). Cero IA — suma directa en memoria.
+  let ganadoMes = 0;
+  let pipelineAbierto = 0;
+  for (const e of empresasRaw ?? []) {
+    const valor = e.valor_estimado_clp as number;
+    if (e.estado === "ganado") {
+      const desde = e.estado_desde as string | null;
+      if (desde && desde >= inicioMes) ganadoMes += valor;
+    } else if (e.estado !== "perdido") {
+      pipelineAbierto += valor;
+    }
+  }
+  const montos = { ganado_mes: ganadoMes, pipeline_abierto: pipelineAbierto };
+
+  return NextResponse.json({ rendimiento, evaluaciones, cumplimiento_tareas, montos });
 }
