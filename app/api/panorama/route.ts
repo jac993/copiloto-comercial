@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hoyCL } from "@/lib/fecha";
+import { calcularEnfriamiento } from "@/lib/enfriamiento";
 import type { PanoramaFila, EstadoEmpresa, TipoInteraccion, MeddicData } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -64,16 +65,20 @@ export async function GET() {
     { data: interaccionesRaw },
     { data: tareasRaw },
     { data: sinRespuestaRaw },
+    { data: asignacionesRaw },
+    { data: cadenciasRaw },
   ] = await Promise.all([
     // 1. Empresas activas (con conversacion_pausada_at para excluir del semáforo rojo)
     supabase
       .from("empresas")
-      .select("id, nombre, estado, meddic, conversacion_pausada_at")
+      .select("id, nombre, estado, estado_desde, meddic, conversacion_pausada_at")
       .not("estado", "in", "(ganado,perdido)"),
-    // 2. Todas las interacciones, más reciente primero → Map conserva la primera por empresa
+    // 2. Todas las interacciones, más reciente primero → Map conserva la primera por empresa.
+    // cadencia_asignacion_id + resuelta permiten distinguir las tareas de cadencia
+    // PENDIENTES (no son actividad real) para el ancla del enfriamiento.
     supabase
       .from("interacciones")
-      .select("empresa_id, fecha, tipo, contacto_id")
+      .select("empresa_id, fecha, tipo, contacto_id, cadencia_asignacion_id, resuelta")
       .order("fecha", { ascending: false }),
     // 3. Tareas pendientes, fecha más cercana primero → Map conserva la primera por empresa
     supabase
@@ -92,6 +97,18 @@ export async function GET() {
       .lt("fecha", limite48h)
       .gt("fecha", limite7d)
       .order("fecha", { ascending: false }),
+    // 5. Asignaciones de cadencia activas — una empresa con cadencia corriendo
+    // no necesita sugerencia de reactivación aunque esté enfriada.
+    supabase
+      .from("cadencia_asignaciones")
+      .select("empresa_id")
+      .eq("estado", "activa"),
+    // 6. Catálogo de cadencias activas — mapeo etapa_pipeline → nombre para
+    // la sugerencia ("Activar cadencia Post-cotización").
+    supabase
+      .from("cadencias")
+      .select("nombre, etapa_pipeline")
+      .eq("activa", true),
   ]);
 
   if (empresasError) {
@@ -111,6 +128,26 @@ export async function GET() {
       });
     }
   }
+
+  // Última interacción REAL por empresa — ancla del enfriamiento. Excluye
+  // tareas de cadencia pendientes (cadencia_asignacion_id no nulo y
+  // resuelta=false): son agenda futura, no actividad que "des-enfríe".
+  const ultimaRealPorEmpresa = new Map<string, string>(); // eid → fecha ISO
+  for (const r of interaccionesRaw ?? []) {
+    const eid = r.empresa_id as string;
+    const esCadenciaPendiente = r.cadencia_asignacion_id != null && r.resuelta !== true;
+    if (!esCadenciaPendiente && !ultimaRealPorEmpresa.has(eid)) {
+      ultimaRealPorEmpresa.set(eid, r.fecha as string);
+    }
+  }
+
+  // Empresas con cadencia activa + catálogo etapa → nombre de cadencia
+  const empresasConCadencia = new Set(
+    (asignacionesRaw ?? []).map((a) => a.empresa_id as string)
+  );
+  const cadenciaPorEtapa = new Map(
+    (cadenciasRaw ?? []).map((c) => [c.etapa_pipeline as string, c.nombre as string])
+  );
 
   // Conteo de interacciones por empresa y por contacto ("cuántas llevo y
   // con quiénes"). Cuenta TODO el historial — la query 2 ya lo trae completo.
@@ -219,6 +256,29 @@ export async function GET() {
       .slice(0, 3)
       .map(([cid, count]) => ({ nombre: contactosMap.get(cid) ?? "Sin nombre", count }));
 
+    // Enfriamiento silencioso (reglas puras, sin IA). Empresas pausadas no
+    // alertan: la pausa es una decisión consciente del vendedor.
+    const estadoDesde = (e.estado_desde as string | null) ?? null;
+    const ultimaReal = ultimaRealPorEmpresa.get(eid) ?? null;
+    const enfriamiento = pausada
+      ? { enfriada: false, dias_sin_movimiento: 0 }
+      : calcularEnfriamiento({
+          estado: e.estado as EstadoEmpresa,
+          hoy,
+          ultimaInteraccion: ultimaReal ? fechaCL(ultimaReal) : null,
+          estadoDesde,
+          fechaReunion: tarea?.fecha ?? null,
+        });
+    // Sugerencia solo si está enfriada y no tiene una cadencia corriendo:
+    // la de su etapa si existe (ej. cotizado → Post-cotización), genérica si no.
+    let sugerencia: string | null = null;
+    if (enfriamiento.enfriada && !empresasConCadencia.has(eid)) {
+      const nombreCadencia = cadenciaPorEtapa.get(e.estado as string);
+      sugerencia = nombreCadencia
+        ? `Activar cadencia ${nombreCadencia}`
+        : "Asignar una cadencia de seguimiento";
+    }
+
     return {
       empresa_id: eid,
       nombre: e.nombre as string,
@@ -237,6 +297,10 @@ export async function GET() {
       mensaje_accion: mensaje,
       total_interacciones: conteoPorEmpresa.get(eid) ?? 0,
       interacciones_por_contacto: porContacto,
+      dias_en_etapa: estadoDesde ? diffDias(estadoDesde, hoy) : null,
+      enfriada: enfriamiento.enfriada,
+      dias_sin_movimiento: enfriamiento.dias_sin_movimiento,
+      sugerencia_enfriamiento: sugerencia,
     };
   });
 

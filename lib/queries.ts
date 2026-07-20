@@ -817,6 +817,8 @@ export async function guardarEmpresaDesdeFicha(
     tamano_estimado: ficha.tamano_estimado,
     region: ficha.region,
     estado: "prospecto",
+    // Entra al pipeline hoy — base del contador "días en etapa"
+    estado_desde: hoyCL(),
     razon_de_contacto_actual: ficha.angulo_entrada,
     score_prioridad: score,
     ficha_ia: ficha,

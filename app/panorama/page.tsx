@@ -136,6 +136,8 @@ export default function PanoramaPage() {
         .pan .fila.r{border-left-color:var(--red)} .pan .fila.a{border-left-color:var(--amber)} .pan .fila.v{border-left-color:var(--green)}
         .pan .nombre{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
         .pan .etapa{font-size:10.5px;padding:2px 8px;border-radius:99px;background:var(--orange-soft);color:var(--orange);font-weight:600}
+        .pan .frio{font-size:10.5px;padding:2px 8px;border-radius:99px;background:rgba(56,189,248,.14);color:#38BDF8;font-weight:600;white-space:nowrap}
+        .pan .sugerencia{grid-column:1/-1;font-size:12px;color:#38BDF8;font-weight:600;display:flex;align-items:center;gap:6px}
         .pan .meddic{font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;align-self:start;text-align:right}
         .pan .meddic b{color:var(--txt)}
         .pan .accion{grid-column:1/-1;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
@@ -230,6 +232,12 @@ export default function PanoramaPage() {
                   >
                     <div className="nombre">
                       {f.nombre} <span className="etapa">{ESTADO_LABEL[f.estado]}</span>
+                      {/* Enfriamiento silencioso: superó el umbral de su etapa */}
+                      {f.enfriada && (
+                        <span className="frio">
+                          🧊 {f.dias_sin_movimiento} {f.dias_sin_movimiento === 1 ? "día" : "días"} sin movimiento
+                        </span>
+                      )}
                     </div>
                     <div className="meddic">
                       {f.score_meddic !== null ? (
@@ -248,7 +256,16 @@ export default function PanoramaPage() {
                       {color === "amarillo" && <>📅 <span className="pronto">{f.mensaje_accion}</span></>}
                       {color === "verde" && <>✓ {f.mensaje_accion}</>}
                     </div>
-                    <div className="meta">{metaUltimoContacto(f)}</div>
+                    <div className="meta">
+                      {metaUltimoContacto(f)}
+                      {f.dias_en_etapa !== null &&
+                        ` · ${f.dias_en_etapa} ${f.dias_en_etapa === 1 ? "día" : "días"} en esta etapa`}
+                    </div>
+                    {/* Acción sugerida para reactivar una cuenta enfriada — el click
+                        en la card ya lleva a la ficha, donde se asigna con un clic */}
+                    {f.sugerencia_enfriamiento && (
+                      <div className="sugerencia">💡 {f.sugerencia_enfriamiento}</div>
+                    )}
                     {/* Historial acumulado: cuántas interacciones y con quiénes */}
                     {f.total_interacciones > 0 && (
                       <div className="meta">

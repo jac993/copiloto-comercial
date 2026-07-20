@@ -311,6 +311,9 @@ export interface Empresa {
   tamano_estimado: string | null;
   region: string | null;
   estado: EstadoEmpresa;
+  // Fecha (YYYY-MM-DD) en que entró a su estado actual del pipeline.
+  // La mantiene PATCH /api/empresas/[id]/estado; base de "días en etapa".
+  estado_desde: string | null;
   razon_de_contacto_actual: string | null;
   score_prioridad: number;
   ficha_ia: FichaIA | null;
@@ -479,6 +482,14 @@ export interface PanoramaFila {
   // "12 interacciones · Juan (8) · María (4)" en Panorama.
   total_interacciones: number;
   interacciones_por_contacto: { nombre: string; count: number }[];
+  // Enfriamiento silencioso (lib/enfriamiento.ts — reglas puras, sin IA):
+  // días calendario en la etapa actual (null si estado_desde no existe aún),
+  // flag de umbral superado, días hábiles sin movimiento y la cadencia
+  // sugerida para reactivar (null si no está enfriada o ya tiene una activa).
+  dias_en_etapa: number | null;
+  enfriada: boolean;
+  dias_sin_movimiento: number;
+  sugerencia_enfriamiento: string | null;
 }
 
 // Interacción cuyo plazo de respuesta de 48h ya venció — usada por la API /vencidas

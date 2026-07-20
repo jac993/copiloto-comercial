@@ -81,6 +81,25 @@ export function sumarDiasHabilesDesde(fechaBase: string, n: number): string {
 }
 
 /**
+ * Días hábiles (lun-vie) transcurridos entre dos fechas calendario "YYYY-MM-DD".
+ * Cuenta los días hábiles ESTRICTAMENTE posteriores a `desde` hasta `hasta`
+ * inclusive: diasHabilesEntre(viernes, lunes) = 1. Si hasta <= desde retorna 0.
+ * Misma aritmética UTC-mediodía de sumarDiasHabilesDesde (DST-safe).
+ */
+export function diasHabilesEntre(desde: string, hasta: string): number {
+  if (hasta <= desde) return 0;
+  const d = new Date(desde + "T12:00:00Z");
+  const fin = new Date(hasta + "T12:00:00Z");
+  let habiles = 0;
+  while (d < fin) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dia = d.getUTCDay();
+    if (dia !== 0 && dia !== 6) habiles++;
+  }
+  return habiles;
+}
+
+/**
  * Milisegundos "hábiles" (lun-vie, hora Chile) transcurridos entre dos instantes.
  * El contador de respuesta se congela sábado y domingo y se reanuda el lunes:
  * un mensaje enviado el viernes no acumula tiempo el fin de semana, así no
