@@ -32,8 +32,9 @@ interface FormContacto {
   cargo: string;
   telefono: string;
   email: string;
+  linkedin_url: string;
 }
-const FORM_VACIO: FormContacto = { id: null, nombre: "", cargo: "", telefono: "", email: "" };
+const FORM_VACIO: FormContacto = { id: null, nombre: "", cargo: "", telefono: "", email: "", linkedin_url: "" };
 
 export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
   const router = useRouter();
@@ -55,6 +56,7 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
           body: JSON.stringify({
             nombre: form.nombre.trim(), cargo: form.cargo.trim(),
             telefono: form.telefono.trim(), email: form.email.trim(),
+            linkedin_url: form.linkedin_url.trim(),
           }),
         });
         const actualizado = (await res.json()) as Contacto;
@@ -70,6 +72,7 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
             empresa_id: empresa.id, nombre: form.nombre.trim(),
             cargo: form.cargo.trim() || undefined, telefono: form.telefono.trim() || undefined,
             email: form.email.trim() || undefined,
+            linkedin_url: form.linkedin_url.trim() || undefined,
           }),
         });
         const nuevo = (await res.json()) as Contacto;
@@ -163,7 +166,7 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => setForm({ id: c.id, nombre: c.nombre ?? "", cargo: c.cargo ?? "", telefono: c.telefono ?? "", email: c.email ?? "" })}
+                    <button onClick={() => setForm({ id: c.id, nombre: c.nombre ?? "", cargo: c.cargo ?? "", telefono: c.telefono ?? "", email: c.email ?? "", linkedin_url: c.linkedin_url ?? "" })}
                       className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted" title="Editar">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -226,9 +229,16 @@ function ContactoForm({ form, setForm, onGuardar, guardando }: {
       <div className="grid grid-cols-2 gap-2">
         <input placeholder="Teléfono" value={form.telefono} className={campo}
           onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
-        <input placeholder="Email" value={form.email} className={campo}
+        <input type="email" placeholder="Email" value={form.email} className={campo}
           onChange={(e) => setForm({ ...form, email: e.target.value })} />
       </div>
+      <input
+        type="url"
+        placeholder="LinkedIn URL"
+        value={form.linkedin_url}
+        className={campo}
+        onChange={(e) => setForm({ ...form, linkedin_url: e.target.value })}
+      />
       <div className="flex gap-2 pt-1">
         <Button size="sm" className="flex-1 gap-1.5" disabled={!form.nombre.trim() || guardando} onClick={onGuardar}>
           {guardando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
