@@ -1,11 +1,69 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: sesión de corrección de 5 bugs (build, fechas, tareas
-duplicadas, historial stubs, botón "No contestó"). Commits `8c086b3`–`a5d9d7f`.
+Última actualización: sesión de features (21 jul 2026) — enfriamiento, montos,
+rediseño Hoy, diferenciación ganado/perdido y prospectos ligeros.
+Commits `6bee8ab`–`da5b345`.
 
 ---
 
-## Commits de esta sesión
+## Commits de esta sesión (21 jul 2026)
+
+| Hash | Descripción |
+|------|-------------|
+| `6bee8ab` | feat: días en etapa + alertas de enfriamiento silencioso (sin IA) |
+| `a28a36c` | feat: montos en pipeline — valor estimado CLP por oportunidad (sin IA) |
+| `2d76daa` | feat: diferenciación visual de ganado/perdido en kanban, lista y ficha |
+| `25829f0` | feat: rediseño de Hoy — lista unificada y compacta de tareas |
+| `da5b345` | feat: alta rápida de prospectos ligeros ("Por calificar") + promoción al pipeline |
+
+Rama: `main`. Sincronizado con `origin/main`.
+
+### Prospectos ligeros ("Por calificar") — `da5b345`
+- **Discriminador:** columna `empresas.tipo_registro` ('ligero' | 'completo',
+  default 'completo'). Migración `20260721_tipo_registro.sql` (aditiva).
+- **Separación total:** filtro `tipo_registro='completo'` en `getEmpresas`,
+  `getEmpresasPriorizadas`, `/api/panorama`, `/api/interacciones/vencidas` y
+  `/api/metricas/hoy`. Los ligeros no aparecen en Cuentas, Panorama, priorización
+  IA, Hoy ni Alertas.
+- **Alta sin IA:** `POST /api/prospectos` (solo nombre + URL opcional).
+- **Contactos libres:** reutilizan la tabla `contactos` (`es_decisor=false`),
+  CRUD vía `/api/contactos` + `/api/contactos/[id]`. No usan los 6 cargos fijos.
+- **Detalle liviano:** `/cuentas/[id]` bifurca por `tipo_registro` →
+  `ProspectoLigeroDetail` (header slate, contactos, historial reutilizando
+  `TabHistorial`) vs `EmpresaTabs`.
+- **Promoción:** botón "⚡ Investigar y pasar a pipeline" → cliente llama
+  `regenerar` (investigación IA existente, por id) → `PATCH .../promover`
+  (flip a 'completo' + `estado_desde=hoy`, guard 409 si ya está en pipeline).
+- **Estado:** el ligero se crea con `estado='prospecto'` (no hay columna
+  `etapa_pipeline`; la etapa es `estado`); `tipo_registro` lo mantiene oculto.
+
+### Rediseño de Hoy — `25829f0`
+- Lista única de tareas: prioridades IA + tareas de interacciones, unificadas
+  como `TareaPendiente` y ordenadas por fecha.
+- Sub-pestañas: Vencidas / Tareas (hoy+futuras) / Realizadas. Se eliminaron
+  "Hoy" y "Todas". Máximo 10 visibles + "Ver X tareas más".
+- Diferenciación por borde izquierdo: hoy verde, vencida roja, futura apagada.
+- Se eliminó `PrioridadCard` (tarjeta grande). Nuevo campo opcional
+  `TareaPendiente.razon_ia` (línea gris al expandir tareas de IA).
+- Completar IA de hoy ahora pasa por `/api/tareas/completar` (origen 'ia'),
+  con verificación "¿realizaste este contacto?" igual que las vencidas.
+
+### Diferenciación ganado/perdido — `2d76daa`
+- Borde izquierdo verde (ganado) / gris + opacidad (perdido) en kanban y lista.
+- Header de ficha: verde sólido (ganado) / gris (perdido) en vez del gradiente.
+
+### Montos en pipeline — `a28a36c`
+- Reusa columna `empresas.valor_estimado_clp` (entero). Se captura al pasar a
+  "cotizado" (dialog de rangos) o desde la ficha. Suma por etapa en kanban,
+  ponderación en Panorama, sección "Montos" en Rendimiento. Sin IA.
+
+### Días en etapa + enfriamiento — `6bee8ab`
+- Columna `empresas.estado_desde` (date). `lib/enfriamiento.ts` con umbrales por
+  etapa (reglas puras, cero IA). Alertas de "enfriamiento silencioso" en Panorama.
+
+---
+
+## Sesión anterior (corrección de 5 bugs) — `8c086b3`–`a5d9d7f`
 
 | Hash | Descripción |
 |------|-------------|
@@ -14,8 +72,6 @@ duplicadas, historial stubs, botón "No contestó"). Commits `8c086b3`–`a5d9d7
 | `f14be7e` | fix: una empresa = máximo una tarea pendiente (supersederTareasPendientesEmpresa) |
 | `bc611ab` | fix: ocultar stubs de tarea/estado del historial de la ficha |
 | `a5d9d7f` | fix: boton No contesto ahora actualiza la UI (esStubDeTarea respeta parent_id) |
-
-Rama: `main`. Sincronizado con `origin/main` (0 commits adelante).
 
 ---
 
@@ -111,34 +167,31 @@ Rama: `main`. Sincronizado con `origin/main` (0 commits adelante).
 
 ---
 
+## Features completadas (esta sesión)
+
+- ✅ **Prompt 2 — días en etapa + alertas de enfriamiento** (`6bee8ab`)
+- ✅ **Prompt 4 — montos en pipeline** (`a28a36c`)
+
 ## Features pendientes (en orden de prioridad)
 
-1. **Prompt 2 — días en etapa + alertas de enfriamiento**
-   - Mostrar cuántos días lleva una cuenta en su etapa actual del pipeline.
-   - Alertas cuando una cuenta lleva demasiado tiempo sin avanzar.
-
-2. **Prompt 3 — razones de pérdida**
+1. **Prompt 3 — razones de pérdida**
    - Al marcar un negocio como perdido, capturar la razón (precio, competidor,
      no hay necesidad, timing, etc.).
    - Alimentar análisis de patrones de pérdida.
 
-3. **Prompt 4 — montos en pipeline**
-   - Campo de monto estimado por oportunidad.
-   - Vista de pipeline con valor total por etapa.
-
-4. **Prompt 7 — resumen Panorama**
+2. **Prompt 7 — resumen Panorama**
    - Resumen semanal/mensual generado por IA con las métricas de Panorama.
    - Estado de la cartera, tendencias, alertas.
 
-5. **Prompt 5 — sugerencia de movimiento en pipeline**
+3. **Prompt 5 — sugerencia de movimiento en pipeline**
    - IA sugiere cuándo avanzar una cuenta de etapa basada en señales de la
      conversación y tiempo en etapa.
 
-6. **Prompt 6 — preparador de reuniones**
+4. **Prompt 6 — preparador de reuniones**
    - Antes de una reunión, generar un briefing: contexto del prospecto,
      objetivos, preguntas clave, posibles objeciones.
 
-7. **Prompt 10 — cosméticos fecha cliente**
+5. **Prompt 10 — cosméticos fecha cliente**
    - Mejoras visuales en la presentación de fechas en la ficha del cliente.
 
 ---
