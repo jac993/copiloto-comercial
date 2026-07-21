@@ -4,23 +4,35 @@ export const dynamic = "force-dynamic";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { CuentasClient } from "@/components/cuentas/cuentas-client";
-import { getEmpresas, getInteraccionesConProximoPaso } from "@/lib/queries";
+import {
+  getEmpresas,
+  getInteraccionesConProximoPaso,
+  getProspectosLigeros,
+  getConteosPorEmpresa,
+} from "@/lib/queries";
 import type { Empresa } from "@/lib/types";
 
 export default async function CuentasPage() {
   let empresas: Empresa[] = [];
   let empresasVencidasIds: string[] = [];
+  let prospectosLigeros: Empresa[] = [];
+  let conteos: Record<string, { interacciones: number; contactos: number }> = {};
   let errorCarga: string | null = null;
 
   try {
-    const [emps, interaccionesVencidas] = await Promise.all([
+    const [emps, interaccionesVencidas, ligeros] = await Promise.all([
       getEmpresas(),
       getInteraccionesConProximoPaso(),
+      getProspectosLigeros(),
     ]);
     empresas = emps;
+    prospectosLigeros = ligeros;
     // IDs de empresas con al menos un próximo paso vencido
     const idsUnicos = Array.from(new Set(interaccionesVencidas.map((i) => i.empresa_id)));
     empresasVencidasIds = idsUnicos;
+    // Map → objeto plano (los Map no serializan de Server a Client Component)
+    const conteosMap = await getConteosPorEmpresa(ligeros.map((e) => e.id));
+    conteos = Object.fromEntries(conteosMap);
   } catch (err) {
     errorCarga = err instanceof Error ? err.message : "Error desconocido";
     console.error("[cuentas] Error cargando empresas:", errorCarga);
@@ -55,7 +67,12 @@ export default async function CuentasPage() {
         </div>
       )}
 
-      <CuentasClient empresas={empresas} empresasVencidasIds={empresasVencidasIds} />
+      <CuentasClient
+        empresas={empresas}
+        empresasVencidasIds={empresasVencidasIds}
+        prospectosLigeros={prospectosLigeros}
+        conteos={conteos}
+      />
     </div>
   );
 }

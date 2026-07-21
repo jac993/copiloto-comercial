@@ -298,6 +298,10 @@ export type BorradoresContacto = {
 };
 export type BorradoresGuardados = Record<string, BorradoresContacto>;
 
+// Distingue prospectos ligeros ("Por calificar", sin ficha IA, fuera del
+// pipeline) de empresas completas (investigadas, en el pipeline).
+export type TipoRegistro = "ligero" | "completo";
+
 export interface Empresa {
   id: string;
   nombre: string;
@@ -311,6 +315,9 @@ export interface Empresa {
   tamano_estimado: string | null;
   region: string | null;
   estado: EstadoEmpresa;
+  // 'ligero' = prospecto en "Por calificar" (sin ficha IA, fuera del pipeline);
+  // 'completo' = empresa investigada en el pipeline. Migración: default 'completo'.
+  tipo_registro: TipoRegistro;
   // Fecha (YYYY-MM-DD) en que entró a su estado actual del pipeline.
   // La mantiene PATCH /api/empresas/[id]/estado; base de "días en etapa".
   estado_desde: string | null;
@@ -332,8 +339,13 @@ export interface Empresa {
   actualizado_en: string;
 }
 
-// Para insertar — id y timestamps los genera la DB
-export type EmpresaInsert = Omit<Empresa, "id" | "creado_en" | "actualizado_en">;
+// Para insertar — id y timestamps los genera la DB. tipo_registro es opcional
+// en insert: la columna tiene DEFAULT 'completo', así que solo el alta de
+// prospectos ligeros necesita pasarlo explícito ('ligero').
+export type EmpresaInsert = Omit<
+  Empresa,
+  "id" | "creado_en" | "actualizado_en" | "tipo_registro"
+> & { tipo_registro?: TipoRegistro };
 export type EmpresaUpdate = Partial<EmpresaInsert>;
 
 // ─── TABLA: contactos ────────────────────────────────────────

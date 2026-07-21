@@ -32,13 +32,16 @@ export async function GET() {
 
   // Obtener IDs de empresas FUERA del pipeline activo para excluirlas:
   // conversación pausada, o estado 'perdido' (ya no se les hace seguimiento).
-  const [{ data: pausadas }, { data: perdidas }] = await Promise.all([
+  const [{ data: pausadas }, { data: perdidas }, { data: ligeras }] = await Promise.all([
     supabase.from("empresas").select("id").not("conversacion_pausada_at", "is", null),
     supabase.from("empresas").select("id").eq("estado", "perdido"),
+    // Prospectos ligeros ("Por calificar") — fuera del pipeline, no alertan.
+    supabase.from("empresas").select("id").eq("tipo_registro", "ligero"),
   ]);
   const idsExcluidas = Array.from(new Set([
     ...(pausadas ?? []).map((e) => e.id as string),
     ...(perdidas ?? []).map((e) => e.id as string),
+    ...(ligeras ?? []).map((e) => e.id as string),
   ]));
 
   let query = supabase

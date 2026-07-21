@@ -72,7 +72,8 @@ export async function GET() {
     supabase
       .from("empresas")
       .select("id, nombre, estado, estado_desde, meddic, conversacion_pausada_at, valor_estimado_clp")
-      .not("estado", "in", "(ganado,perdido)"),
+      .not("estado", "in", "(ganado,perdido)")
+      .eq("tipo_registro", "completo"),
     // 2. Todas las interacciones, más reciente primero → Map conserva la primera por empresa.
     // cadencia_asignacion_id + resuelta permiten distinguir las tareas de cadencia
     // PENDIENTES (no son actividad real) para el ancla del enfriamiento.

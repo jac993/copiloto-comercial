@@ -71,6 +71,9 @@ export async function getEmpresas(): Promise<Empresa[]> {
   const { data, error } = await getSupabase()
     .from("empresas")
     .select("*")
+    // Solo empresas del pipeline. Los prospectos ligeros ("Por calificar")
+    // viven en su propia sección; getProspectosLigeros los trae aparte.
+    .eq("tipo_registro", "completo")
     .order("score_prioridad", { ascending: false });
 
   if (error) throw new Error(`getEmpresas: ${error.message}`);
@@ -142,6 +145,8 @@ export async function getEmpresasPriorizadas(limite = 10): Promise<Empresa[]> {
   const { data, error } = await getSupabase()
     .from("empresas")
     .select("*")
+    // Solo pipeline: los prospectos ligeros no se priorizan con IA.
+    .eq("tipo_registro", "completo")
     .not("estado", "eq", "perdido")
     .not("estado", "eq", "ganado")
     .order("score_prioridad", { ascending: false })
@@ -149,6 +154,42 @@ export async function getEmpresasPriorizadas(limite = 10): Promise<Empresa[]> {
 
   if (error) throw new Error(`getEmpresasPriorizadas: ${error.message}`);
   return data ?? [];
+}
+
+// Prospectos ligeros ("Por calificar") — fuera del pipeline, sin ficha IA.
+export async function getProspectosLigeros(): Promise<Empresa[]> {
+  const { data, error } = await getSupabase()
+    .from("empresas")
+    .select("*")
+    .eq("tipo_registro", "ligero")
+    .order("actualizado_en", { ascending: false });
+
+  if (error) throw new Error(`getProspectosLigeros: ${error.message}`);
+  return data ?? [];
+}
+
+// Conteo de interacciones y contactos por empresa (2 queries + Map, nunca
+// joins de Supabase). Alimenta las tarjetas de la lista "Por calificar".
+export async function getConteosPorEmpresa(
+  empresaIds: string[]
+): Promise<Map<string, { interacciones: number; contactos: number }>> {
+  const mapa = new Map<string, { interacciones: number; contactos: number }>();
+  if (empresaIds.length === 0) return mapa;
+  empresaIds.forEach((id) => mapa.set(id, { interacciones: 0, contactos: 0 }));
+
+  const [{ data: inter }, { data: cont }] = await Promise.all([
+    getSupabase().from("interacciones").select("empresa_id").in("empresa_id", empresaIds),
+    getSupabase().from("contactos").select("empresa_id").in("empresa_id", empresaIds),
+  ]);
+  for (const r of inter ?? []) {
+    const e = mapa.get(r.empresa_id as string);
+    if (e) e.interacciones++;
+  }
+  for (const r of cont ?? []) {
+    const e = mapa.get(r.empresa_id as string);
+    if (e) e.contactos++;
+  }
+  return mapa;
 }
 
 // ─── CONTACTOS ───────────────────────────────────────────────

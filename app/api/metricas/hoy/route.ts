@@ -32,6 +32,12 @@ export async function GET() {
   const supabase = getSupabase();
   const hoy = hoyCL();
 
+  // Prospectos ligeros ("Por calificar") — fuera del pipeline; sus tareas no
+  // deben aparecer en Hoy (separación total). Se excluyen por empresa_id.
+  const { data: ligerasRows } = await supabase
+    .from("empresas").select("id").eq("tipo_registro", "ligero");
+  const ligerasSet = new Set((ligerasRows ?? []).map((e) => e.id as string));
+
   // Ventana del día calendario CHILENO (Fix 5): sin esto el filtro corría
   // en UTC y una interacción de las ~21:00 Chile no contaba para hoy.
   const { desde: diaDesde, hasta: diaHasta } = rangoDiaChileUTC(hoy);
@@ -258,8 +264,8 @@ export async function GET() {
       prioridades_vencidas_ia: prioridadesVencidasRaw ?? [],
       prioridades_generadas_en: metricaHoy?.prioridades_generadas_en ?? null,
       resumen_dia_cache: metricaHoy?.notas_dia ?? null,
-      tareas_pendientes: tareasPendientes,
-      tareas_realizadas: tareasRealizadas,
+      tareas_pendientes: tareasPendientes.filter((t) => !ligerasSet.has(t.empresa_id)),
+      tareas_realizadas: tareasRealizadas.filter((t) => !ligerasSet.has(t.empresa_id)),
     },
     {
       headers: {

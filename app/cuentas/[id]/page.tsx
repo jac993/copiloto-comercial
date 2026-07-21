@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 import { getEmpresaCompleta, getInteraccionesPorEmpresa } from "@/lib/queries";
 import { EmpresaTabs } from "@/components/cuentas/empresa-tabs";
+import { ProspectoLigeroDetail } from "@/components/cuentas/prospecto-ligero-detail";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -20,6 +21,11 @@ export default async function EmpresaPage({ params }: PageProps) {
   ]);
 
   if (!empresa) notFound();
+
+  // Prospecto ligero ("Por calificar") → vista liviana sin ficha IA.
+  if (empresa.tipo_registro === "ligero") {
+    return <ProspectoLigeroDetail empresa={empresa} interacciones={interacciones} />;
+  }
 
   return <EmpresaTabs empresa={empresa} interacciones={interacciones} />;
 }
