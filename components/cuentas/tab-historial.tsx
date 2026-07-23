@@ -320,6 +320,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
     try {
       await Promise.all(ids.map((id) => fetch(`/api/interacciones/${id}`, { method: "DELETE" })));
       setLista((prev) => prev.filter((i) => !ids.includes(i.id)));
+      router.refresh();
     } finally {
       setEliminandoIds(new Set());
     }
@@ -330,6 +331,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
     try {
       await Promise.all(ids.map((id) => fetch(`/api/interacciones/${id}`, { method: "DELETE" })));
       setLista((prev) => prev.filter((i) => !ids.includes(i.id)));
+      router.refresh();
     } finally {
       setEliminandoIds(new Set());
     }
@@ -418,6 +420,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
         setLista((prev) => [...prev, nueva]);
       }
     }
+    router.refresh();
   }
 
   return (
@@ -542,7 +545,7 @@ export function TabHistorial({ interacciones: inicial, empresaId, contactos, con
         onCerrar={() => setSheetAbierto(false)}
         empresaId={empresaId}
         contactos={contactos}
-        onCreada={(nueva) => setLista((prev) => [nueva, ...prev])}
+        onCreada={(nueva) => { setLista((prev) => [nueva, ...prev]); router.refresh(); }}
       />
 
     </div>
@@ -712,6 +715,7 @@ function TarjetaHilo({
         onMensajeAgregado(nueva);
       }
       setInputBar((prev) => ({ ...prev, texto: "", enviando: false }));
+      router.refresh();
       textareaRef.current?.focus();
     } catch (e) {
       setInputBar((prev) => ({ ...prev, enviando: false, error: e instanceof Error ? e.message : "Error al enviar" }));
@@ -739,6 +743,7 @@ function TarjetaHilo({
       console.log(`[borrar-msg] respuesta HTTP ${res.status}:`, body);
       if (!res.ok || !body.ok) throw new Error(body.error ?? `Error HTTP ${res.status}`);
       onMensajeEliminado(msgId);
+      router.refresh();
     } catch (e) {
       console.error("[borrar-msg] error:", e);
       alert(e instanceof Error ? e.message : "Error al eliminar el mensaje");
@@ -762,6 +767,7 @@ function TarjetaHilo({
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al guardar");
       if (data.interaccion) onInteraccionActualizada(data.interaccion);
       setEditandoMsg(null);
+      router.refresh();
     } catch (e) {
       setEditandoMsg((prev) => prev
         ? { ...prev, guardando: false, error: e instanceof Error ? e.message : "Error al guardar" }
@@ -827,9 +833,12 @@ function TarjetaHilo({
     <div className={`rounded-2xl border border-border bg-card shadow-sm overflow-hidden ${tieneAlgunEliminado ? "opacity-40 pointer-events-none" : ""}`}>
 
       {/* ── Header ── */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setExpandido(!expandido)}
-        className="w-full text-left px-4 pt-3.5 pb-3 flex items-start gap-3 hover:bg-muted/30 active:bg-muted/50 transition-colors"
+        onKeyDown={(e) => e.key === "Enter" && setExpandido(!expandido)}
+        className="w-full text-left px-4 pt-3.5 pb-3 flex items-start gap-3 hover:bg-muted/30 active:bg-muted/50 transition-colors cursor-pointer"
       >
         <div className="w-9 h-9 rounded-full bg-[#FFF7ED] dark:bg-[#431407]/50 flex items-center justify-center shrink-0 mt-0.5">
           <tipoConf.Icon className="w-4 h-4 text-[#F97316]" />
@@ -896,7 +905,7 @@ function TarjetaHilo({
         <ChevronDown
           className={`h-4 w-4 text-muted-foreground shrink-0 mt-1 transition-transform duration-200 ${expandido ? "rotate-180" : ""}`}
         />
-      </button>
+      </div>
 
       {/* ── Hilo expandido ── */}
       {expandido && (
