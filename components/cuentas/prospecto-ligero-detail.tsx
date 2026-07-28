@@ -63,6 +63,7 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
         if (res.ok) {
           setContactos((prev) => prev.map((c) => (c.id === form.id ? actualizado : c)));
           setForm(null);
+          router.refresh();
         }
       } else {
         const res = await fetch("/api/contactos", {
@@ -79,6 +80,7 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
         if (res.ok) {
           setContactos((prev) => [...prev, nuevo]);
           setForm(null);
+          router.refresh();
         }
       }
     } finally {
@@ -91,6 +93,7 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
     setContactos((c) => c.filter((x) => x.id !== id)); // optimista
     const res = await fetch(`/api/contactos/${id}`, { method: "DELETE" });
     if (!res.ok) setContactos(prev); // revertir si falla
+    else router.refresh();
   };
 
   return (
