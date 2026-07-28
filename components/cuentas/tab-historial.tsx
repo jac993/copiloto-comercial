@@ -191,6 +191,7 @@ interface EditMsgState {
 // ── Main component ────────────────────────────────────────────
 
 export function TabHistorial({ interacciones: inicial, empresaId, contactos, conversacionPausadaAt: pausadaAtInit }: TabHistorialProps) {
+  const router = useRouter();
   const [lista, setLista] = useState<Interaccion[]>(inicial);
   const [pausadaAt, setPausadaAt] = useState<string | null>(pausadaAtInit);
   const [confirmandoHilo, setConfirmandoHilo] = useState<{ ids: string[]; count: number } | null>(null);
