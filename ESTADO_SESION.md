@@ -1,12 +1,133 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: sesión de features (21 jul 2026) — enfriamiento, montos,
-rediseño Hoy, diferenciación ganado/perdido y prospectos ligeros.
-Commits `6bee8ab`–`da5b345`.
+Última actualización: sesión del 20 ago 2026 — rotación de la `service_role` key
+(deuda de seguridad saldada), fix transversal de sincronización de Server
+Components, y cuatro mejoras a prospectos ligeros.
+Commits `385d269`–`d35fa61`.
 
 ---
 
-## Commits de esta sesión (21 jul 2026)
+## Commits de esta sesión (20 ago 2026)
+
+| Hash | Descripción |
+|------|-------------|
+| `385d269` | feat: campo LinkedIn URL en el formulario de contacto de prospecto ligero |
+| `d3c878e` | chore: forzar redeploy con nueva service role key |
+| `e7ad196` | chore: forzar redeploy con nueva JWT signing key |
+| `cfc34a3` | fix: router.refresh() en crear, eliminar y editar interacciones |
+| `01dc70d` | fix: router.refresh() en contactos de prospecto ligero |
+| `24fa53c` | fix: agregar useRouter al componente TabHistorial |
+| `4df4578` | feat: visual de tarjeta de prospecto ligero (badge de días, estilo naranja) |
+| `d35fa61` | feat: contactos expandibles y congelamiento de prospectos ligeros |
+
+Rama: `main`. Sincronizado con `origin/main`.
+
+### ✅ RESUELTO — rotación de la `service_role` key
+
+La deuda crítica que arrastraba varias sesiones **quedó saldada**.
+
+- **Alcance real de la exposición:** la key `eyJhbGci...4TDa_ZUR` estaba en
+  `.claude/settings.local.json` en 3 commits del historial (`03bbcc2`,
+  `3102048`, `d7ff832`), como argumento de un `curl` dentro de la lista de
+  permisos. Todos esos commits están en `origin/main`.
+- **Rotación efectiva:** Supabase → Project Settings → **JWT Keys** →
+  *Create standby key* (ES256) → *Rotate signing key* → **revocar la
+  Previous key**. La key expuesta ya **no funciona**.
+- La app corre con una JWT nueva, generada el 20 ago, que nunca estuvo en git.
+  `.env.local` y las variables de Vercel actualizadas + redeploy.
+- El archivo ya está gitignoreado desde `a8dae31`, así que no puede volver a
+  filtrarse.
+
+**Intento fallido con el formato nuevo `sb_secret_`:** se probó migrar a la
+Secret Key nueva de Supabase. Las llamadas REST directas a PostgREST la
+rechazan con `"Forbidden use of secret API key in browser"`, lo que dejó
+inservibles los scripts de diagnóstico. Se volvió a una JWT `service_role`
+(rotada). **Migrar de verdad al esquema `sb_publishable_`/`sb_secret_` sigue
+pendiente** y es prerequisito para poder deshabilitar las legacy JWT keys.
+
+**Queda vivo (bajo riesgo):** el *Legacy JWT secret* no se puede revocar sin
+antes deshabilitar las legacy API keys — y eso tumbaría la app, porque la key
+en uso es justamente una JWT legacy. No es un riesgo activo: lo que estaba
+expuesto en git era la key derivada, ya revocada.
+
+### Bug transversal — mutaciones no se reflejaban hasta recargar (`cfc34a3`, `01dc70d`, `24fa53c`)
+
+- **Síntoma:** crear/eliminar interacciones y contactos "funcionaba" (HTTP 200,
+  fila correcta en BD) pero al recargar la pantalla el cambio desaparecía. Al
+  editar, el nuevo valor solo se veía al reabrir el formulario.
+- **Causa:** los componentes actualizaban su estado local de forma optimista
+  pero nunca invalidaban el Server Component que había servido los datos
+  iniciales. La siguiente lectura volvía a pintar la versión vieja.
+- **Fix:** `router.refresh()` después de cada mutación exitosa —
+  `tab-historial.tsx` (5 sitios: alta desde el sheet, alta inline, eliminar
+  hilo, eliminar mensaje, editar mensaje) y `prospecto-ligero-detail.tsx`
+  (3 sitios: alta, edición y borrado de contacto).
+- **Trampa asociada:** `tab-historial.tsx` importaba `useRouter` pero nunca
+  llamaba `const router = useRouter()`. El build de Vercel falló con
+  `Cannot find name 'router'` (`24fa53c`). `tsc --noEmit` local lo habría
+  detectado antes del push.
+
+### Bug — `<button>` dentro de `<button>` rompía la hidratación
+
+- **Síntoma:** `Error: Hydration failed... In HTML, <button> cannot be a
+  descendant of <button>` en la ficha de empresa. Con la hidratación rota, los
+  handlers no se conectaban y el basurero de las interacciones no respondía.
+- **Causa:** en `tab-historial.tsx` la cabecera expandir/colapsar del hilo era
+  un `<button>` que contenía los botones de lápiz y basura.
+- **Fix:** la cabecera pasó a `<div role="button" tabIndex={0}>` con
+  `onKeyDown` para Enter. Los botones internos quedan válidos.
+- **Regla para el futuro:** cualquier fila clickeable que contenga botones de
+  acción va como `div role="button"`, nunca como `<button>`. Se aplicó el mismo
+  patrón en los contactos expandibles de `d35fa61`.
+
+### Congelamiento de prospectos ligeros — `d35fa61`
+
+- **Columna:** `empresas.prospecto_congelado_hasta` (date, nullable).
+  Migración `20260820_prospecto_congelado_hasta.sql` + índice parcial
+  (solo indexa los no-nulos). Aditiva: `NULL` = activo.
+- **Partición de las dos vistas** (en `lib/queries.ts`):
+  - `getProspectosLigeros()` → Activos:
+    `congelado IS NULL OR congelado <= hoyCL()`
+  - `getProspectosCongelados()` → Congelados: `congelado > hoyCL()`
+  - Son **complementarias y exhaustivas**: todo ligero cae en una y solo una.
+- **Vuelve solo:** al llegar la fecha, el filtro por fecha lo devuelve a
+  Activos en la siguiente lectura. **No hay cron ni job.**
+- **Endpoints:** `PATCH /api/empresas/[id]/congelar` (valida formato
+  `YYYY-MM-DD`, rechaza `hasta <= hoy`, techo defensivo de 2 años, guard 409 si
+  no es `ligero`) y `.../descongelar` (idempotente, mismo guard).
+- **UI:** sub-toggle `Activos | Congelados` dentro de "Por calificar", con chip
+  "Recontactar el DD/MM" por tarjeta. En la ficha, banner de congelado +
+  Descongelar, o botón "Congelar prospecto" con dialog de presets
+  (1 semana / 1 mes / 3 meses) + fecha manual con `min` = mañana.
+
+### Contactos expandibles en "Por calificar" — `d35fa61`
+
+- Cabecera clickeable (`div role="button"`) despliega un panel **hermano** —
+  nunca anidado — con una fila por canal: teléfono con `tel:`, email con
+  copiar al portapapeles (feedback "Copiado" 2s), LinkedIn con abrir en
+  pestaña nueva.
+- Colapsado muestra solo **iconitos de presencia**, sin valores: así la
+  expansión tiene propósito real en vez de repetir lo visible.
+- Acordeón de uno a la vez. Estado vacío útil si el contacto no tiene canales.
+- `Linkedin` **no existe** en esta versión de lucide-react (quitaron los iconos
+  de marca). El proyecto usa `Briefcase` como icono de LinkedIn — misma
+  convención que `llamadas-client.tsx` y `nueva-interaccion-sheet.tsx`.
+
+### Visual de la tarjeta de prospecto ligero — `4df4578`
+
+Borde izquierdo naranja, avatar con fondo `#FFF7ED`, nombre a `text-base`,
+chips de contactos/interacciones en píldoras naranja, y badge de días desde
+`creado_en` con semáforo: 0-3 verde, 4-7 ámbar, +7 naranja.
+
+### Campo LinkedIn URL — `385d269`
+
+El formulario de contacto de prospecto ligero ya tenía email; se agregó
+`linkedin_url` (`type="url"`) y se marcó el email como `type="email"`. La
+columna y el endpoint ya lo soportaban: fue solo UI.
+
+---
+
+## Commits de la sesión anterior (21 jul 2026)
 
 | Hash | Descripción |
 |------|-------------|
@@ -75,7 +196,7 @@ Rama: `main`. Sincronizado con `origin/main`.
 
 ---
 
-## Bugs resueltos en esta sesión
+## Bugs resueltos en la sesión de los 5 bugs (`8c086b3`–`a5d9d7f`)
 
 ### 1. Build de Vercel bloqueado (`prefer-const`) — `8c086b3`
 - **Síntoma:** todos los deploys fallaban desde el commit del sistema de cadencias.
@@ -167,10 +288,12 @@ Rama: `main`. Sincronizado con `origin/main`.
 
 ---
 
-## Features completadas (esta sesión)
+## Features completadas (acumulado)
 
 - ✅ **Prompt 2 — días en etapa + alertas de enfriamiento** (`6bee8ab`)
 - ✅ **Prompt 4 — montos en pipeline** (`a28a36c`)
+- ✅ **Prospectos ligeros "Por calificar"** (`da5b345`) + LinkedIn (`385d269`),
+  visual de tarjeta (`4df4578`), contactos expandibles y congelamiento (`d35fa61`)
 
 ## Features pendientes (en orden de prioridad)
 
@@ -194,9 +317,58 @@ Rama: `main`. Sincronizado con `origin/main`.
 5. **Prompt 10 — cosméticos fecha cliente**
    - Mejoras visuales en la presentación de fechas en la ficha del cliente.
 
+### Deuda de plataforma (no bloquea features)
+
+- **Migrar al esquema de keys nuevo de Supabase** (`sb_publishable_` /
+  `sb_secret_`). Es prerequisito para poder deshabilitar las legacy JWT keys y
+  revocar el Legacy JWT secret. Ojo: las llamadas REST directas rechazan la
+  `sb_secret_` con `"Forbidden use of secret API key in browser"`, así que hay
+  que validar bien el camino por supabase-js antes de cambiar.
+- **Auditar `fetchCache = "force-no-store"`** en el resto de páginas que leen
+  BD. Ya faltaba en `app/cuentas/page.tsx` y causó un bug que parecía de lógica.
+
+### Idea planteada, aplazada por decisión del usuario
+
+- **Uso por un equipo de 8 personas.** El usuario lo mencionó como dirección
+  futura y luego decidió: *"de momento estoy solo, enfoquémonos solo en mí como
+  usuario"*. **No implementar nada multi-usuario hasta que lo pida.**
+  Cuando llegue, la pregunta que quedó sin responder es si serían 8 vendedores
+  con pipelines independientes, 1 vendedor + 7 observadores, u 8 sobre un
+  pipeline compartido — la respuesta define si hace falta autenticación
+  multi-usuario y separación de datos (semanas de trabajo), y hoy el diseño
+  asume un solo usuario sin login.
+
 ---
 
-## Decisiones arquitectónicas tomadas en esta sesión
+## Decisiones arquitectónicas (20 ago 2026)
+
+### Congelar se resuelve por filtro de fecha, no por job
+- **Decisión:** el "descongelamiento automático" no existe como proceso. Las
+  dos queries parten el universo de ligeros por `hoyCL()` en cada lectura.
+- **Razón:** cero infraestructura, cero estado que se pueda desincronizar, y
+  es imposible que un prospecto quede en las dos listas o en ninguna.
+
+### `prospecto_congelado_hasta` opcional en `EmpresaInsert`
+- **Decisión:** agregarla al `Omit` de `EmpresaInsert` y re-declararla opcional,
+  igual que `tipo_registro`.
+- **Razón:** un campo requerido nuevo en `Empresa` se propaga a todos los
+  inserts existentes y rompe el build de `/api/prospectos` y
+  `guardarEmpresaDesdeFicha`. La columna es nullable, así que opcional es
+  además lo semánticamente correcto.
+
+### Rechazar `hasta <= hoy` con 400 en vez de aceptarlo
+- **Decisión:** congelar hasta hoy o al pasado devuelve 400.
+- **Razón:** el filtro de Activos usa `<= hoy`, así que se aceptaría la
+  escritura y el prospecto reaparecería al instante — el vendedor concluiría
+  que el botón está roto. Mejor fallar ruidosamente.
+
+### Filas clickeables con botones adentro: `div role="button"`, nunca `<button>`
+- **Decisión:** patrón fijo para toda cabecera expandible que contenga acciones.
+- **Razón:** `<button>` anidado es HTML inválido y rompe la hidratación de React
+  entera, lo que desconecta handlers en toda la página (no solo el botón
+  culpable). Ya costó un bug difícil de diagnosticar en `tab-historial.tsx`.
+
+## Decisiones arquitectónicas anteriores (21 jul 2026)
 
 ### Nulificación vs. marcado `resuelta=true` para superseder tareas
 - **Decisión:** nulificar `proximo_paso`, `proximo_paso_fecha` y `motivo_fecha_sugerida`
@@ -249,6 +421,29 @@ Rama: `main`. Sincronizado con `origin/main`.
 - **Data Cache de Next.js**: toda ruta GET que lea la BD necesita
   `export const fetchCache = "force-no-store"` además de `dynamic = "force-dynamic"`.
   Sin esto, supabase-js sirve datos viejos.
+  **Caso real (20 ago):** `app/cuentas/page.tsx` tenía `force-dynamic` pero le
+  faltaba `fetchCache`. Al congelar un prospecto la BD ya decía la fecha nueva
+  pero la lista seguía mostrando 18 activos — incluso con `?nocache=` en la URL
+  y con el server re-renderizando (200 en 1396ms). Agregar la línea lo arregló
+  al instante. **Si una mutación no se refleja, revisar esto ANTES de dudar del
+  código.** Vale la pena auditar el resto de las páginas que leen BD.
+- **Dos dev servers compitiendo por `.next` sirven bundles de cliente viejos**:
+  el síntoma es peor que un error de sintaxis — la página carga, los datos del
+  servidor son correctos, pero un componente de cliente recién editado renderiza
+  su versión anterior (el sub-toggle nuevo simplemente no aparecía, aunque
+  `grep` confirmaba que el código estaba en el archivo). Ciclo de arreglo:
+  `Get-Process node | Stop-Process -Force` → borrar `.next` → un solo server.
+- **Tras borrar `.next`, el primer arranque puede colgarse** en "Starting..."
+  sin llegar nunca a "Ready" (OneDrive bloquea la recreación). El puerto queda
+  escuchando, así que parece vivo. Solución: matar node, borrar `.next` otra
+  vez y reintentar — al segundo intento arranca.
+- **`git commit -m` con here-string de PowerShell se rompe** si el mensaje tiene
+  comillas dobles (`"Por calificar"` partió el mensaje en pathspecs y el commit
+  falló dejando todo staged). Usar `git commit -F <archivo>` para mensajes
+  largos o con comillas.
+- **`gh` CLI no está instalado** en esta máquina (ni en PATH ni en las rutas
+  típicas). Para cosas de GitHub (visibilidad del repo, PRs) hay que ir a la
+  web. La visibilidad de `jac993/copiloto-comercial` quedó **sin confirmar**.
 - **Fechas siempre con `lib/fecha.ts`** (`hoyCL`, `nowChileLocal`,
   `sumarDiasHabilesDesde`, `resolverFechaSeguimiento`, `rangoDiaChileUTC`,
   `msRespuestaHabil`): Vercel corre en UTC, Chile es UTC-3/UTC-4.
@@ -273,8 +468,8 @@ Rama: `main`. Sincronizado con `origin/main`.
 - `UPDATE contactos SET nombre = NULL WHERE cargo = nombre AND verificado = false;`
   — el usuario nunca confirmó haberlo ejecutado. Verificar si sigue siendo relevante.
 
-### CRÍTICO PENDIENTE — Rotar `service_role` key de Supabase
-- La key quedó expuesta en `.claude/settings.local.json` (ya gitignoreado).
-- La key sigue en el historial de git. **Debe rotarse en Supabase dashboard →
-  Project Settings → API → Reset service_role key**, luego actualizar `.env.local`
-  y las variables de entorno en Vercel.
+### ✅ ~~CRÍTICO PENDIENTE — Rotar `service_role` key de Supabase~~
+**Resuelto el 20 ago 2026.** Ver la sección de rotación al inicio del documento.
+La key expuesta en el historial de git fue revocada y la app corre con una JWT
+nueva. Lo que queda es la migración al esquema `sb_secret_`, que es trabajo de
+plataforma, no una fuga abierta.
