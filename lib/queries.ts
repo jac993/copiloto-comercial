@@ -156,15 +156,33 @@ export async function getEmpresasPriorizadas(limite = 10): Promise<Empresa[]> {
   return data ?? [];
 }
 
-// Prospectos ligeros ("Por calificar") — fuera del pipeline, sin ficha IA.
+// Prospectos ligeros ACTIVOS ("Por calificar" → Activos): fuera del pipeline,
+// sin ficha IA. Excluye los congelados a futuro. Un prospecto cuya fecha de
+// recontacto ya llegó (<= hoy) vuelve solo a esta lista — sin cron ni job.
 export async function getProspectosLigeros(): Promise<Empresa[]> {
   const { data, error } = await getSupabase()
     .from("empresas")
     .select("*")
     .eq("tipo_registro", "ligero")
+    .or(`prospecto_congelado_hasta.is.null,prospecto_congelado_hasta.lte.${hoyCL()}`)
     .order("actualizado_en", { ascending: false });
 
   if (error) throw new Error(`getProspectosLigeros: ${error.message}`);
+  return data ?? [];
+}
+
+// Prospectos ligeros CONGELADOS ("Por calificar" → Congelados): el vendedor
+// fijó una fecha de recontacto futura. Orden ascendente por esa fecha → el
+// que se recontacta primero aparece arriba.
+export async function getProspectosCongelados(): Promise<Empresa[]> {
+  const { data, error } = await getSupabase()
+    .from("empresas")
+    .select("*")
+    .eq("tipo_registro", "ligero")
+    .gt("prospecto_congelado_hasta", hoyCL())
+    .order("prospecto_congelado_hasta", { ascending: true });
+
+  if (error) throw new Error(`getProspectosCongelados: ${error.message}`);
   return data ?? [];
 }
 

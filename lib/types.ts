@@ -318,6 +318,10 @@ export interface Empresa {
   // 'ligero' = prospecto en "Por calificar" (sin ficha IA, fuera del pipeline);
   // 'completo' = empresa investigada en el pipeline. Migración: default 'completo'.
   tipo_registro: TipoRegistro;
+  // Solo aplica a prospectos ligeros: fecha (YYYY-MM-DD) hasta la que el
+  // vendedor lo congeló. null = activo. Al llegar la fecha reaparece solo en
+  // "Activos" (el filtro por fecha lo resuelve en cada lectura, sin cron).
+  prospecto_congelado_hasta: string | null;
   // Fecha (YYYY-MM-DD) en que entró a su estado actual del pipeline.
   // La mantiene PATCH /api/empresas/[id]/estado; base de "días en etapa".
   estado_desde: string | null;
@@ -342,10 +346,13 @@ export interface Empresa {
 // Para insertar — id y timestamps los genera la DB. tipo_registro es opcional
 // en insert: la columna tiene DEFAULT 'completo', así que solo el alta de
 // prospectos ligeros necesita pasarlo explícito ('ligero').
+// prospecto_congelado_hasta también es opcional: nace NULL (activo) y solo
+// lo escribe PATCH .../congelar. Mismo patrón que tipo_registro — así los
+// inserts existentes no necesitan declararlo.
 export type EmpresaInsert = Omit<
   Empresa,
-  "id" | "creado_en" | "actualizado_en" | "tipo_registro"
-> & { tipo_registro?: TipoRegistro };
+  "id" | "creado_en" | "actualizado_en" | "tipo_registro" | "prospecto_congelado_hasta"
+> & { tipo_registro?: TipoRegistro; prospecto_congelado_hasta?: string | null };
 export type EmpresaUpdate = Partial<EmpresaInsert>;
 
 // ─── TABLA: contactos ────────────────────────────────────────

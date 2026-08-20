@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Zap, Building2, Search, List, Columns3, Plus, ClipboardList } from "lucide-react";
+import { Zap, Building2, Search, List, Columns3, Plus, ClipboardList, Snowflake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EmpresaCard } from "@/components/cuentas/empresa-card";
@@ -13,11 +13,21 @@ import type { Empresa } from "@/lib/types";
 
 type Vista = "lista" | "pipeline";
 type Seccion = "pipeline" | "por_calificar";
+type SubVista = "activos" | "congelados";
+
+// Formateador local de display. Duplica el de prospecto-ligero-detail.tsx a
+// propósito: son 4 líneas y así no hay que tocar lib/fecha.ts.
+function fechaLegible(fecha: string): string {
+  return new Date(fecha + "T12:00:00Z").toLocaleDateString("es-CL", {
+    day: "numeric", month: "short", timeZone: "America/Santiago",
+  });
+}
 
 interface CuentasClientProps {
   empresas: Empresa[];
   empresasVencidasIds: string[];
   prospectosLigeros: Empresa[];
+  prospectosCongelados: Empresa[];
   conteos: Record<string, { interacciones: number; contactos: number }>;
 }
 
@@ -25,12 +35,14 @@ export function CuentasClient({
   empresas,
   empresasVencidasIds,
   prospectosLigeros,
+  prospectosCongelados,
   conteos,
 }: CuentasClientProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogProspecto, setDialogProspecto] = useState(false);
   const [vista, setVista] = useState<Vista>("lista");
   const [seccion, setSeccion] = useState<Seccion>("pipeline");
+  const [subVista, setSubVista] = useState<SubVista>("activos");
 
   // Cargar preferencia desde localStorage al montar
   useEffect(() => {
@@ -147,16 +159,74 @@ export function CuentasClient({
             )}
           </>
         )
-      ) : prospectosLigeros.length === 0 ? (
+      ) : prospectosLigeros.length === 0 && prospectosCongelados.length === 0 ? (
         <EstadoVacioLigero onNuevo={() => setDialogProspecto(true)} />
       ) : (
         <div className="px-4 pt-3 space-y-3">
-          <p className="text-xs text-muted-foreground font-medium px-1">
-            {prospectosLigeros.length} por calificar · sin investigar aún
-          </p>
-          {prospectosLigeros.map((p) => (
-            <ProspectoLigeroCard key={p.id} empresa={p} conteo={conteos[p.id]} />
-          ))}
+          {/* Sub-toggle Activos | Congelados */}
+          <div className="inline-flex items-center border border-input rounded-xl overflow-hidden text-xs font-semibold">
+            <button
+              onClick={() => setSubVista("activos")}
+              className={`px-3.5 h-8 transition-colors ${
+                subVista === "activos"
+                  ? "bg-primary text-white"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              Activos ({prospectosLigeros.length})
+            </button>
+            <button
+              onClick={() => setSubVista("congelados")}
+              className={`px-3.5 h-8 transition-colors inline-flex items-center gap-1.5 ${
+                subVista === "congelados"
+                  ? "bg-primary text-white"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              <Snowflake className="h-3 w-3" />
+              Congelados ({prospectosCongelados.length})
+            </button>
+          </div>
+
+          {subVista === "activos" ? (
+            prospectosLigeros.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8 leading-relaxed">
+                Nada activo por calificar.<br />
+                Revisa los congelados o crea un prospecto nuevo.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground font-medium px-1">
+                  {prospectosLigeros.length} por calificar · sin investigar aún
+                </p>
+                {prospectosLigeros.map((p) => (
+                  <ProspectoLigeroCard key={p.id} empresa={p} conteo={conteos[p.id]} />
+                ))}
+              </>
+            )
+          ) : prospectosCongelados.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8 leading-relaxed">
+              Ningún prospecto congelado.<br />
+              Congela uno desde su ficha cuando no valga la pena ahora.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground font-medium px-1">
+                {prospectosCongelados.length} congelado{prospectosCongelados.length === 1 ? "" : "s"} · vuelven solos en su fecha
+              </p>
+              {prospectosCongelados.map((p) => (
+                <div key={p.id} className="space-y-1.5">
+                  {p.prospecto_congelado_hasta && (
+                    <p className="text-xs font-semibold text-sky-700 dark:text-sky-400 inline-flex items-center gap-1 px-1">
+                      <Snowflake className="h-3 w-3" />
+                      Recontactar el {fechaLegible(p.prospecto_congelado_hasta)}
+                    </p>
+                  )}
+                  <ProspectoLigeroCard empresa={p} conteo={conteos[p.id]} />
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
 

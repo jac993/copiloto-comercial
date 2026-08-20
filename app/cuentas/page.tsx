@@ -1,5 +1,9 @@
-// Forzar render dinámico — la lista de empresas cambia frecuentemente
+// Forzar render dinámico — la lista de empresas cambia frecuentemente.
+// fetchCache es obligatorio además de dynamic: sin él el Data Cache de Next
+// sirve resultados viejos de supabase-js y un prospecto recién congelado
+// seguía apareciendo en "Activos" hasta reiniciar el server.
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -8,6 +12,7 @@ import {
   getEmpresas,
   getInteraccionesConProximoPaso,
   getProspectosLigeros,
+  getProspectosCongelados,
   getConteosPorEmpresa,
 } from "@/lib/queries";
 import type { Empresa } from "@/lib/types";
@@ -16,22 +21,28 @@ export default async function CuentasPage() {
   let empresas: Empresa[] = [];
   let empresasVencidasIds: string[] = [];
   let prospectosLigeros: Empresa[] = [];
+  let prospectosCongelados: Empresa[] = [];
   let conteos: Record<string, { interacciones: number; contactos: number }> = {};
   let errorCarga: string | null = null;
 
   try {
-    const [emps, interaccionesVencidas, ligeros] = await Promise.all([
+    const [emps, interaccionesVencidas, ligeros, congelados] = await Promise.all([
       getEmpresas(),
       getInteraccionesConProximoPaso(),
       getProspectosLigeros(),
+      getProspectosCongelados(),
     ]);
     empresas = emps;
     prospectosLigeros = ligeros;
+    prospectosCongelados = congelados;
     // IDs de empresas con al menos un próximo paso vencido
     const idsUnicos = Array.from(new Set(interaccionesVencidas.map((i) => i.empresa_id)));
     empresasVencidasIds = idsUnicos;
-    // Map → objeto plano (los Map no serializan de Server a Client Component)
-    const conteosMap = await getConteosPorEmpresa(ligeros.map((e) => e.id));
+    // Map → objeto plano (los Map no serializan de Server a Client Component).
+    // Conteos para ambas sub-vistas: Activos y Congelados.
+    const conteosMap = await getConteosPorEmpresa(
+      [...ligeros, ...congelados].map((e) => e.id)
+    );
     conteos = Object.fromEntries(conteosMap);
   } catch (err) {
     errorCarga = err instanceof Error ? err.message : "Error desconocido";
@@ -71,6 +82,7 @@ export default async function CuentasPage() {
         empresas={empresas}
         empresasVencidasIds={empresasVencidasIds}
         prospectosLigeros={prospectosLigeros}
+        prospectosCongelados={prospectosCongelados}
         conteos={conteos}
       />
     </div>
