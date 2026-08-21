@@ -1,11 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2, CheckCheck, ShieldCheck, ChevronDown, CornerUpRight } from "lucide-react";
+import { useState, useMemo } from "react";
+import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2, CheckCheck, ShieldCheck, ChevronDown, CornerUpRight, Copy, Check } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
-import type { Contacto, DecisorIA, AreaContacto } from "@/lib/types";
+import { hoyCL, diasHabilesEntre } from "@/lib/fecha";
+import type { Contacto, DecisorIA, AreaContacto, Interaccion } from "@/lib/types";
+
+// Semáforo de actividad POR CONTACTO, en días hábiles desde su última
+// interacción. Umbrales propios: UMBRAL_ENFRIAMIENTO de lib/enfriamiento.ts
+// mide la empresa completa por etapa, no a una persona.
+const NIVELES_ACTIVIDAD = [
+  { max: 5,        label: "Activo",      barra: "bg-[#22C55E]", pct: 100 },
+  { max: 15,       label: "Enfriándose", barra: "bg-[#F59E0B]", pct: 55  },
+  { max: Infinity, label: "Frío",        barra: "bg-[#DC2626]", pct: 20  },
+];
+const nivelActividad = (d: number) => NIVELES_ACTIVIDAD.find((n) => d <= n.max)!;
 
 const AREA_OPCIONES: { value: AreaContacto; label: string }[] = [
   { value: "calidad",       label: "Calidad" },
@@ -40,9 +51,10 @@ interface TabDecisoresProps {
   decisoresIA: DecisorIA[];
   empresaId: string;
   nombreBusqueda: string;
+  interacciones: Interaccion[];
 }
 
-export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda }: TabDecisoresProps) {
+export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda, interacciones }: TabDecisoresProps) {
   const [decisoresLocales, setDecisoresLocales] = useState<DecisorIA[]>(decisoresIA);
   // Estado local para soportar eliminaciones sin recargar la página
   const [contactosLocales, setContactosLocales] = useState<Contacto[]>(contactos);
@@ -64,12 +76,35 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
   const cargoRegistrado = new Set(contactosLocales.map((c) => c.cargo));
   const decisoresSugeridos = decisoresLocales.filter((d) => !cargoRegistrado.has(d.cargo));
 
+  // contacto_id → fecha ISO de su última interacción. Las interacciones sin
+  // contacto_id se ignoran a propósito: son stubs de sistema (18 de las 21
+  // que existen hoy), no conversaciones atribuibles a una persona.
+  const ultimaActividad = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const i of interacciones) {
+      if (!i.contacto_id) continue;
+      const prev = m.get(i.contacto_id);
+      if (!prev || Date.parse(i.fecha) > Date.parse(prev)) m.set(i.contacto_id, i.fecha);
+    }
+    return m;
+  }, [interacciones]);
+
   const tieneNombreReal = (c: Contacto) => c.nombre != null && c.nombre.trim() !== "";
   const porFechaCreacion = (a: Contacto, b: Contacto) =>
     new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime();
 
-  const contactosConfirmados = contactosLocales.filter(tieneNombreReal).sort(porFechaCreacion);
-  const cargosSinIdentificar = contactosLocales.filter((c) => !tieneNombreReal(c)).sort(porFechaCreacion);
+  // Corte por ACTIVIDAD. Deliberadamente no se usa es_decisor: ese flag es
+  // true en el 100% de los contactos del pipeline (y false en el 100% de los
+  // ligeros), o sea que duplica tipo_registro y no discrimina nada.
+  const conActividad = contactosLocales
+    .filter((c) => ultimaActividad.has(c.id))
+    .sort((a, b) => Date.parse(ultimaActividad.get(b.id)!) - Date.parse(ultimaActividad.get(a.id)!));
+
+  // Sin contactar: personas con nombre real primero, cargos placeholder
+  // (nombre = null) después. Mismo tratamiento apagado para ambos.
+  const sinContactar = contactosLocales
+    .filter((c) => !ultimaActividad.has(c.id))
+    .sort((a, b) => (tieneNombreReal(a) ? 0 : 1) - (tieneNombreReal(b) ? 0 : 1) || porFechaCreacion(a, b));
 
   // Identificado = ya tiene persona con nombre, o ya se confirmó como contacto real
   const identificados = decisoresLocales.filter(
@@ -94,17 +129,18 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
         </div>
       )}
 
-      {/* Contactos confirmados — nombre real, vengan de investigación o agregados manualmente */}
-      {contactosConfirmados.length > 0 && (
+      {/* Con actividad — ordenados por contacto más reciente primero */}
+      {conActividad.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-            ✅ Contactos confirmados
+            Con actividad ({conActividad.length})
           </p>
           <div className="space-y-2">
-            {contactosConfirmados.map((contacto) => (
+            {conActividad.map((contacto) => (
               <ContactoCard
                 key={contacto.id}
                 contacto={contacto}
+                ultimaInteraccion={ultimaActividad.get(contacto.id) ?? null}
                 onEliminar={() => handleContactoEliminado(contacto.id)}
                 empresaId={empresaId}
                 onContactoAgregado={handleContactoAgregado}
@@ -114,17 +150,18 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
         </div>
       )}
 
-      {/* Cargos sugeridos sin persona real todavía (nombre = null) */}
-      {cargosSinIdentificar.length > 0 && (
+      {/* Sin contactar aún — al final y apagados: nadie les ha escrito todavía */}
+      {sinContactar.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-            🔍 Cargos por identificar
+          <p className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wide mb-2 px-1">
+            Sin contactar aún ({sinContactar.length})
           </p>
-          <div className="space-y-2">
-            {cargosSinIdentificar.map((contacto) => (
+          <div className="space-y-2 opacity-60">
+            {sinContactar.map((contacto) => (
               <ContactoCard
                 key={contacto.id}
                 contacto={contacto}
+                ultimaInteraccion={null}
                 onEliminar={() => handleContactoEliminado(contacto.id)}
                 empresaId={empresaId}
                 onContactoAgregado={handleContactoAgregado}
@@ -180,17 +217,24 @@ export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda
 
 function ContactoCard({
   contacto,
+  ultimaInteraccion,
   onEliminar,
   empresaId,
   onContactoAgregado,
 }: {
   contacto: Contacto;
+  /** Fecha ISO de la última interacción con esta persona. null = sin contactar. */
+  ultimaInteraccion: string | null;
   onEliminar?: () => void;
   empresaId?: string;
   onContactoAgregado?: (c: Contacto) => void;
 }) {
   const [datos, setDatos] = useState<Contacto>(contacto);
   const [editando, setEditando] = useState(false);
+  // Los datos de contacto arrancan colapsados: con 7-9 personas la lista tiene
+  // que ser escaneable, y la barra de actividad es la señal primaria.
+  const [expandido, setExpandido] = useState(false);
+  const [emailCopiado, setEmailCopiado] = useState(false);
   const [form, setForm] = useState({
     nombre:      datos.nombre     ?? "",
     cargo:       datos.cargo      ?? "",
@@ -294,6 +338,27 @@ function ContactoCard({
   const areaColor = AREA_COLOR[datos.area ?? "otro"] ?? AREA_COLOR.otro;
   const iniciales = (datos.nombre?.trim() || datos.cargo?.trim() || "?")
     .split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+  // Días hábiles desde la última interacción. La fecha ISO se convierte a día
+  // calendario chileno antes de comparar: diasHabilesEntre opera en "YYYY-MM-DD".
+  const diasSinContacto = ultimaInteraccion
+    ? diasHabilesEntre(
+        new Date(ultimaInteraccion).toLocaleDateString("en-CA", { timeZone: "America/Santiago" }),
+        hoyCL()
+      )
+    : null;
+  const nivel = diasSinContacto === null ? null : nivelActividad(diasSinContacto);
+
+  const copiarEmail = async () => {
+    if (!datos.email) return;
+    try {
+      await navigator.clipboard.writeText(datos.email);
+      setEmailCopiado(true);
+      setTimeout(() => setEmailCopiado(false), 2000);
+    } catch {
+      // Clipboard bloqueado por el navegador: el mailto sigue disponible.
+    }
+  };
 
   const handleEliminar = async () => {
     setEliminando(true);
@@ -430,7 +495,21 @@ function ContactoCard({
   return (
     <Card>
       <CardContent className="pt-4 pb-4">
-        <div className="flex items-start gap-3">
+        {/* Cabecera clickeable. Es un <div role="button">, NO un <button>:
+            contiene los botones de editar/eliminar y un <button> dentro de otro
+            <button> es HTML inválido → rompe la hidratación de React. */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpandido((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setExpandido((v) => !v);
+            }
+          }}
+          className="flex items-start gap-3 cursor-pointer"
+        >
           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0">
             {iniciales}
           </div>
@@ -441,11 +520,6 @@ function ContactoCard({
                   <p className="font-semibold text-sm">
                     {datos.nombre ?? datos.cargo ?? "Sin nombre"}
                   </p>
-                  {datos.es_decisor && (
-                    <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                      Decisor
-                    </span>
-                  )}
                   {datos.verificado ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                       <ShieldCheck className="h-2.5 w-2.5" />
@@ -466,8 +540,8 @@ function ContactoCard({
                   </span>
                 )}
               </div>
-              {/* Botones editar y eliminar */}
-              <div className="flex items-center gap-0.5 shrink-0">
+              {/* Botones editar y eliminar — stopPropagation para no togglear */}
+              <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setEditando(true)}
                   className="p-1.5 rounded-lg text-muted-foreground hover:text-[#F97316] hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
@@ -487,6 +561,9 @@ function ContactoCard({
                       : <Trash2 className="h-3.5 w-3.5" />}
                   </button>
                 )}
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${expandido ? "rotate-180" : ""}`}
+                />
               </div>
             </div>
 
@@ -495,29 +572,74 @@ function ContactoCard({
                 {datos.notas_ia.split("\n")[0]}
               </p>
             )}
+
+            {/* Barra de actividad: qué tan reciente fue el contacto con ESTA persona */}
+            <div className="mt-2">
+              {nivel && diasSinContacto !== null ? (
+                <>
+                  <div className="flex justify-between items-center mb-1 gap-2">
+                    <span className="text-xs text-muted-foreground truncate">
+                      {diasSinContacto === 0
+                        ? "Contactado hoy"
+                        : `Hace ${diasSinContacto} ${diasSinContacto === 1 ? "día hábil" : "días hábiles"}`}
+                    </span>
+                    <span className="text-xs font-semibold shrink-0">{nivel.label}</span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${nivel.barra}`}
+                      style={{ width: `${nivel.pct}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">Sin contactar aún</p>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Acciones: teléfono, email, LinkedIn */}
-        {(datos.telefono || datos.email || datos.linkedin_url) && (
-          <div className="flex gap-2 mt-3 flex-wrap">
-            {datos.telefono && (
-              <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0" asChild>
-                <a href={`tel:${datos.telefono}`}>📞 {datos.telefono}</a>
-              </Button>
-            )}
-            {datos.email && (
-              <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0" asChild>
-                <a href={`mailto:${datos.email}`}>✉️ Email</a>
-              </Button>
-            )}
-            {datos.linkedin_url && (
-              <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0 gap-1" asChild>
-                <a href={datos.linkedin_url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  LinkedIn
-                </a>
-              </Button>
+        {/* Datos de contacto — colapsados por defecto, se abren al pinchar la fila */}
+        {expandido && (
+          <div className="mt-3">
+            {datos.telefono || datos.email || datos.linkedin_url ? (
+              <div className="flex gap-2 flex-wrap">
+                {datos.telefono && (
+                  <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0" asChild>
+                    <a href={`tel:${datos.telefono}`}>📞 {datos.telefono}</a>
+                  </Button>
+                )}
+                {datos.email && (
+                  <div className="flex-1 min-w-0 flex gap-1">
+                    <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0" asChild>
+                      <a href={`mailto:${datos.email}`}>✉️ Email</a>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 px-2"
+                      onClick={copiarEmail}
+                      title={`Copiar ${datos.email}`}
+                    >
+                      {emailCopiado
+                        ? <Check className="h-3.5 w-3.5 text-green-600" />
+                        : <Copy className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                )}
+                {datos.linkedin_url && (
+                  <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0 gap-1" asChild>
+                    <a href={datos.linkedin_url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      LinkedIn
+                    </a>
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Sin teléfono, email ni LinkedIn. Usa el lápiz para agregarlos.
+              </p>
             )}
           </div>
         )}
@@ -799,6 +921,8 @@ function DecisorSugeridoCard({
               <ContactoCard
                 key={c.id}
                 contacto={c}
+                // Recién creado en esta sesión: no puede tener interacciones aún.
+                ultimaInteraccion={null}
                 onEliminar={() => setAgregados((prev) => prev.filter((x) => x.id !== c.id))}
               />
             ))}
