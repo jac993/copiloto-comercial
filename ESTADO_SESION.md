@@ -1,13 +1,114 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: sesión del 20 ago 2026 — rotación de la `service_role` key
-(deuda de seguridad saldada), fix transversal de sincronización de Server
-Components, y cuatro mejoras a prospectos ligeros.
-Commits `385d269`–`d35fa61`.
+Última actualización: 21 ago 2026 — panel lateral de seguimiento de contactos,
+dos acciones explícitas por tarjeta, y revert de la barra de actividad en la
+pestaña Decisores. Commits `d76fd07`–`74c8ca9`.
+
+Sesión previa (20 ago): rotación de la `service_role` key (deuda de seguridad
+saldada), fix transversal de sincronización de Server Components y cuatro
+mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
 
 ---
 
-## Commits de esta sesión (20 ago 2026)
+## Commits del 21 ago 2026
+
+| Hash | Descripción |
+|------|-------------|
+| `d76fd07` | feat: barra de actividad por decisor y datos de contacto colapsables — **revertido** |
+| `ca7f416` | fix: normalizar href de LinkedIn y ajustar umbrales del semáforo |
+| `74c8ca9` | feat: panel lateral de seguimiento de contactos y dos acciones por tarjeta |
+
+Rama: `main`. Sincronizado con `origin/main`.
+
+### ⚠️ `d76fd07` fue revertido — la pestaña Decisores NO tiene barra de actividad
+
+Se construyó la barra de actividad dentro de `tab-decisores.tsx` y luego, por
+decisión de producto, se revirtió en `74c8ca9`. **El estado actual de la pestaña
+Decisores es el previo a `d76fd07`**: secciones "✅ Contactos confirmados" /
+"🔍 Cargos por identificar", badge "Decisor", y canales de contacto siempre
+visibles sin colapso. Lo único que sobrevivió de esos dos commits es el fix de
+`hrefLinkedIn`.
+
+La información de actividad por contacto vive ahora **solo** en
+`panel-seguimiento-contactos.tsx`. Si mañana se cambian los umbrales, se cambian
+ahí y la pestaña Decisores no los refleja — es duplicación aceptada
+explícitamente por el usuario, no un descuido.
+
+### Panel lateral de seguimiento de contactos — `74c8ca9`
+
+- **Componente nuevo** `components/cuentas/panel-seguimiento-contactos.tsx`,
+  compartido por el pipeline y "Por calificar". Usa el `Sheet` de
+  `components/ui/sheet.tsx` (entra desde la derecha, `max-w-sm`).
+- **Barra de actividad por contacto** en días hábiles desde su última
+  interacción: verde ≤5, ámbar 6–10, rojo >10. Umbrales de *persona*, distintos
+  de `UMBRAL_ENFRIAMIENTO` de `lib/enfriamiento.ts`, que mide la empresa por etapa.
+- **Agrupación:** "Con actividad" arriba ordenado por más reciente;
+  "Sin contactar aún" al final con `opacity-60` (mezcla personas nunca
+  contactadas con los cargos placeholder sin nombre).
+- **Carga al abrir, no antes:** `GET /api/contactos?empresa_id=` y
+  `GET /api/interacciones/empresa/[id]` en paralelo, con `AbortController` si el
+  usuario cierra antes de que respondan. **Ambos endpoints ya existían** y ambos
+  ya traían `fetchCache = "force-no-store"` — no se creó ninguna ruta API.
+  Cero créditos de IA, así que no lleva chip ⚡.
+- **Cuatro estados:** skeleton, error con botón Reintentar, vacío útil, y datos.
+- Ignora las interacciones con `contacto_id = null` (son stubs de sistema).
+- Queda montado aunque esté cerrado (Radix no renderiza nada con `open=false`).
+  Es a propósito: si el padre lo desmonta al cerrar, **se pierde la animación de
+  salida**.
+
+### Dos acciones por tarjeta en vez de tarjeta clickeable — `74c8ca9`
+
+Las tres tarjetas (`empresa-card.tsx`, `vista-kanban.tsx`,
+`prospecto-ligero-card.tsx`) pasaron de "toda la tarjeta navega" a dos botones:
+**Ver empresa** → `/cuentas/[id]`, y **Seguimiento contactos** → abre el panel.
+En kanban van compactos ("Ver" / "Contactos") porque la columna es de 220px.
+
+El estado del panel vive **en cada tarjeta**, no elevado al padre: así no hubo
+que tocar `cuentas-client.tsx`. Solo una instancia está abierta a la vez en la
+práctica.
+
+### `hrefLinkedIn` consolidado en `lib/utils.ts` — `74c8ca9`
+
+Estaba duplicado en 3 archivos y con el panel iban a ser 4. Ahora vive en
+`lib/utils.ts` junto a `cn`, y los 4 componentes lo importan de ahí. No se puso
+en `lib/fecha.ts` porque ese módulo es estrictamente lógica de fechas.
+
+### 🔴 TRAMPA DE DATOS — `contactos.es_decisor` no significa "es decisor"
+
+Medido sobre los 98 contactos reales:
+
+```
+tipo_registro = completo  +  es_decisor = true   →  61
+tipo_registro = ligero    +  es_decisor = false  →  37
+```
+
+**Correlación perfecta.** `es_decisor` no es un flag semántico: es un duplicado
+accidental de `tipo_registro`, consecuencia de que los prospectos ligeros
+reutilizan la tabla `contactos` con `es_decisor = false`.
+
+Consecuencias prácticas:
+- **Nunca filtrar una lista de contactos por `es_decisor`.** Si se hace, en
+  "Por calificar" sale vacío siempre. El panel nuevo lo evita a propósito.
+- El badge "Decisor" de `tab-decisores.tsx` se muestra en el 100% de las filas
+  de ese componente (solo ve empresas `completo`), así que no informa nada. Se
+  quitó en `d76fd07` y **volvió con el revert**.
+
+### Otros datos del diagnóstico (21 ago, 34 empresas / 98 contactos / 222 interacciones)
+
+- **Contactos por empresa:** promedio 3,2 · máximo 9 · el caso más común es
+  **1 solo contacto** (13 de 31 empresas). 3 empresas sin ningún contacto.
+- **Trazabilidad interacción → persona:** 201 de 222 (90,5%) tienen
+  `contacto_id`. De las 21 que no, **18 son stubs de sistema**
+  (`crearStubInteraccion` lo pone en `null` a propósito). O sea que casi toda
+  conversación real es atribuible a alguien.
+- **Calidad de los contactos:** 46 de 98 (47%) no tienen ninguna interacción ·
+  28 tienen `nombre = null` (cargos sugeridos por IA sin persona real) ·
+  68 están `verificado = false`.
+- **`linkedin_url` sin protocolo:** 2 de 53. Ese era el bug de `ca7f416`.
+
+---
+
+## Commits del 20 ago 2026
 
 | Hash | Descripción |
 |------|-------------|
@@ -270,6 +371,19 @@ Rama: `main`. Sincronizado con `origin/main`.
 
 ## Bugs pendientes
 
+### Sin verificar — pulsación táctil larga sobre los botones del kanban
+Los botones nuevos llevan `onPointerDown` con `stopPropagation` justamente para
+que una pulsación de más de 200ms no arrastre la tarjeta (`TouchSensor`
+`delay: 200`). Se verificó con la secuencia `pointerdown → pointerup → click`
+simulada, que **no reproduce** una pulsación táctil sostenida real. **Falta
+probarlo con el dedo en el celular.** Si mantener el botón un instante arrastra
+la tarjeta en vez de activarlo, el `stopPropagation` no alcanzó.
+
+### Sin caso real — banda ámbar del semáforo de actividad
+Verde (≤5 días hábiles) y rojo (>10) se verificaron con datos reales. La banda
+ámbar (6–10) **no tiene ningún contacto** que caiga ahí en empresas del pipeline,
+así que nunca se vio renderizada. Comparte el mismo `find()` que las otras dos.
+
 ### Cosmético — duplicados históricos de "No contestó" en CCU
 - Empresa: CCU S.A., contacto John Velásquez (LinkedIn)
 - 7 burbujas "❌ Sin respuesta tras 48h" del 14 jul visibles ahora que el fix aplicó.
@@ -294,6 +408,8 @@ Rama: `main`. Sincronizado con `origin/main`.
 - ✅ **Prompt 4 — montos en pipeline** (`a28a36c`)
 - ✅ **Prospectos ligeros "Por calificar"** (`da5b345`) + LinkedIn (`385d269`),
   visual de tarjeta (`4df4578`), contactos expandibles y congelamiento (`d35fa61`)
+- ✅ **Panel de seguimiento de contactos** con barra de actividad por persona,
+  accesible desde las tarjetas de pipeline y de "Por calificar" (`74c8ca9`)
 
 ## Features pendientes (en orden de prioridad)
 
@@ -339,6 +455,43 @@ Rama: `main`. Sincronizado con `origin/main`.
   asume un solo usuario sin login.
 
 ---
+
+## Decisiones arquitectónicas (21 ago 2026)
+
+### Interactivos anidados: la regla completa (corrige la nota del 20 ago)
+Ayer quedó escrito "toda fila clickeable va como `div role="button"`". Eso está
+**incompleto** y llevaba a usar el div donde no hace falta. La regla real:
+
+- **`<a>` no puede contener `<button>`** — mismo problema que `<button>` dentro
+  de `<button>`. Por eso `empresa-card.tsx` y `prospecto-ligero-card.tsx`
+  tuvieron que salir del `<Link>` que envolvía toda la tarjeta antes de poder
+  meterle botones.
+- **Si la fila clickeable CONTIENE otros interactivos** (lápiz, basura) → va
+  como `div role="button"` con `tabIndex` y `onKeyDown`, y los internos llevan
+  `onClick={(e) => e.stopPropagation()}`.
+- **Si NO contiene interactivos** (el detalle expandido es *hermano*, no hijo) →
+  va como `<button>` de verdad. Es HTML válido y mejor para teclado y lectores
+  de pantalla. Así está el panel nuevo.
+
+El div no es la opción "segura por defecto": es la opción para el caso anidado.
+
+### Botones dentro de tarjetas arrastrables (dnd-kit)
+`KanbanCardDraggable` monta `{...listeners}` en el div contenedor, así que un
+`pointerdown` en cualquier botón interno burbujea hasta dnd-kit. Los sensores
+tienen umbrales (`PointerSensor { distance: 8 }`, `TouchSensor { delay: 200 }`),
+así que un clic de ratón no dispara arrastre — **pero una pulsación táctil de
+más de 200ms sí**. Todo botón dentro de una tarjeta del kanban necesita
+`onPointerDown={(e) => e.stopPropagation()}`.
+
+Efecto lateral útil descubierto al verificar: los dos botones del kanban miden
+**44px** aunque tengan `h-9` (36px), porque el flex padre los estira para
+igualar alturas. Cumplen el mínimo táctil de CLAUDE.md por accidente; si se
+cambia ese contenedor, vuelven a 36px.
+
+### El panel carga al abrir, no se precarga
+Los datos de actividad requieren 2 GET por empresa. Precargarlos para las 15
+tarjetas de la lista serían 30 peticiones para que el vendedor abra una. El
+`useEffect` está bloqueado por `if (!abierto) return;`.
 
 ## Decisiones arquitectónicas (20 ago 2026)
 
