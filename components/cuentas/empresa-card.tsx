@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
-import { Building2, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Building2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { PanelSeguimientoContactos } from "@/components/cuentas/panel-seguimiento-contactos";
 import type { Empresa, EstadoEmpresa, MeddicData } from "@/lib/types";
 
 // Colores semánticos por estado — reflejan la etapa del pipeline
@@ -82,6 +87,7 @@ interface EmpresaCardProps {
 }
 
 export function EmpresaCard({ empresa }: EmpresaCardProps) {
+  const [panelAbierto, setPanelAbierto] = useState(false);
   const estadoConf = ESTADO_CONFIG[empresa.estado];
   const iniciales = getIniciales(empresa.nombre);
   const avatarColor = getAvatarColor(empresa.score_prioridad);
@@ -94,8 +100,8 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
       : "";
 
   return (
-    <Link href={`/cuentas/${empresa.id}`} className="block">
-      <Card className={`border hover:border-primary/30 hover:shadow-md transition-all active:scale-[0.98] ${cardBorderFondo}`}>
+    <>
+      <Card className={`border hover:border-primary/30 hover:shadow-md transition-all ${cardBorderFondo}`}>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             {/* Avatar con iniciales */}
@@ -174,14 +180,30 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
                   <span className="text-xs text-muted-foreground">
                     {tiempoRelativo(empresa.actualizado_en)}
                   </span>
-                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Dos acciones explícitas: la tarjeta ya no navega por sí sola */}
+          <div className="flex gap-2 mt-3">
+            <Button asChild variant="outline" className="flex-1 h-11 text-xs">
+              <Link href={`/cuentas/${empresa.id}`}>Ver empresa</Link>
+            </Button>
+            <Button className="flex-1 h-11 text-xs" onClick={() => setPanelAbierto(true)}>
+              Seguimiento contactos
+            </Button>
+          </div>
         </CardContent>
       </Card>
-    </Link>
+
+      <PanelSeguimientoContactos
+        empresaId={empresa.id}
+        empresaNombre={empresa.nombre}
+        abierto={panelAbierto}
+        onCerrar={() => setPanelAbierto(false)}
+      />
+    </>
   );
 }
 

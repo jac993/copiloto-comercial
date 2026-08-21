@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
-import { Building2, ChevronRight, Globe, Users, MessageSquare } from "lucide-react";
+import { useState } from "react";
+import { Building2, Globe, Users, MessageSquare } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { PanelSeguimientoContactos } from "@/components/cuentas/panel-seguimiento-contactos";
 import type { Empresa } from "@/lib/types";
 import { hoyCL } from "@/lib/fecha";
 
@@ -36,6 +41,7 @@ interface ProspectoLigeroCardProps {
 // Tarjeta de la lista "Por calificar": prospecto ligero sin ficha IA.
 // Clickable → /cuentas/[id] (la bifurcación a la vista ligera vive en 4b).
 export function ProspectoLigeroCard({ empresa, conteo }: ProspectoLigeroCardProps) {
+  const [panelAbierto, setPanelAbierto] = useState(false);
   const iniciales = getIniciales(empresa.nombre);
   const contactos = conteo?.contactos ?? 0;
   const interacciones = conteo?.interacciones ?? 0;
@@ -43,8 +49,8 @@ export function ProspectoLigeroCard({ empresa, conteo }: ProspectoLigeroCardProp
   const etiquetaDias = dias === 0 ? "Hoy" : dias === 1 ? "1 día" : `${dias} días`;
 
   return (
-    <Link href={`/cuentas/${empresa.id}`} className="block">
-      <Card className="border border-l-4 border-l-[#F97316] hover:border-primary/30 hover:shadow-md transition-all active:scale-[0.98]">
+    <>
+      <Card className="border border-l-4 border-l-[#F97316] hover:border-primary/30 hover:shadow-md transition-all">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             {/* Avatar con iniciales — naranja suave, coherente con el brand */}
@@ -55,7 +61,6 @@ export function ProspectoLigeroCard({ empresa, conteo }: ProspectoLigeroCardProp
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold text-base leading-tight truncate text-foreground">{empresa.nombre}</p>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
               </div>
 
               {empresa.url && (
@@ -80,8 +85,25 @@ export function ProspectoLigeroCard({ empresa, conteo }: ProspectoLigeroCardProp
               </div>
             </div>
           </div>
+
+          {/* Dos acciones explícitas: la tarjeta ya no navega por sí sola */}
+          <div className="flex gap-2 mt-3">
+            <Button asChild variant="outline" className="flex-1 h-11 text-xs">
+              <Link href={`/cuentas/${empresa.id}`}>Ver empresa</Link>
+            </Button>
+            <Button className="flex-1 h-11 text-xs" onClick={() => setPanelAbierto(true)}>
+              Seguimiento contactos
+            </Button>
+          </div>
         </CardContent>
       </Card>
-    </Link>
+
+      <PanelSeguimientoContactos
+        empresaId={empresa.id}
+        empresaNombre={empresa.nombre}
+        abierto={panelAbierto}
+        onCerrar={() => setPanelAbierto(false)}
+      />
+    </>
   );
 }

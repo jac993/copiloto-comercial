@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ChevronRight, ChevronLeft, X, Trophy } from "lucide-react";
 import {
   DndContext,
@@ -24,6 +25,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { PerdidoDialog } from "@/components/cuentas/perdido-dialog";
 import { MontoDialog } from "@/components/cuentas/monto-dialog";
+import { PanelSeguimientoContactos } from "@/components/cuentas/panel-seguimiento-contactos";
+import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { construirBorradorCaso, BORRADOR_CASO_STORAGE_KEY } from "@/lib/borradorCaso";
 import { formatCLP, formatCLPCompacto } from "@/lib/moneda";
@@ -424,7 +427,7 @@ function KanbanCardStatic({
   onMarcarPerdido: () => void;
   isOverlay?: boolean;
 }) {
-  const router = useRouter();
+  const [panelAbierto, setPanelAbierto] = useState(false);
   const tecnica = empresa.ficha_ia?.tecnica_recomendada;
   const dotColor = tecnica ? (TECNICA_DOT[tecnica] ?? "bg-gray-300") : "bg-gray-300";
   const reac = esPerdido ? labelReactivacion(empresa.fecha_reactivacion) : null;
@@ -439,12 +442,12 @@ function KanbanCardStatic({
       : "border border-border";
 
   return (
+    <>
     <div
-      className={`relative group rounded-xl bg-card p-3 cursor-pointer
-        hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98]
+      className={`relative group rounded-xl bg-card p-3
+        hover:border-primary/40 hover:shadow-sm transition-all
         ${cardBorderFondo}
         ${isOverlay ? "shadow-lg rotate-1 scale-105" : ""}`}
-      onClick={() => !isOverlay && router.push(`/cuentas/${empresa.id}`)}
     >
       <div className="flex items-start gap-2">
         <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
@@ -492,6 +495,39 @@ function KanbanCardStatic({
           <X className="h-3 w-3" />
         </button>
       )}
+
+      {/* Acciones. onPointerDown detiene la propagación para que dnd-kit no
+          interprete la pulsación como el inicio de un arrastre: el TouchSensor
+          arranca a los 200ms y una pulsación algo lenta se comería el clic. */}
+      {!isOverlay && (
+        <div className="flex gap-1.5 mt-2.5">
+          <Button
+            asChild
+            variant="outline"
+            className="flex-1 h-9 text-[11px] px-2"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <Link href={`/cuentas/${empresa.id}`}>Ver</Link>
+          </Button>
+          <Button
+            className="flex-1 h-9 text-[11px] px-2"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setPanelAbierto(true)}
+          >
+            Contactos
+          </Button>
+        </div>
+      )}
     </div>
+
+    {!isOverlay && (
+      <PanelSeguimientoContactos
+        empresaId={empresa.id}
+        empresaNombre={empresa.nombre}
+        abierto={panelAbierto}
+        onCerrar={() => setPanelAbierto(false)}
+      />
+    )}
+    </>
   );
 }

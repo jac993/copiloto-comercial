@@ -9,12 +9,7 @@ import { Globe, Zap, RefreshCw, AlertCircle, CheckCircle, ExternalLink, Clock } 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { EmpresaCompleta, BusquedaWebRaw, AnalisisWeb } from "@/lib/types";
-import { cn } from "@/lib/utils";
-
-// Mismo fix que en tab-decisores.tsx: sin protocolo el href se resuelve como
-// ruta relativa y navega dentro de la app en vez de ir a LinkedIn.
-const hrefLinkedIn = (url: string) =>
-  /^https?:\/\//.test(url) ? url : `https://${url}`;
+import { cn, hrefLinkedIn } from "@/lib/utils";
 
 interface TabBusquedaWebProps {
   empresa: EmpresaCompleta;

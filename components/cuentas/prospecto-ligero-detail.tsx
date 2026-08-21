@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { TabHistorial } from "@/components/cuentas/tab-historial";
 import { hoyCL } from "@/lib/fecha";
+import { hrefLinkedIn } from "@/lib/utils";
 import type { EmpresaCompleta, Contacto, Interaccion } from "@/lib/types";
 
 // Suma días calendario a una fecha "YYYY-MM-DD" (aritmética UTC-mediodía, DST-safe)
@@ -43,11 +44,6 @@ const PRESETS_CONGELAR = [
   { label: "1 mes", dias: 30 },
   { label: "3 meses", dias: 90 },
 ];
-
-// Mismo fix que en tab-decisores.tsx: sin protocolo el href se resuelve como
-// ruta relativa y navega dentro de la app en vez de ir a LinkedIn.
-const hrefLinkedIn = (url: string) =>
-  /^https?:\/\//.test(url) ? url : `https://${url}`;
 
 interface Props {
   empresa: EmpresaCompleta;
