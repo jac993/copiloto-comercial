@@ -9,7 +9,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
+  Mail,
   Trash2, ChevronDown, Loader2, Plus, Zap,
   TrendingUp, Minus, Brain, AlertCircle, Clock,
   CheckCircle2, XCircle, AlertTriangle, User, Send, Pencil, CalendarPlus,
@@ -28,6 +28,7 @@ import type {
   CorreoDetectado, Contacto, TipoInteraccion, SentimientoInteraccion,
 } from "@/lib/types";
 import { msRespuestaHabil } from "@/lib/fecha";
+import { TIPO_CONF } from "@/lib/interaccion-meta";
 
 // ── Visual configs ────────────────────────────────────────────
 
@@ -45,15 +46,6 @@ const SENTIMIENTO_BADGE: Record<string, { label: string; className: string }> = 
   positivo: { label: "Positivo", className: "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400" },
   neutro:   { label: "Neutro",   className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" },
   negativo: { label: "Negativo", className: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400" },
-};
-
-const TIPO_CONF: Record<string, { emoji: string; Icon: React.ElementType; label: string }> = {
-  llamada:      { emoji: "📞", Icon: Phone,         label: "Llamada" },
-  email:        { emoji: "📧", Icon: Mail,          label: "Correo" },
-  whatsapp:     { emoji: "💬", Icon: MessageCircle, label: "WhatsApp" },
-  linkedin:     { emoji: "💼", Icon: Briefcase,     label: "LinkedIn" },
-  reunion:      { emoji: "🤝", Icon: Users,         label: "Reunión" },
-  sin_respuesta:{ emoji: "⏰", Icon: PhoneOff,      label: "Sin respuesta" },
 };
 
 // Formato "19 jun, 04:36 p.m." — usa fecha, con fallback a creado_en

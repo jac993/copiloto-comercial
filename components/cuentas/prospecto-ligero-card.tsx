@@ -87,12 +87,12 @@ export function ProspectoLigeroCard({ empresa, conteo }: ProspectoLigeroCardProp
           </div>
 
           {/* Dos acciones explícitas: la tarjeta ya no navega por sí sola */}
-          <div className="flex gap-2 mt-3">
-            <Button asChild variant="outline" className="flex-1 h-11 text-xs">
-              <Link href={`/cuentas/${empresa.id}`}>Ver empresa</Link>
-            </Button>
-            <Button className="flex-1 h-11 text-xs" onClick={() => setPanelAbierto(true)}>
+          <div className="flex flex-col gap-2 mt-3">
+            <Button className="w-full h-11 text-xs" onClick={() => setPanelAbierto(true)}>
               Seguimiento contactos
+            </Button>
+            <Button asChild variant="outline" className="w-full h-11 text-xs">
+              <Link href={`/cuentas/${empresa.id}`}>Detalle empresa</Link>
             </Button>
           </div>
         </CardContent>

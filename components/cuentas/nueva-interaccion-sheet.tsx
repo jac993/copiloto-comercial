@@ -18,21 +18,24 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users,
+  PhoneOff,
   Upload, Loader2, CheckCircle2,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { TIPO_CONF } from "@/lib/interaccion-meta";
 import type { Contacto, Interaccion, TipoInteraccion } from "@/lib/types";
 
 type Fase = "tipos" | "form" | "transcribiendo" | "ok";
 
+// Orden del selector y flag `ia` (qué canal gasta créditos) son propios de
+// esta pantalla; emoji/label/Icon vienen del módulo compartido.
 const TIPOS = [
-  { id: "llamada" as TipoInteraccion,       emoji: "📞", label: "Llamada",        Icon: Phone,          ia: true  },
-  { id: "reunion" as TipoInteraccion,       emoji: "🤝", label: "Reunión",        Icon: Users,          ia: false },
-  { id: "whatsapp" as TipoInteraccion,      emoji: "💬", label: "WhatsApp",       Icon: MessageCircle,  ia: false },
-  { id: "email" as TipoInteraccion,         emoji: "📧", label: "Correo",         Icon: Mail,           ia: false },
-  { id: "linkedin" as TipoInteraccion,      emoji: "💼", label: "LinkedIn",       Icon: Briefcase,      ia: false },
-  { id: "sin_respuesta" as TipoInteraccion, emoji: "⏰", label: "Sin respuesta",  Icon: PhoneOff,       ia: false },
+  { id: "llamada" as TipoInteraccion,       ...TIPO_CONF.llamada,       ia: true  },
+  { id: "reunion" as TipoInteraccion,       ...TIPO_CONF.reunion,       ia: false },
+  { id: "whatsapp" as TipoInteraccion,      ...TIPO_CONF.whatsapp,      ia: false },
+  { id: "email" as TipoInteraccion,         ...TIPO_CONF.email,         ia: false },
+  { id: "linkedin" as TipoInteraccion,      ...TIPO_CONF.linkedin,      ia: false },
+  { id: "sin_respuesta" as TipoInteraccion, ...TIPO_CONF.sin_respuesta, ia: false },
 ];
 
 interface Props {

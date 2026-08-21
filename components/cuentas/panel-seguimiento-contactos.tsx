@@ -25,7 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hoyCL, diasHabilesEntre } from "@/lib/fecha";
 import { hrefLinkedIn } from "@/lib/utils";
-import type { Contacto, Interaccion } from "@/lib/types";
+import { TIPO_CONF } from "@/lib/interaccion-meta";
+import type { Contacto, Interaccion, TipoInteraccion } from "@/lib/types";
 
 // Semáforo de actividad POR CONTACTO, en días hábiles desde su última
 // interacción. Umbrales de persona: UMBRAL_ENFRIAMIENTO de lib/enfriamiento.ts
@@ -101,14 +102,16 @@ export function PanelSeguimientoContactos({
     return () => ac.abort();
   }, [abierto, empresaId, intento]);
 
-  // contacto_id → fecha ISO de su última interacción. Las interacciones sin
-  // contacto_id se ignoran: son stubs de sistema, no conversaciones con alguien.
+  // contacto_id → fecha ISO y tipo de su última interacción. Las interacciones
+  // sin contacto_id se ignoran: son stubs de sistema, no conversaciones.
   const ultimaActividad = useMemo(() => {
-    const m = new Map<string, string>();
+    const m = new Map<string, { fecha: string; tipo: TipoInteraccion }>();
     for (const i of interacciones) {
       if (!i.contacto_id) continue;
       const prev = m.get(i.contacto_id);
-      if (!prev || Date.parse(i.fecha) > Date.parse(prev)) m.set(i.contacto_id, i.fecha);
+      if (!prev || Date.parse(i.fecha) > Date.parse(prev.fecha)) {
+        m.set(i.contacto_id, { fecha: i.fecha, tipo: i.tipo });
+      }
     }
     return m;
   }, [interacciones]);
@@ -119,7 +122,7 @@ export function PanelSeguimientoContactos({
     () => contactos
       .filter((c) => ultimaActividad.has(c.id))
       .sort((a, b) =>
-        Date.parse(ultimaActividad.get(b.id)!) - Date.parse(ultimaActividad.get(a.id)!)),
+        Date.parse(ultimaActividad.get(b.id)!.fecha) - Date.parse(ultimaActividad.get(a.id)!.fecha)),
     [contactos, ultimaActividad]
   );
   const sinContactar = useMemo(
@@ -260,14 +263,15 @@ function FilaContacto({
   contacto, ultima, expandido, onToggle, copiado, onCopiar,
 }: {
   contacto: Contacto;
-  ultima: string | null;
+  ultima: { fecha: string; tipo: TipoInteraccion } | null;
   expandido: boolean;
   onToggle: () => void;
   copiado: string | null;
   onCopiar: (email: string) => void;
 }) {
-  const dias = ultima ? diasHabilesEntre(diaChile(ultima), hoyCL()) : null;
+  const dias = ultima ? diasHabilesEntre(diaChile(ultima.fecha), hoyCL()) : null;
   const nivel = dias === null ? null : nivelActividad(dias);
+  const conf = ultima ? TIPO_CONF[ultima.tipo] : null;
   const sinCanales = !contacto.telefono && !contacto.email && !contacto.linkedin_url;
 
   return (
@@ -293,6 +297,7 @@ function FilaContacto({
               <>
                 <div className="flex justify-between items-center mb-1 gap-2">
                   <span className="text-xs text-muted-foreground truncate">
+                    {conf && `${conf.emoji} ${conf.label} · `}
                     {dias === 0
                       ? "Contactado hoy"
                       : `Hace ${dias} ${dias === 1 ? "día hábil" : "días hábiles"}`}

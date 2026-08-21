@@ -500,21 +500,21 @@ function KanbanCardStatic({
           interprete la pulsación como el inicio de un arrastre: el TouchSensor
           arranca a los 200ms y una pulsación algo lenta se comería el clic. */}
       {!isOverlay && (
-        <div className="flex gap-1.5 mt-2.5">
+        <div className="flex flex-col gap-2 mt-2.5">
           <Button
-            asChild
-            variant="outline"
-            className="flex-1 h-9 text-[11px] px-2"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <Link href={`/cuentas/${empresa.id}`}>Ver</Link>
-          </Button>
-          <Button
-            className="flex-1 h-9 text-[11px] px-2"
+            className="w-full h-11 text-[11px] px-2"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => setPanelAbierto(true)}
           >
-            Contactos
+            Seguimiento contactos
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="w-full h-11 text-[11px] px-2"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <Link href={`/cuentas/${empresa.id}`}>Detalle empresa</Link>
           </Button>
         </div>
       )}

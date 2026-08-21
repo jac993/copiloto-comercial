@@ -8,18 +8,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Mail, MessageCircle, Briefcase,
-  Loader2, ArrowLeft, CheckCircle2,
-} from "lucide-react";
+import { Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TIPO_CONF } from "@/lib/interaccion-meta";
 import type { InteraccionVencida } from "@/lib/types";
-
-const TIPO_CONF: Record<string, { emoji: string; label: string; Icon: React.ElementType }> = {
-  whatsapp: { emoji: "💬", label: "WhatsApp", Icon: MessageCircle },
-  email:    { emoji: "📧", label: "Correo",   Icon: Mail },
-  linkedin: { emoji: "💼", label: "LinkedIn", Icon: Briefcase },
-};
 
 function fechaCorta(iso: string) {
   return new Date(iso).toLocaleString("es-CL", {
