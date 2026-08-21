@@ -1,8 +1,13 @@
 # Estado de sesión — Copiloto Comercial
 
 Última actualización: 21 ago 2026 — panel lateral de seguimiento de contactos,
-dos acciones explícitas por tarjeta, y revert de la barra de actividad en la
-pestaña Decisores. Commits `d76fd07`–`74c8ca9`.
+dos acciones apiladas por tarjeta, revert de la barra de actividad en la pestaña
+Decisores, y consolidación de `hrefLinkedIn` y `TIPO_CONF` en `lib/`.
+Commits `d76fd07`–`80ba3b9`.
+
+**Si el build local falla con errores raros de archivos, ver la nota de
+`attrib +P -U .next` en Notas de entorno — es el arreglo real, borrar `.next`
+no alcanza.**
 
 Sesión previa (20 ago): rotación de la `service_role` key (deuda de seguridad
 saldada), fix transversal de sincronización de Server Components y cuatro
@@ -17,6 +22,8 @@ mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
 | `d76fd07` | feat: barra de actividad por decisor y datos de contacto colapsables — **revertido** |
 | `ca7f416` | fix: normalizar href de LinkedIn y ajustar umbrales del semáforo |
 | `74c8ca9` | feat: panel lateral de seguimiento de contactos y dos acciones por tarjeta |
+| `3258ce0` | docs: actualizar ESTADO_SESION (panel de contactos + revert) |
+| `80ba3b9` | feat: tipo de última interacción en el panel y botones apilados en tarjetas |
 
 Rama: `main`. Sincronizado con `origin/main`.
 
@@ -72,6 +79,53 @@ práctica.
 Estaba duplicado en 3 archivos y con el panel iban a ser 4. Ahora vive en
 `lib/utils.ts` junto a `cn`, y los 4 componentes lo importan de ahí. No se puso
 en `lib/fecha.ts` porque ese módulo es estrictamente lógica de fechas.
+
+### Tipo de última interacción en el panel + `TIPO_CONF` consolidado — `80ba3b9`
+
+- El mapa `ultimaActividad` del panel pasó de guardar solo la fecha a
+  `{ fecha, tipo }`, y cada fila muestra
+  **"📞 Llamada · Hace 24 días hábiles · Frío"**.
+- **`TIPO_CONF` consolidado en `lib/interaccion-meta.ts`.** Estaba duplicado en
+  4 componentes (`llamadas-client`, `tab-historial`, `nueva-interaccion-sheet`,
+  `alertas/page`) y el panel habría sido la quinta copia. Los 5 importan de ahí.
+- `nueva-interaccion-sheet` es el único caso parcial: conserva su array `TIPOS`
+  porque lleva el **orden del selector** y el flag **`ia`** (qué canal gasta
+  créditos), y solo hace spread de la parte presentacional.
+
+**Trampa al consolidar:** quitar los 4 mapas locales dejó **19 imports de
+lucide sin uso** repartidos en esos archivos. Se eliminaron todos menos `Mail`
+(en `tab-historial`) y `PhoneOff` (en `nueva-interaccion-sheet`), que sí se usan
+en JSX. Sin ese barrido el build de Vercel falla por lint — la misma clase de
+error que tumbó el deploy con `router` el 20 ago. **Antes de borrar un mapa que
+referencia iconos, contar los usos en JSX del archivo.**
+
+### ⚠️ `TipoInteraccion` tiene 6 valores y uno se llama `email`, no `correo`
+
+El union real es:
+```
+"llamada" | "email" | "linkedin" | "whatsapp" | "reunion" | "sin_respuesta"
+```
+El **label** de `email` es "Correo" (así se muestra al usuario), pero la **clave**
+es `email`. Es fácil equivocarse: un mapa escrito con la clave `correo` deja sin
+icono justo al canal más frecuente, y en silencio. `hoy-client.tsx` sí usa la
+clave `correo`, pero ese es otro dominio (`CANAL_TAREA_META`, canales de tarea),
+no `TipoInteraccion` — no confundirlos.
+
+### Botones apilados por tarjeta — `80ba3b9`
+
+Las 3 tarjetas pasaron de una fila horizontal a dos botones apilados:
+**"Seguimiento contactos"** arriba (primario naranja) y **"Detalle empresa"**
+abajo (outline). Antes era "Ver empresa" primero y en horizontal.
+
+`bg-primary` **ya es `#F97316`** (`--primary: 25 95% 53%` en `globals.css`), así
+que el `<Button>` por defecto ya es naranja — no hubo que tocar colores.
+
+**Se cumplió la advertencia que dejé el 20 ago:** los botones del kanban medían
+44px sólo porque el flex *row* los estiraba, y al apilarlos volvieron a los 36px
+de `h-9`. Se subieron a `h-11` explícito, así que ahora las tres pantallas
+cumplen el mínimo táctil de 44px de CLAUDE.md sin depender de un efecto
+colateral del layout. Apilados también entran los labels completos en la columna
+de 220px, sin acortar a "Seguimiento".
 
 ### 🔴 TRAMPA DE DATOS — `contactos.es_decisor` no significa "es decisor"
 
@@ -379,6 +433,13 @@ simulada, que **no reproduce** una pulsación táctil sostenida real. **Falta
 probarlo con el dedo en el celular.** Si mantener el botón un instante arrastra
 la tarjeta en vez de activarlo, el `stopPropagation` no alcanzó.
 
+### Sin verificar — ancho de la línea de actividad a 375px
+La línea del panel pasó a ser más larga ("📞 Llamada · Hace 24 días hábiles").
+A 384px de sheet el navegador no reporta desborde, pero **no se pudo medir a
+375px** porque `resize_window` no funciona con el panel oculto. A esa anchura el
+contenedor pasa de 196 a ~187px, así que en el peor caso el `truncate` recorta la
+cola de "hábiles" — no el número de días. Vale mirarlo en el celular.
+
 ### Sin caso real — banda ámbar del semáforo de actividad
 Verde (≤5 días hábiles) y rojo (>10) se verificaron con datos reales. La banda
 ámbar (6–10) **no tiene ningún contacto** que caiga ahí en empresas del pipeline,
@@ -434,6 +495,9 @@ así que nunca se vio renderizada. Comparte el mismo `find()` que las otras dos.
    - Mejoras visuales en la presentación de fechas en la ficha del cliente.
 
 ### Deuda de plataforma (no bloquea features)
+
+- **Mover `distDir` fuera de OneDrive** en `next.config.mjs`. Es el arreglo
+  definitivo al problema de `.next`; hoy se trabaja con el paliativo `attrib`.
 
 - **Migrar al esquema de keys nuevo de Supabase** (`sb_publishable_` /
   `sb_secret_`). Es prerequisito para poder deshabilitar las legacy JWT keys y
@@ -562,15 +626,48 @@ tarjetas de la lista serían 30 peticiones para que el vendedor abra una. El
 - **OneDrive restaura archivos borrados**: el proyecto vive en carpeta sincronizada.
   Si un archivo borrado con `rm` reaparece, es OneDrive. Borrar con PowerShell
   `Remove-Item -Recurse -Force` para mayor fuerza.
-- **`.next` se corrompe con OneDrive** (`EBUSY`/`EINVAL`): si el dev server y
-  `npm run build` corren al mismo tiempo, o si OneDrive sincroniza `.next`, el
-  compilador falla con errores raros de módulos. Solución:
-  1. Detener el dev server
-  2. `Remove-Item -Recurse -Force .next` (PowerShell)
-  3. `npm run build` o reiniciar dev server
+- **⭐ `.next` se corrompe con OneDrive — LA SOLUCIÓN REAL es `attrib`**
+
+  OneDrive convierte archivos de `.next` en *placeholders de nube* mientras Next
+  los está escribiendo. El build entonces falla con errores de sistema de
+  archivos que **cambian en cada corrida** — esa inconsistencia es justamente la
+  firma del problema. El 21 ago falló 4 veces con 4 errores distintos:
+  ```
+  UNKNOWN: unknown error, write            errno -4094
+  ENOENT: Cannot find module for page      (ruta distinta cada vez)
+  EINVAL: readlink '.next/types/package.json'   errno -4071
+  ```
+  Ninguna de esas rutas había sido modificada. **Borrar `.next` y reintentar NO
+  alcanzó** (era la receta anterior de este documento). Lo que sí funcionó:
+
+  ```powershell
+  Get-Process node | Stop-Process -Force
+  Remove-Item -Recurse -Force .next
+  New-Item -ItemType Directory -Path .next -Force
+  attrib +P -U ".next"     # ← "mantener siempre en este dispositivo"
+  npm run build            # exit=0
+  ```
+
+  `+P -U` marca la carpeta como *pinned / no liberable*, así OneDrive deja de
+  hacer placeholders dentro. Hay que reaplicarlo cada vez que se borra `.next`,
+  porque el atributo se va con la carpeta.
+
+  **Cómo distinguirlo de un error de código:** si el mensaje dice `Compiled
+  successfully` y pasó `Linting and checking validity of types`, y el fallo es
+  posterior (en "Collecting page data" o al borrar), es esto. Un error de código
+  falla siempre en el mismo archivo; este cambia. Y en Vercel nunca pasa: compila
+  en Linux, en contenedor limpio, sin OneDrive.
+
+  **Arreglo definitivo pendiente** (requiere tocar `next.config.mjs`): mover
+  `distDir` fuera de la carpeta sincronizada.
 - **SWC (dev server) puede mostrar errores HMR stale**: si `tsc --noEmit` pasa
   limpio pero el dev server muestra "Syntax Error", es el caché de HMR. Hacer
   el ciclo de limpiar `.next` siempre resuelve.
+- **Dos dev servers a la vez sirven bundles de cliente viejos** (ver más abajo).
+- **`resize_window` del navegador integrado no surte efecto** cuando el panel
+  está oculto — misma causa por la que fallan los screenshots. Los checks de
+  ancho a 375px no se pueden hacer así; `window.innerWidth` sigue reportando el
+  tamaño de escritorio aunque la herramienta diga que redimensionó.
 - **Data Cache de Next.js**: toda ruta GET que lea la BD necesita
   `export const fetchCache = "force-no-store"` además de `dynamic = "force-dynamic"`.
   Sin esto, supabase-js sirve datos viejos.
