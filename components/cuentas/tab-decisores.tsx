@@ -13,10 +13,16 @@ import type { Contacto, DecisorIA, AreaContacto, Interaccion } from "@/lib/types
 // mide la empresa completa por etapa, no a una persona.
 const NIVELES_ACTIVIDAD = [
   { max: 5,        label: "Activo",      barra: "bg-[#22C55E]", pct: 100 },
-  { max: 15,       label: "Enfriándose", barra: "bg-[#F59E0B]", pct: 55  },
+  { max: 10,       label: "Enfriándose", barra: "bg-[#F59E0B]", pct: 55  },
   { max: Infinity, label: "Frío",        barra: "bg-[#DC2626]", pct: 20  },
 ];
 const nivelActividad = (d: number) => NIVELES_ACTIVIDAD.find((n) => d <= n.max)!;
+
+// Normaliza una URL de LinkedIn para usarla como href. Varios linkedin_url
+// están guardados sin protocolo ("linkedin.com/in/..."); sin él el navegador
+// lo resuelve como ruta relativa y navega DENTRO de la app en vez de a LinkedIn.
+const hrefLinkedIn = (url: string) =>
+  /^https?:\/\//.test(url) ? url : `https://${url}`;
 
 const AREA_OPCIONES: { value: AreaContacto; label: string }[] = [
   { value: "calidad",       label: "Calidad" },
@@ -629,7 +635,7 @@ function ContactoCard({
                 )}
                 {datos.linkedin_url && (
                   <Button variant="outline" size="sm" className="flex-1 text-xs min-w-0 gap-1" asChild>
-                    <a href={datos.linkedin_url} target="_blank" rel="noopener noreferrer">
+                    <a href={hrefLinkedIn(datos.linkedin_url)} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="h-3.5 w-3.5" />
                       LinkedIn
                     </a>
@@ -892,7 +898,7 @@ function DecisorSugeridoCard({
             </div>
             {persona.linkedin_url && (
               <a
-                href={persona.linkedin_url}
+                href={hrefLinkedIn(persona.linkedin_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-xs text-[#F97316] hover:underline"

@@ -44,6 +44,11 @@ const PRESETS_CONGELAR = [
   { label: "3 meses", dias: 90 },
 ];
 
+// Mismo fix que en tab-decisores.tsx: sin protocolo el href se resuelve como
+// ruta relativa y navega dentro de la app en vez de ir a LinkedIn.
+const hrefLinkedIn = (url: string) =>
+  /^https?:\/\//.test(url) ? url : `https://${url}`;
+
 interface Props {
   empresa: EmpresaCompleta;
   interacciones: Interaccion[];
@@ -305,7 +310,7 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
                       )}
                       {c.linkedin_url && (
                         <FilaCanal Icon={Briefcase} valor={c.linkedin_url.replace(/^https?:\/\/(www\.)?/, "")}>
-                          <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className={CHIP_ACCION}>
+                          <a href={hrefLinkedIn(c.linkedin_url)} target="_blank" rel="noopener noreferrer" className={CHIP_ACCION}>
                             <ExternalLink className="h-3 w-3" /> Abrir
                           </a>
                         </FilaCanal>

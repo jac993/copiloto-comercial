@@ -11,6 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import type { EmpresaCompleta, BusquedaWebRaw, AnalisisWeb } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+// Mismo fix que en tab-decisores.tsx: sin protocolo el href se resuelve como
+// ruta relativa y navega dentro de la app en vez de ir a LinkedIn.
+const hrefLinkedIn = (url: string) =>
+  /^https?:\/\//.test(url) ? url : `https://${url}`;
+
 interface TabBusquedaWebProps {
   empresa: EmpresaCompleta;
 }
@@ -315,7 +320,7 @@ function PersonaCard({ persona }: { persona: import("@/lib/types").PersonaWebEnc
       <div className="flex flex-wrap gap-2">
         {persona.linkedin_url && (
           <a
-            href={persona.linkedin_url}
+            href={hrefLinkedIn(persona.linkedin_url)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-xs text-primary hover:underline"
