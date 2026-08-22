@@ -28,7 +28,9 @@ import type {
   CorreoDetectado, Contacto, TipoInteraccion, SentimientoInteraccion,
 } from "@/lib/types";
 import { msRespuestaHabil } from "@/lib/fecha";
-import { TIPO_CONF } from "@/lib/interaccion-meta";
+import {
+  TIPO_CONF, MARCADOR_LLAMADA_SIN_RESPUESTA, esStubDeTarea,
+} from "@/lib/interaccion-meta";
 
 // ── Visual configs ────────────────────────────────────────────
 
@@ -112,22 +114,9 @@ function esProspectoMsg(i: Interaccion): boolean {
   return i.remitente === "prospecto" || TEXTOS_RESOLUCION.has(i.transcripcion ?? "");
 }
 
-// Marcadores de sistema que NO son conversación real y se OCULTAN del
-// historial: filas vacías (stubs de métricas del botón "✓ Hecho") y
-// "Sin respuesta tras 48h" standalone (stub de tarea, sin parent_id).
-// OJO: "Llamada sin respuesta" NO va aquí — el vendedor la ingresa a mano
-// desde el sheet ("No contestó") y ocultarla parecía pérdida de datos
-// (regresión de bc611ab). Se muestra como evento compacto de sistema.
-const MARCADORES_OCULTAR = new Set(["Sin respuesta tras 48h"]);
-const MARCADOR_LLAMADA_SIN_RESPUESTA = "Llamada sin respuesta";
-
-function esStubDeTarea(i: Interaccion): boolean {
-  if (i.parent_id) return false;
-  const t = (i.transcripcion ?? "").trim();
-  const sinResumen = !(i.resumen_ia ?? "").trim();
-  // Sin resumen de IA y cuyo único "texto" es vacío o un marcador de sistema.
-  return sinResumen && (t === "" || MARCADORES_OCULTAR.has(t));
-}
+// MARCADORES_OCULTAR, MARCADOR_LLAMADA_SIN_RESPUESTA y esStubDeTarea viven en
+// lib/interaccion-meta.ts: el panel de seguimiento necesita la misma regla para
+// no tomar un stub como última actividad.
 
 // Registro real del vendedor pero sin contenido conversacional: se renderiza
 // como línea de evento (📞 Llamada sin respuesta · fecha), no como burbuja.

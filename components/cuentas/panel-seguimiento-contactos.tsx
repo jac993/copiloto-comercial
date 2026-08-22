@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hoyCL, diasHabilesEntre } from "@/lib/fecha";
 import { hrefLinkedIn } from "@/lib/utils";
-import { TIPO_CONF } from "@/lib/interaccion-meta";
+import { TIPO_CONF, esStubDeTarea } from "@/lib/interaccion-meta";
 import type { Contacto, Interaccion, TipoInteraccion } from "@/lib/types";
 
 // Semáforo de actividad POR CONTACTO, en días hábiles desde su última
@@ -102,12 +102,19 @@ export function PanelSeguimientoContactos({
     return () => ac.abort();
   }, [abierto, empresaId, intento]);
 
-  // contacto_id → fecha ISO y tipo de su última interacción. Las interacciones
-  // sin contacto_id se ignoran: son stubs de sistema, no conversaciones.
+  // contacto_id → fecha ISO y tipo de su última interacción REAL.
+  // Se descartan DOS familias distintas de stub:
+  //  1. contacto_id null → los de crearStubInteraccion(), no atribuibles.
+  //  2. esStubDeTarea() → los que SÍ traen contacto_id (el "Sin respuesta
+  //     tras 48h" automático). Sin este filtro el panel tomaba ese stub como
+  //     última actividad: mostraba "⏰ Sin respuesta · Hace 1 día hábil" y en
+  //     verde, cuando la última conversación real había sido 6 días hábiles
+  //     antes. Misma regla que el historial, así las dos pantallas coinciden.
   const ultimaActividad = useMemo(() => {
     const m = new Map<string, { fecha: string; tipo: TipoInteraccion }>();
     for (const i of interacciones) {
       if (!i.contacto_id) continue;
+      if (esStubDeTarea(i)) continue;
       const prev = m.get(i.contacto_id);
       if (!prev || Date.parse(i.fecha) > Date.parse(prev.fecha)) {
         m.set(i.contacto_id, { fecha: i.fecha, tipo: i.tipo });

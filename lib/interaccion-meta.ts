@@ -10,7 +10,7 @@
 
 import type { ElementType } from "react";
 import { Phone, Mail, MessageCircle, Briefcase, PhoneOff, Users } from "lucide-react";
-import type { TipoInteraccion } from "@/lib/types";
+import type { Interaccion, TipoInteraccion } from "@/lib/types";
 
 export interface TipoInteraccionMeta {
   emoji: string;
@@ -26,3 +26,26 @@ export const TIPO_CONF: Record<TipoInteraccion, TipoInteraccionMeta> = {
   reunion:       { emoji: "🤝", label: "Reunión",       Icon: Users },
   sin_respuesta: { emoji: "⏰", label: "Sin respuesta", Icon: PhoneOff },
 };
+
+// ── Qué cuenta como conversación real ────────────────────────
+
+// Marcadores de sistema que NO son conversación real y se OCULTAN del
+// historial: filas vacías (stubs de métricas del botón "✓ Hecho") y
+// "Sin respuesta tras 48h" standalone (stub de tarea, sin parent_id).
+// OJO: "Llamada sin respuesta" NO va aquí — el vendedor la ingresa a mano
+// desde el sheet ("No contestó") y ocultarla parecía pérdida de datos
+// (regresión de bc611ab). Se muestra como evento compacto de sistema.
+export const MARCADORES_OCULTAR = new Set(["Sin respuesta tras 48h"]);
+export const MARCADOR_LLAMADA_SIN_RESPUESTA = "Llamada sin respuesta";
+
+// true = registro de sistema, no conversación. Lo usan el historial (para
+// ocultarlo) y el panel de seguimiento (para no tomarlo como última
+// actividad). CUIDADO: estos stubs SÍ traen contacto_id, así que filtrar
+// por contacto_id != null no alcanza para excluirlos.
+export function esStubDeTarea(i: Interaccion): boolean {
+  if (i.parent_id) return false;
+  const t = (i.transcripcion ?? "").trim();
+  const sinResumen = !(i.resumen_ia ?? "").trim();
+  // Sin resumen de IA y cuyo único "texto" es vacío o un marcador de sistema.
+  return sinResumen && (t === "" || MARCADORES_OCULTAR.has(t));
+}
