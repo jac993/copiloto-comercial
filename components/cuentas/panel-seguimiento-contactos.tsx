@@ -254,8 +254,8 @@ export function PanelSeguimientoContactos({
         {/* Pie fijo, fuera del scroll */}
         <div className="border-t border-border px-4 py-3">
           <Button asChild className="w-full gap-1.5">
-            <Link href={`/cuentas/${empresaId}`}>
-              Ver empresa completa
+            <Link href={`/cuentas/${empresaId}?tab=historial`}>
+              Detalle de interacciones
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </Button>
