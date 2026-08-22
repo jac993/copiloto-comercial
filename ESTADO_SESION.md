@@ -2,8 +2,9 @@
 
 Última actualización: 21 ago 2026 — panel lateral de seguimiento de contactos,
 dos acciones apiladas por tarjeta, revert de la barra de actividad en la pestaña
-Decisores, y consolidación de `hrefLinkedIn` y `TIPO_CONF` en `lib/`.
-Commits `d76fd07`–`80ba3b9`.
+Decisores, consolidación de `hrefLinkedIn` / `TIPO_CONF` / `esStubDeTarea` en
+`lib/`, y fix del cálculo de actividad del panel.
+Commits `d76fd07`–`5654527`.
 
 **Si el build local falla con errores raros de archivos, ver la nota de
 `attrib +P -U .next` en Notas de entorno — es el arreglo real, borrar `.next`
@@ -24,6 +25,8 @@ mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
 | `74c8ca9` | feat: panel lateral de seguimiento de contactos y dos acciones por tarjeta |
 | `3258ce0` | docs: actualizar ESTADO_SESION (panel de contactos + revert) |
 | `80ba3b9` | feat: tipo de última interacción en el panel y botones apilados en tarjetas |
+| `6f78f20` | docs: documentar `attrib +P -U .next` como solución al problema de OneDrive |
+| `5654527` | fix: el panel de seguimiento ignoraba los stubs de tarea al calcular actividad |
 
 Rama: `main`. Sincronizado con `origin/main`.
 
@@ -58,7 +61,9 @@ explícitamente por el usuario, no un descuido.
   ya traían `fetchCache = "force-no-store"` — no se creó ninguna ruta API.
   Cero créditos de IA, así que no lleva chip ⚡.
 - **Cuatro estados:** skeleton, error con botón Reintentar, vacío útil, y datos.
-- Ignora las interacciones con `contacto_id = null` (son stubs de sistema).
+- Ignora las interacciones con `contacto_id = null` **y** las que cumplen
+  `esStubDeTarea()` — ver la trampa de datos más abajo: hay stubs que SÍ traen
+  `contacto_id` y filtrar solo por null no alcanza (corregido en `5654527`).
 - Queda montado aunque esté cerrado (Radix no renderiza nada con `open=false`).
   Es a propósito: si el padre lo desmonta al cerrar, **se pierde la animación de
   salida**.
@@ -88,6 +93,9 @@ en `lib/fecha.ts` porque ese módulo es estrictamente lógica de fechas.
 - **`TIPO_CONF` consolidado en `lib/interaccion-meta.ts`.** Estaba duplicado en
   4 componentes (`llamadas-client`, `tab-historial`, `nueva-interaccion-sheet`,
   `alertas/page`) y el panel habría sido la quinta copia. Los 5 importan de ahí.
+  Ese módulo también alberga ahora `esStubDeTarea` y los marcadores de sistema
+  (movidos en `5654527`), así que es el lugar donde vive **todo lo que define
+  qué es una interacción real y cómo se presenta**.
 - `nueva-interaccion-sheet` es el único caso parcial: conserva su array `TIPOS`
   porque lleva el **orden del selector** y el flag **`ia`** (qué canal gasta
   créditos), y solo hace spread de la parte presentacional.
@@ -127,6 +135,57 @@ cumplen el mínimo táctil de 44px de CLAUDE.md sin depender de un efecto
 colateral del layout. Apilados también entran los labels completos en la columna
 de 220px, sin acortar a "Seguimiento".
 
+### 🔴 TRAMPA DE DATOS — hay stubs de sistema **con** `contacto_id` (`5654527`)
+
+**Corrige lo que este mismo documento decía más arriba.** Filtrar
+`contacto_id != null` NO alcanza para excluir registros de sistema. Hay dos
+familias distintas de stub:
+
+| Origen | `contacto_id` | Cuántos |
+|---|---|---|
+| `crearStubInteraccion()` | **null** | 18 |
+| Flujo "No contestó" / temporizador 48h | **presente** | 11 (`tipo=sin_respuesta`) |
+
+Los 11 de la segunda familia se colaban en el panel de seguimiento y ganaban
+la selección de "última actividad" por tener la `fecha` más alta.
+
+**Síntoma real (Francisco Merino @ Oxiquim):** el stub del 20 ago le ganaba a
+la última conversación real del 13 ago, así que el panel mostraba
+"⏰ Sin respuesta · Hace 1 día hábil" **en verde "Activo"**, cuando en realidad
+llevaba 6 días hábiles sin conversación y estaba "Enfriándose". El semáforo
+mentía en la dirección peligrosa: decía que no hacía falta contactar a alguien
+que sí lo necesitaba. Y pasaba justo con los contactos que dejaron de
+responder, que son los que más atención necesitan.
+
+**Causa de fondo: dos pantallas con reglas distintas.** El historial ya ocultaba
+esos registros con `esStubDeTarea()`; el panel los contaba. Por eso abrías la
+ficha, no veías nada del 20 de agosto, y el panel insistía en "hace 1 día".
+
+**Fix:** `esStubDeTarea`, `MARCADORES_OCULTAR` y
+`MARCADOR_LLAMADA_SIN_RESPUESTA` se movieron a `lib/interaccion-meta.ts` y las
+dos pantallas los importan de ahí, así que no pueden volver a divergir.
+`esEventoSistema` quedó local en `tab-historial` porque es lógica de render.
+
+**Qué SÍ sigue contando como actividad** (decisión explícita del usuario):
+- Los **19** "Sin respuesta tras 48h" **con `parent_id`** — son resoluciones del
+  botón "No contestó" y llevan canal real (linkedin 10, whatsapp 6, email 4).
+  Los deja pasar la guarda `if (i.parent_id) return false`.
+- Los **35** "Llamada sin respuesta" — el vendedor los ingresa a mano y
+  ocultarlos ya fue una regresión antes (`bc611ab`). No están en
+  `MARCADORES_OCULTAR`.
+
+**Impacto:** 6 de 52 contactos con actividad cambiaron, los 6 a mejor. Todos
+mostraban "⏰ Sin respuesta" y ninguno era un canal real: Carlos Tapia
+(18d→21d whatsapp), Hernan Acosta (19d→24d whatsapp), Felipe Cerpa
+(17d→19d email), Carla Munita (25d→29d email), Francisco Merino (1d→6d
+whatsapp), Verónica Puente (16d→18d linkedin).
+
+**Regla para el futuro:** cualquier cálculo de "última interacción real" debe
+usar `esStubDeTarea()` de `lib/interaccion-meta.ts`, no inventar su propio
+filtro. Y el endpoint `/api/interacciones/empresa/[id]` devuelve **todo** a
+propósito (`select("*")` sin filtros) — el filtrado es responsabilidad del
+consumidor.
+
 ### 🔴 TRAMPA DE DATOS — `contactos.es_decisor` no significa "es decisor"
 
 Medido sobre los 98 contactos reales:
@@ -153,8 +212,10 @@ Consecuencias prácticas:
   **1 solo contacto** (13 de 31 empresas). 3 empresas sin ningún contacto.
 - **Trazabilidad interacción → persona:** 201 de 222 (90,5%) tienen
   `contacto_id`. De las 21 que no, **18 son stubs de sistema**
-  (`crearStubInteraccion` lo pone en `null` a propósito). O sea que casi toda
-  conversación real es atribuible a alguien.
+  (`crearStubInteraccion` lo pone en `null` a propósito).
+  ⚠️ **Pero eso no significa que todo lo que tiene `contacto_id` sea
+  conversación real** — hay 11 stubs `sin_respuesta` y 66 registros con texto
+  marcador que también lo traen. Ver la trampa de datos de los stubs.
 - **Calidad de los contactos:** 46 de 98 (47%) no tienen ninguna interacción ·
   28 tienen `nombre = null` (cargos sugeridos por IA sin persona real) ·
   68 están `verificado = false`.
@@ -440,10 +501,10 @@ A 384px de sheet el navegador no reporta desborde, pero **no se pudo medir a
 contenedor pasa de 196 a ~187px, así que en el peor caso el `truncate` recorta la
 cola de "hábiles" — no el número de días. Vale mirarlo en el celular.
 
-### Sin caso real — banda ámbar del semáforo de actividad
-Verde (≤5 días hábiles) y rojo (>10) se verificaron con datos reales. La banda
-ámbar (6–10) **no tiene ningún contacto** que caiga ahí en empresas del pipeline,
-así que nunca se vio renderizada. Comparte el mismo `find()` que las otras dos.
+### ✅ ~~Sin caso real — banda ámbar del semáforo de actividad~~
+**Verificada el 21 ago.** El fix de `5654527` produjo el primer caso real:
+Francisco Merino (Oxiquim) pasó a 6 días hábiles → "Enfriándose" en ámbar. Las
+tres bandas del semáforo están confirmadas con datos reales.
 
 ### Cosmético — duplicados históricos de "No contestó" en CCU
 - Empresa: CCU S.A., contacto John Velásquez (LinkedIn)
