@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Zap, Building2, Search, List, Columns3, Plus, ClipboardList, Snowflake } from "lucide-react";
+import { Zap, Building2, Search, List, Columns3, Plus, ClipboardList, Snowflake, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EmpresaCard } from "@/components/cuentas/empresa-card";
@@ -9,11 +9,12 @@ import { VistaKanban } from "@/components/cuentas/vista-kanban";
 import { InvestigarDialog } from "@/components/cuentas/investigar-dialog";
 import { NuevoProspectoDialog } from "@/components/cuentas/nuevo-prospecto-dialog";
 import { ProspectoLigeroCard } from "@/components/cuentas/prospecto-ligero-card";
+import { labelRazonPerdida } from "@/lib/prospecto-ligero";
 import type { Empresa } from "@/lib/types";
 
 type Vista = "lista" | "pipeline";
 type Seccion = "pipeline" | "por_calificar";
-type SubVista = "activos" | "congelados";
+type SubVista = "activos" | "congelados" | "perdidos";
 
 // Formateador local de display. Duplica el de prospecto-ligero-detail.tsx a
 // propósito: son 4 líneas y así no hay que tocar lib/fecha.ts.
@@ -28,6 +29,7 @@ interface CuentasClientProps {
   empresasVencidasIds: string[];
   prospectosLigeros: Empresa[];
   prospectosCongelados: Empresa[];
+  prospectosLigerosPerdidos: Empresa[];
   conteos: Record<string, { interacciones: number; contactos: number }>;
 }
 
@@ -36,6 +38,7 @@ export function CuentasClient({
   empresasVencidasIds,
   prospectosLigeros,
   prospectosCongelados,
+  prospectosLigerosPerdidos,
   conteos,
 }: CuentasClientProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -159,11 +162,16 @@ export function CuentasClient({
             )}
           </>
         )
-      ) : prospectosLigeros.length === 0 && prospectosCongelados.length === 0 ? (
+      ) : prospectosLigeros.length === 0 &&
+          prospectosCongelados.length === 0 &&
+          prospectosLigerosPerdidos.length === 0 ? (
+        /* Las TRES listas vacías. Si solo se chequearan activos, al descartar
+           el último prospecto desaparecería el toggle y los perdidos quedarían
+           inalcanzables desde la UI. */
         <EstadoVacioLigero onNuevo={() => setDialogProspecto(true)} />
       ) : (
         <div className="px-4 pt-3 space-y-3">
-          {/* Sub-toggle Activos | Congelados */}
+          {/* Sub-toggle Activos | Congelados | Perdidos */}
           <div className="inline-flex items-center border border-input rounded-xl overflow-hidden text-xs font-semibold">
             <button
               onClick={() => setSubVista("activos")}
@@ -186,9 +194,20 @@ export function CuentasClient({
               <Snowflake className="h-3 w-3" />
               Congelados ({prospectosCongelados.length})
             </button>
+            <button
+              onClick={() => setSubVista("perdidos")}
+              className={`px-3.5 h-8 transition-colors inline-flex items-center gap-1.5 ${
+                subVista === "perdidos"
+                  ? "bg-primary text-white"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              <XCircle className="h-3 w-3" />
+              Perdidos ({prospectosLigerosPerdidos.length})
+            </button>
           </div>
 
-          {subVista === "activos" ? (
+          {subVista === "activos" && (
             prospectosLigeros.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8 leading-relaxed">
                 Nada activo por calificar.<br />
@@ -204,28 +223,64 @@ export function CuentasClient({
                 ))}
               </>
             )
-          ) : prospectosCongelados.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8 leading-relaxed">
-              Ningún prospecto congelado.<br />
-              Congela uno desde su ficha cuando no valga la pena ahora.
-            </p>
-          ) : (
-            <>
-              <p className="text-xs text-muted-foreground font-medium px-1">
-                {prospectosCongelados.length} congelado{prospectosCongelados.length === 1 ? "" : "s"} · vuelven solos en su fecha
+          )}
+
+          {subVista === "congelados" && (
+            prospectosCongelados.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8 leading-relaxed">
+                Ningún prospecto congelado.<br />
+                Congela uno desde su ficha cuando no valga la pena ahora.
               </p>
-              {prospectosCongelados.map((p) => (
-                <div key={p.id} className="space-y-1.5">
-                  {p.prospecto_congelado_hasta && (
-                    <p className="text-xs font-semibold text-sky-700 dark:text-sky-400 inline-flex items-center gap-1 px-1">
-                      <Snowflake className="h-3 w-3" />
-                      Recontactar el {fechaLegible(p.prospecto_congelado_hasta)}
-                    </p>
-                  )}
-                  <ProspectoLigeroCard empresa={p} conteo={conteos[p.id]} />
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground font-medium px-1">
+                  {prospectosCongelados.length} congelado{prospectosCongelados.length === 1 ? "" : "s"} · vuelven solos en su fecha
+                </p>
+                {prospectosCongelados.map((p) => (
+                  <div key={p.id} className="space-y-1.5">
+                    {p.prospecto_congelado_hasta && (
+                      <p className="text-xs font-semibold text-sky-700 dark:text-sky-400 inline-flex items-center gap-1 px-1">
+                        <Snowflake className="h-3 w-3" />
+                        Recontactar el {fechaLegible(p.prospecto_congelado_hasta)}
+                      </p>
+                    )}
+                    <ProspectoLigeroCard empresa={p} conteo={conteos[p.id]} />
+                  </div>
+                ))}
+              </>
+            )
+          )}
+
+          {subVista === "perdidos" && (
+            prospectosLigerosPerdidos.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8 leading-relaxed">
+                Ningún prospecto descartado.<br />
+                Marca uno como perdido desde su ficha cuando no sea tu cliente.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground font-medium px-1">
+                  {prospectosLigerosPerdidos.length} descartado{prospectosLigerosPerdidos.length === 1 ? "" : "s"} · reactivables desde su ficha
+                </p>
+                {/* Apagados, coherente con la convención de perdido del pipeline.
+                    El chip de razón se renderiza acá y no dentro de
+                    ProspectoLigeroCard: su badge de días desde creación no
+                    aplica a un descartado. */}
+                <div className="space-y-3 opacity-60">
+                  {prospectosLigerosPerdidos.map((p) => (
+                    <div key={p.id} className="space-y-1.5">
+                      {p.prospecto_ligero_perdido_razon && (
+                        <p className="text-xs font-semibold text-red-600 dark:text-red-400 inline-flex items-center gap-1 px-1">
+                          <XCircle className="h-3 w-3" />
+                          {labelRazonPerdida(p.prospecto_ligero_perdido_razon)}
+                        </p>
+                      )}
+                      <ProspectoLigeroCard empresa={p} conteo={conteos[p.id]} />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </>
+              </>
+            )
           )}
         </div>
       )}

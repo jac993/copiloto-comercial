@@ -13,6 +13,7 @@ import {
   getInteraccionesConProximoPaso,
   getProspectosLigeros,
   getProspectosCongelados,
+  getProspectosLigerosPerdidos,
   getConteosPorEmpresa,
 } from "@/lib/queries";
 import type { Empresa } from "@/lib/types";
@@ -22,26 +23,29 @@ export default async function CuentasPage() {
   let empresasVencidasIds: string[] = [];
   let prospectosLigeros: Empresa[] = [];
   let prospectosCongelados: Empresa[] = [];
+  let prospectosLigerosPerdidos: Empresa[] = [];
   let conteos: Record<string, { interacciones: number; contactos: number }> = {};
   let errorCarga: string | null = null;
 
   try {
-    const [emps, interaccionesVencidas, ligeros, congelados] = await Promise.all([
+    const [emps, interaccionesVencidas, ligeros, congelados, perdidos] = await Promise.all([
       getEmpresas(),
       getInteraccionesConProximoPaso(),
       getProspectosLigeros(),
       getProspectosCongelados(),
+      getProspectosLigerosPerdidos(),
     ]);
     empresas = emps;
     prospectosLigeros = ligeros;
     prospectosCongelados = congelados;
+    prospectosLigerosPerdidos = perdidos;
     // IDs de empresas con al menos un próximo paso vencido
     const idsUnicos = Array.from(new Set(interaccionesVencidas.map((i) => i.empresa_id)));
     empresasVencidasIds = idsUnicos;
     // Map → objeto plano (los Map no serializan de Server a Client Component).
-    // Conteos para ambas sub-vistas: Activos y Congelados.
+    // Conteos para las tres sub-vistas: Activos, Congelados y Perdidos.
     const conteosMap = await getConteosPorEmpresa(
-      [...ligeros, ...congelados].map((e) => e.id)
+      [...ligeros, ...congelados, ...perdidos].map((e) => e.id)
     );
     conteos = Object.fromEntries(conteosMap);
   } catch (err) {
@@ -83,6 +87,7 @@ export default async function CuentasPage() {
         empresasVencidasIds={empresasVencidasIds}
         prospectosLigeros={prospectosLigeros}
         prospectosCongelados={prospectosCongelados}
+        prospectosLigerosPerdidos={prospectosLigerosPerdidos}
         conteos={conteos}
       />
     </div>

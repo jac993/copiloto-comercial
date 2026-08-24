@@ -157,13 +157,15 @@ export async function getEmpresasPriorizadas(limite = 10): Promise<Empresa[]> {
 }
 
 // Prospectos ligeros ACTIVOS ("Por calificar" → Activos): fuera del pipeline,
-// sin ficha IA. Excluye los congelados a futuro. Un prospecto cuya fecha de
-// recontacto ya llegó (<= hoy) vuelve solo a esta lista — sin cron ni job.
+// sin ficha IA. Excluye los descartados y los congelados a futuro. Un prospecto
+// cuya fecha de recontacto ya llegó (<= hoy) vuelve solo a esta lista — sin
+// cron ni job.
 export async function getProspectosLigeros(): Promise<Empresa[]> {
   const { data, error } = await getSupabase()
     .from("empresas")
     .select("*")
     .eq("tipo_registro", "ligero")
+    .neq("estado", "perdido")
     .or(`prospecto_congelado_hasta.is.null,prospecto_congelado_hasta.lte.${hoyCL()}`)
     .order("actualizado_en", { ascending: false });
 
@@ -179,10 +181,31 @@ export async function getProspectosCongelados(): Promise<Empresa[]> {
     .from("empresas")
     .select("*")
     .eq("tipo_registro", "ligero")
+    .neq("estado", "perdido")
     .gt("prospecto_congelado_hasta", hoyCL())
     .order("prospecto_congelado_hasta", { ascending: true });
 
   if (error) throw new Error(`getProspectosCongelados: ${error.message}`);
+  return data ?? [];
+}
+
+// Prospectos ligeros PERDIDOS ("Por calificar" → Perdidos): descartados arriba
+// del embudo, nunca se calificaron. Distinto de los perdidos del pipeline, que
+// sí se compitieron y usan empresas.razon_perdido.
+//
+// Perdido gana sobre congelado: marcar perdido limpia
+// prospecto_congelado_hasta, y además las otras dos listas excluyen
+// estado='perdido'. Así las tres son excluyentes y exhaustivas — verificado
+// contra los 18 ligeros reales: 17 + 1 + 0 = 18, sin solapamiento.
+export async function getProspectosLigerosPerdidos(): Promise<Empresa[]> {
+  const { data, error } = await getSupabase()
+    .from("empresas")
+    .select("*")
+    .eq("tipo_registro", "ligero")
+    .eq("estado", "perdido")
+    .order("actualizado_en", { ascending: false });
+
+  if (error) throw new Error(`getProspectosLigerosPerdidos: ${error.message}`);
   return data ?? [];
 }
 

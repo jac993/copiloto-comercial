@@ -1,0 +1,26 @@
+-- Razón por la que un prospecto ligero se descartó arriba del embudo.
+--
+-- Distinta de empresas.razon_perdido, que pertenece al pipeline principal:
+-- allá se pierde un negocio que se estaba compitiendo (precio, timing,
+-- competidor); acá se descarta un prospecto que nunca se calificó (no es ICP,
+-- muy pequeño, importa y no fabrica). Los dos flujos no se mezclan y ninguno
+-- lee la columna del otro.
+--
+-- TEXT libre SIN check constraint a propósito: agregar razones nuevas no debe
+-- requerir una migración. El conjunto válido vive en lib/prospecto-ligero.ts
+-- (RAZONES_PERDIDA_LIGERO) y lo valida el endpoint marcar-perdido-ligero.
+--
+-- Aditiva y sin backfill: al momento de escribirla los 18 prospectos ligeros
+-- están todos en estado='prospecto', ninguno en 'perdido', así que no hay
+-- filas que migrar y los filtros nuevos (estado != 'perdido' en
+-- getProspectosLigeros y getProspectosCongelados) son no-op sobre los datos
+-- actuales.
+--
+-- Un prospecto ligero perdido queda con:
+--   tipo_registro = 'ligero'
+--   estado = 'perdido'
+--   prospecto_ligero_perdido_razon = <slug>
+--   prospecto_congelado_hasta = null   (marcar perdido limpia el congelamiento)
+--   estado_desde = hoy (zona Chile)
+alter table empresas
+  add column if not exists prospecto_ligero_perdido_razon text;

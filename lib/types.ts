@@ -322,6 +322,10 @@ export interface Empresa {
   // vendedor lo congeló. null = activo. Al llegar la fecha reaparece solo en
   // "Activos" (el filtro por fecha lo resuelve en cada lectura, sin cron).
   prospecto_congelado_hasta: string | null;
+  // Solo prospectos ligeros: slug de la razón por la que se descartó arriba
+  // del embudo (ver RAZONES_PERDIDA_LIGERO en lib/prospecto-ligero.ts).
+  // NO confundir con razon_perdido, que es del pipeline principal.
+  prospecto_ligero_perdido_razon: string | null;
   // Fecha (YYYY-MM-DD) en que entró a su estado actual del pipeline.
   // La mantiene PATCH /api/empresas/[id]/estado; base de "días en etapa".
   estado_desde: string | null;
@@ -346,13 +350,21 @@ export interface Empresa {
 // Para insertar — id y timestamps los genera la DB. tipo_registro es opcional
 // en insert: la columna tiene DEFAULT 'completo', así que solo el alta de
 // prospectos ligeros necesita pasarlo explícito ('ligero').
-// prospecto_congelado_hasta también es opcional: nace NULL (activo) y solo
-// lo escribe PATCH .../congelar. Mismo patrón que tipo_registro — así los
-// inserts existentes no necesitan declararlo.
+// prospecto_congelado_hasta y prospecto_ligero_perdido_razon también son
+// opcionales: nacen NULL y solo los escriben sus PATCH respectivos
+// (.../congelar y .../marcar-perdido-ligero). Mismo patrón que tipo_registro.
+// OJO: cualquier campo nuevo de Empresa que no vaya en este Omit se vuelve
+// OBLIGATORIO en todos los inserts y rompe el build. Ya pasó con el
+// congelamiento.
 export type EmpresaInsert = Omit<
   Empresa,
-  "id" | "creado_en" | "actualizado_en" | "tipo_registro" | "prospecto_congelado_hasta"
-> & { tipo_registro?: TipoRegistro; prospecto_congelado_hasta?: string | null };
+  | "id" | "creado_en" | "actualizado_en"
+  | "tipo_registro" | "prospecto_congelado_hasta" | "prospecto_ligero_perdido_razon"
+> & {
+  tipo_registro?: TipoRegistro;
+  prospecto_congelado_hasta?: string | null;
+  prospecto_ligero_perdido_razon?: string | null;
+};
 export type EmpresaUpdate = Partial<EmpresaInsert>;
 
 // ─── TABLA: contactos ────────────────────────────────────────

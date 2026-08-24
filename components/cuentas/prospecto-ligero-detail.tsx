@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Zap, Globe, Loader2, Plus, Pencil, Trash2,
   User, Phone, Mail, Building2, AlertCircle, Snowflake,
-  ChevronDown, Copy, Check, Briefcase, ExternalLink,
+  ChevronDown, Copy, Check, Briefcase, ExternalLink, XCircle, RotateCcw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
 import { TabHistorial } from "@/components/cuentas/tab-historial";
 import { hoyCL } from "@/lib/fecha";
 import { hrefLinkedIn } from "@/lib/utils";
+import { RAZONES_PERDIDA_LIGERO, labelRazonPerdida } from "@/lib/prospecto-ligero";
 import type { EmpresaCompleta, Contacto, Interaccion } from "@/lib/types";
 
 // Suma días calendario a una fecha "YYYY-MM-DD" (aritmética UTC-mediodía, DST-safe)
@@ -81,6 +82,14 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
   );
   const [congelarAbierto, setCongelarAbierto] = useState(false);
   const [descongelando, setDescongelando] = useState(false);
+  // Descarte. `perdido` y la razón van por separado: si algún día hay un
+  // estado='perdido' sin razón, el banner igual se muestra sin inventar una.
+  const [perdido, setPerdido] = useState(empresa.estado === "perdido");
+  const [razonPerdida, setRazonPerdida] = useState<string | null>(
+    empresa.prospecto_ligero_perdido_razon
+  );
+  const [perdidoAbierto, setPerdidoAbierto] = useState(false);
+  const [reactivando, setReactivando] = useState(false);
 
   // ── Contactos: alta / edición ──────────────────────────────
   const guardarContacto = async () => {
@@ -157,6 +166,20 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
     }
   };
 
+  const reactivar = async () => {
+    setReactivando(true);
+    try {
+      const res = await fetch(`/api/empresas/${empresa.id}/reactivar-ligero`, { method: "PATCH" });
+      if (res.ok) {
+        setPerdido(false);
+        setRazonPerdida(null);
+        router.refresh();
+      }
+    } finally {
+      setReactivando(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header neutro (slate) — distinto del violeta del pipeline */}
@@ -178,37 +201,66 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
             {empresa.url.replace(/^https?:\/\/(www\.)?/, "")}
           </a>
         )}
-        {/* Acción principal: investigar y pasar al pipeline */}
-        <Button
-          className="mt-4 w-full gap-2 bg-white text-slate-800 hover:bg-white/90 font-semibold"
-          onClick={() => setPromoverAbierto(true)}
-        >
-          <Zap className="h-4 w-4" />
-          Investigar y pasar a pipeline
-        </Button>
-        <p className="text-xs text-center text-white/60 mt-1.5">⚡ Esta acción usa créditos de IA</p>
-
-        {/* Congelamiento: banner si está congelado, botón si está activo */}
-        {congelado ? (
-          <div className="mt-3 rounded-xl bg-white/10 p-3 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-white inline-flex items-center gap-1.5">
-                <Snowflake className="h-3.5 w-3.5" /> Congelado
-              </p>
-              <p className="text-xs text-white/70 mt-0.5">Recontactar el {fechaLegible(congelado)}</p>
-            </div>
-            <button onClick={descongelar} disabled={descongelando}
-              className="shrink-0 text-xs font-semibold px-3 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50">
-              {descongelando && <Loader2 className="h-3 w-3 animate-spin" />}
-              Descongelar
+        {perdido ? (
+          /* Descartado: banner con la razón + reactivar. Sin promover ni
+             congelar — no tienen sentido sobre algo que ya descartaste. */
+          <div className="mt-4 rounded-xl bg-red-500/20 border border-red-400/30 p-3">
+            <p className="text-xs font-semibold text-white inline-flex items-center gap-1.5">
+              <XCircle className="h-3.5 w-3.5" /> Descartado
+            </p>
+            {razonPerdida && (
+              <p className="text-xs text-white/80 mt-0.5">{labelRazonPerdida(razonPerdida)}</p>
+            )}
+            <button onClick={reactivar} disabled={reactivando}
+              className="mt-2.5 w-full h-9 rounded-lg bg-white/20 text-white text-xs font-semibold hover:bg-white/30 transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-50">
+              {reactivando
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RotateCcw className="h-3.5 w-3.5" />}
+              Reactivar prospecto
             </button>
           </div>
         ) : (
-          <button onClick={() => setCongelarAbierto(true)}
-            className="mt-3 w-full h-10 rounded-xl bg-white/10 text-white text-sm font-semibold hover:bg-white/20 transition-colors inline-flex items-center justify-center gap-2">
-            <Snowflake className="h-4 w-4" />
-            Congelar prospecto
-          </button>
+          <>
+            {/* Acción principal: investigar y pasar al pipeline */}
+            <Button
+              className="mt-4 w-full gap-2 bg-white text-slate-800 hover:bg-white/90 font-semibold"
+              onClick={() => setPromoverAbierto(true)}
+            >
+              <Zap className="h-4 w-4" />
+              Investigar y pasar a pipeline
+            </Button>
+            <p className="text-xs text-center text-white/60 mt-1.5">⚡ Esta acción usa créditos de IA</p>
+
+            {/* Congelamiento: banner si está congelado, botón si está activo */}
+            {congelado ? (
+              <div className="mt-3 rounded-xl bg-white/10 p-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white inline-flex items-center gap-1.5">
+                    <Snowflake className="h-3.5 w-3.5" /> Congelado
+                  </p>
+                  <p className="text-xs text-white/70 mt-0.5">Recontactar el {fechaLegible(congelado)}</p>
+                </div>
+                <button onClick={descongelar} disabled={descongelando}
+                  className="shrink-0 text-xs font-semibold px-3 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50">
+                  {descongelando && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Descongelar
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setCongelarAbierto(true)}
+                className="mt-3 w-full h-10 rounded-xl bg-white/10 text-white text-sm font-semibold hover:bg-white/20 transition-colors inline-flex items-center justify-center gap-2">
+                <Snowflake className="h-4 w-4" />
+                Congelar prospecto
+              </button>
+            )}
+
+            {/* Descartar: última en la jerarquía, es la acción menos deseable */}
+            <button onClick={() => setPerdidoAbierto(true)}
+              className="mt-2 w-full h-9 text-white/60 hover:text-white/90 text-xs font-medium transition-colors inline-flex items-center justify-center gap-1.5">
+              <XCircle className="h-3.5 w-3.5" />
+              Marcar como perdido
+            </button>
+          </>
         )}
       </div>
 
@@ -359,6 +411,21 @@ export function ProspectoLigeroDetail({ empresa, interacciones }: Props) {
           onCongelado={(hasta) => {
             setCongelado(hasta);
             setCongelarAbierto(false);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {perdidoAbierto && (
+        <MarcarPerdidoDialog
+          empresaId={empresa.id}
+          empresaNombre={empresa.nombre}
+          onClose={() => setPerdidoAbierto(false)}
+          onPerdido={(razon) => {
+            setPerdido(true);
+            setRazonPerdida(razon);
+            setCongelado(null); // el endpoint limpió el congelamiento en BD
+            setPerdidoAbierto(false);
             router.refresh();
           }}
         />
@@ -608,6 +675,98 @@ function PromoverDialog({ empresaId, urlInicial, onClose }: {
             <p className="text-xs text-center text-muted-foreground">⚡ Usa créditos de IA</p>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Dialog de descarte: 6 razones de una pulsación + confirmar ──
+function MarcarPerdidoDialog({ empresaId, empresaNombre, onClose, onPerdido }: {
+  empresaId: string;
+  empresaNombre: string;
+  onClose: () => void;
+  onPerdido: (razon: string) => void;
+}) {
+  const [razon, setRazon] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirmar = async () => {
+    if (!razon) return;
+    setGuardando(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/empresas/${empresaId}/marcar-perdido-ligero`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ razon }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "No se pudo descartar.");
+      onPerdido(razon);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al descartar.");
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o && !guardando) onClose(); }}>
+      <DialogContent className="max-w-sm mx-4 rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <div className="h-8 w-8 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            </div>
+            Marcar como perdido
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">{empresaNombre}</span> sale
+            de Activos y pasa a Perdidos. ¿Por qué lo descartas?
+          </p>
+
+          <div className="space-y-1.5">
+            {RAZONES_PERDIDA_LIGERO.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => setRazon(r.value)}
+                className={`w-full h-11 px-3 rounded-xl text-sm font-medium text-left border-2 transition-colors ${
+                  razon === r.value
+                    ? "border-red-500 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+                    : "border-border text-foreground hover:border-red-300"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-xs">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              {error}
+            </div>
+          )}
+
+          <Button
+            size="lg"
+            variant="destructive"
+            className="w-full gap-2 h-12"
+            disabled={!razon || guardando}
+            onClick={confirmar}
+          >
+            {guardando
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <XCircle className="h-4 w-4" />}
+            {razon ? "Confirmar descarte" : "Elige una razón"}
+          </Button>
+          <p className="text-xs text-center text-muted-foreground">
+            Reversible: puedes reactivarlo después
+          </p>
+        </div>
       </DialogContent>
     </Dialog>
   );
