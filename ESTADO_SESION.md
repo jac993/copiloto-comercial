@@ -1,10 +1,11 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: 21 ago 2026 — panel lateral de seguimiento de contactos,
+Última actualización: 24 ago 2026 — panel lateral de seguimiento de contactos,
 dos acciones apiladas por tarjeta, revert de la barra de actividad en la pestaña
-Decisores, consolidación de `hrefLinkedIn` / `TIPO_CONF` / `esStubDeTarea` en
-`lib/`, y fix del cálculo de actividad del panel.
-Commits `d76fd07`–`5654527`.
+Decisores, consolidación de `hrefLinkedIn` / `TIPO_CONF` / `esStubDeTarea` /
+`RAZONES_PERDIDA_LIGERO` en `lib/`, fix del cálculo de actividad del panel, y
+descarte de prospectos ligeros con razón.
+Commits `d76fd07`–`7e34eb0`.
 
 **Si el build local falla con errores raros de archivos, ver la nota de
 `attrib +P -U .next` en Notas de entorno — es el arreglo real, borrar `.next`
@@ -16,19 +17,76 @@ mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
 
 ---
 
-## Commits del 21 ago 2026
+## Commits del 21–24 ago 2026
 
-| Hash | Descripción |
-|------|-------------|
-| `d76fd07` | feat: barra de actividad por decisor y datos de contacto colapsables — **revertido** |
-| `ca7f416` | fix: normalizar href de LinkedIn y ajustar umbrales del semáforo |
-| `74c8ca9` | feat: panel lateral de seguimiento de contactos y dos acciones por tarjeta |
-| `3258ce0` | docs: actualizar ESTADO_SESION (panel de contactos + revert) |
-| `80ba3b9` | feat: tipo de última interacción en el panel y botones apilados en tarjetas |
-| `6f78f20` | docs: documentar `attrib +P -U .next` como solución al problema de OneDrive |
-| `5654527` | fix: el panel de seguimiento ignoraba los stubs de tarea al calcular actividad |
+Una sola sesión de trabajo repartida en tres días. Ojo con el desfase de fechas:
+el archivo de migración del descarte se llama `20260821_...` pero se ejecutó el
+24 — no se renombró porque cambiarle el nombre a una migración ya aplicada es
+peor que la inconsistencia.
+
+| Hash | Fecha | Descripción |
+|------|-------|-------------|
+| `d76fd07` | 21 ago | feat: barra de actividad por decisor y datos de contacto colapsables — **revertido** |
+| `ca7f416` | 21 ago | fix: normalizar href de LinkedIn y ajustar umbrales del semáforo |
+| `74c8ca9` | 21 ago | feat: panel lateral de seguimiento de contactos y dos acciones por tarjeta |
+| `3258ce0` | 21 ago | docs: actualizar ESTADO_SESION (panel de contactos + revert) |
+| `80ba3b9` | 21 ago | feat: tipo de última interacción en el panel y botones apilados en tarjetas |
+| `6f78f20` | 21 ago | docs: documentar `attrib +P -U .next` como solución al problema de OneDrive |
+| `5654527` | 22 ago | fix: el panel de seguimiento ignoraba los stubs de tarea al calcular actividad |
+| `d1726d7` | 22 ago | docs: trampa de stubs con `contacto_id` + corrección de afirmaciones previas |
+| `0e02593` | 22 ago | feat: el pie del panel lleva directo al historial de interacciones |
+| `7e34eb0` | 24 ago | feat: descarte de prospectos ligeros con razón y sub-vista Perdidos |
 
 Rama: `main`. Sincronizado con `origin/main`.
+
+### Descarte de prospectos ligeros — `7e34eb0`
+
+Un ligero descartado **no es lo mismo** que un perdido del pipeline: nunca se
+calificó, se descartó arriba del embudo. Flujo y columna separados;
+`empresas.razon_perdido` y `PerdidoDialog` **no se tocaron**.
+
+- **Columna:** `empresas.prospecto_ligero_perdido_razon` (text, nullable).
+  Migración `20260821_prospecto_ligero_perdido_razon.sql` (nombre con fecha 21,
+  ejecutada el 24). **Sin check constraint a propósito:** agregar una razón es
+  editar `lib/prospecto-ligero.ts`, sin migración. El conjunto válido lo valida
+  el endpoint contra `SLUGS_PERDIDA_LIGERO`.
+- **Las 6 razones** viven en `lib/prospecto-ligero.ts` (`RAZONES_PERDIDA_LIGERO`)
+  porque las necesitan dos pantallas. `labelRazonPerdida()` cae al slug crudo si
+  no lo conoce: sin constraint la columna puede tener cualquier cosa, y es mejor
+  mostrarla que hacerla desaparecer.
+- **Estado de un descartado:** `estado='perdido'` + razón, y además
+  `prospecto_congelado_hasta = null` — un descartado no debe arrastrar fecha de
+  recontacto. `estado_desde` se actualiza en ambas direcciones, para mantener la
+  columna coherente con lo que hace `PATCH /api/empresas/[id]/estado`.
+
+**La partición de "Por calificar" pasó de dos listas a tres**, complementarias y
+excluyentes:
+```
+Activos     ligero AND estado != 'perdido' AND (cong IS NULL OR cong <= hoy)
+Congelados  ligero AND estado != 'perdido' AND cong > hoy
+Perdidos    ligero AND estado = 'perdido'
+```
+Verificado contra los 18 ligeros reales: **16 + 1 + 1 = 18**, cero solapamiento,
+ninguno fuera de las tres.
+
+**Endpoints nuevos.** `PATCH .../marcar-perdido-ligero` (body `{ razon }`) y
+`PATCH .../reactivar-ligero`. El de reactivar es **aparte de `descongelar` a
+propósito**: son intenciones distintas sobre columnas distintas, y extender
+`descongelar` habría hecho que ese botón pudiera resucitar un descartado como
+efecto secundario. Y **no es idempotente** (409 si no está perdido) porque
+`estado_desde` no debe moverse en una llamada que no cambia nada — a diferencia
+de `descongelar`, donde poner `null` sobre `null` es gratis.
+
+**UI.** "Marcar como perdido" va último en la jerarquía del header: es la acción
+menos deseable. Un prospecto descartado muestra **una** acción (Reactivar), no
+cuatro — promover y congelar no tienen sentido sobre algo ya descartado.
+
+**La trampa del estado vacío, otra vez.** La guarda del vacío grande tuvo que
+pasar a chequear las **tres** listas. Con solo activos, al descartar el último
+prospecto desaparecía el toggle y los perdidos quedaban inalcanzables. Es la
+misma trampa que apareció al agregar Congelados; esta vez se anticipó.
+**Regla: cada vez que se agrega una sub-vista, la guarda del estado vacío tiene
+que incluirla.**
 
 ### ⚠️ `d76fd07` fue revertido — la pestaña Decisores NO tiene barra de actividad
 
@@ -532,6 +590,10 @@ tres bandas del semáforo están confirmadas con datos reales.
   visual de tarjeta (`4df4578`), contactos expandibles y congelamiento (`d35fa61`)
 - ✅ **Panel de seguimiento de contactos** con barra de actividad por persona,
   accesible desde las tarjetas de pipeline y de "Por calificar" (`74c8ca9`)
+- ✅ **Descarte de prospectos ligeros** con razón, sub-vista "Perdidos" y
+  reactivación (`7e34eb0`). Cubre para el embudo ligero lo que el Prompt 3
+  pedía para el pipeline; **el Prompt 3 sigue pendiente** para los negocios
+  perdidos del pipeline, que hoy guardan la razón en texto libre.
 
 ## Features pendientes (en orden de prioridad)
 
@@ -581,7 +643,7 @@ tres bandas del semáforo están confirmadas con datos reales.
 
 ---
 
-## Decisiones arquitectónicas (21 ago 2026)
+## Decisiones arquitectónicas (21–24 ago 2026)
 
 ### Interactivos anidados: la regla completa (corrige la nota del 20 ago)
 Ayer quedó escrito "toda fila clickeable va como `div role="button"`". Eso está
@@ -626,13 +688,16 @@ tarjetas de la lista serían 30 peticiones para que el vendedor abra una. El
 - **Razón:** cero infraestructura, cero estado que se pueda desincronizar, y
   es imposible que un prospecto quede en las dos listas o en ninguna.
 
-### `prospecto_congelado_hasta` opcional en `EmpresaInsert`
-- **Decisión:** agregarla al `Omit` de `EmpresaInsert` y re-declararla opcional,
-  igual que `tipo_registro`.
-- **Razón:** un campo requerido nuevo en `Empresa` se propaga a todos los
+### Campos nullable de `Empresa` van al `Omit` de `EmpresaInsert` — ya van 3
+- **Decisión:** todo campo nuevo y nullable de `Empresa` se agrega al `Omit` de
+  `EmpresaInsert` y se re-declara opcional. Ya pasaron por acá `tipo_registro`,
+  `prospecto_congelado_hasta` y `prospecto_ligero_perdido_razon`.
+- **Razón:** un campo requerido nuevo en `Empresa` se propaga a **todos** los
   inserts existentes y rompe el build de `/api/prospectos` y
   `guardarEmpresaDesdeFicha`. La columna es nullable, así que opcional es
   además lo semánticamente correcto.
+- El `Omit` está escrito en lista vertical y con una advertencia explícita
+  arriba, justamente porque es una trampa recurrente.
 
 ### Rechazar `hasta <= hoy` con 400 en vez de aceptarlo
 - **Decisión:** congelar hasta hoy o al pasado devuelve 400.
@@ -712,6 +777,10 @@ tarjetas de la lista serían 30 peticiones para que el vendedor abra una. El
   `+P -U` marca la carpeta como *pinned / no liberable*, así OneDrive deja de
   hacer placeholders dentro. Hay que reaplicarlo cada vez que se borra `.next`,
   porque el atributo se va con la carpeta.
+
+  **Confirmado el 24 ago:** se usó de nuevo y el build pasó **al primer
+  intento**, contra los 4 reintentos fallidos de la vez anterior. La receta
+  funciona.
 
   **Cómo distinguirlo de un error de código:** si el mensaje dice `Compiled
   successfully` y pasó `Linting and checking validity of types`, y el fallo es
