@@ -7,6 +7,10 @@ Decisores, consolidación de `hrefLinkedIn` / `TIPO_CONF` / `esStubDeTarea` /
 descarte de prospectos ligeros con razón.
 Commits `d76fd07`–`7e34eb0`.
 
+**⚠️ HAY UN BUG ABIERTO SIN ARREGLAR** — en el pipeline no se guardan decisores
+ni interacciones. Diagnosticado con dos causas confirmadas; ver la sección
+"BUG ABIERTO" más abajo. **Es lo primero que hay que atacar.**
+
 **Si el build local falla con errores raros de archivos, ver la nota de
 `attrib +P -U .next` en Notas de entorno — es el arreglo real, borrar `.next`
 no alcanza.**
@@ -36,8 +40,77 @@ peor que la inconsistencia.
 | `d1726d7` | 22 ago | docs: trampa de stubs con `contacto_id` + corrección de afirmaciones previas |
 | `0e02593` | 22 ago | feat: el pie del panel lleva directo al historial de interacciones |
 | `7e34eb0` | 24 ago | feat: descarte de prospectos ligeros con razón y sub-vista Perdidos |
+| `253c68a` | 24 ago | docs: descarte de ligeros + corrección del rango de fechas |
 
 Rama: `main`. Sincronizado con `origin/main`.
+
+---
+
+## 🔴 BUG ABIERTO — en el pipeline no se guardan decisores ni interacciones
+
+**Reportado por el usuario el 24 ago. NO está arreglado.** Se diagnosticó al
+escribir esta nota, así que la próxima sesión arranca con dos causas confirmadas
+en vez de desde cero.
+
+### Síntoma
+En el **pipeline** (empresas `tipo_registro='completo'`), al agregar un decisor
+o una interacción desde la ficha, el cambio aparece y luego desaparece. Mismo
+síntoma que ya tuvimos dos veces esta sesión con otros componentes.
+
+### Causa 1 (confirmada) — `tab-decisores.tsx` no tiene `router.refresh()`
+```
+tab-decisores.tsx            useRouter: 0   router.refresh: 0   ← NINGUNO
+tab-historial.tsx            useRouter: 3   router.refresh: 8
+prospecto-ligero-detail.tsx  useRouter: 3   router.refresh: 8
+```
+Todo el CRUD de decisores (`handleContactoAgregado`, `handleContactoEliminado`,
+y el editar/eliminar de `ContactoCard`) actualiza **solo estado local** y nunca
+invalida el Server Component. Es exactamente la clase de bug que se arregló en
+`cfc34a3` / `01dc70d` / `24fa53c` para los otros componentes — y
+`tab-decisores.tsx` **quedó fuera** de esos fixes.
+
+Ojo con la historia: el revert de `74c8ca9` devolvió el archivo a su estado
+previo a `d76fd07`, que tampoco tenía `router.refresh()`. El revert no causó el
+bug, pero tampoco lo arregló.
+
+### Causa 2 (confirmada) — `app/cuentas/[id]/page.tsx` no tiene `fetchCache`
+```
+app/cuentas/page.tsx        dynamic:SI  fetchCache:SI   ← arreglada el 21 ago
+app/cuentas/[id]/page.tsx   dynamic:SI  fetchCache:NO   ← LA FICHA
+app/casos/page.tsx          dynamic:SI  fetchCache:NO   ← mismo bug latente
+```
+Es **el mismo bug** que se encontró en `app/cuentas/page.tsx` con el
+congelamiento: `force-dynamic` re-ejecuta la página en cada request pero **no
+cubre el Data Cache**, así que supabase-js devuelve filas viejas. La nota de
+entorno lo documenta y la memoria del proyecto decía "auditar el resto de
+páginas" — esta es esa auditoría, y faltaban dos.
+
+### Por qué se combinan (y por qué confunde tanto)
+Las dos causas se refuerzan: **arreglar solo la Causa 1 puede no alcanzar**,
+porque aunque `router.refresh()` re-ejecute el Server Component, el Data Cache
+le devolvería los mismos datos viejos. Fue justo lo que hizo tan difícil el bug
+del congelamiento. Hay que arreglar **las dos**.
+
+### Auditoría completa de `fetchCache` (hecha el 24 ago)
+Solo 3 páginas son Server Components que leen la BD. Las demás son `"use client"`
+y traen datos por API routes, así que las directivas de página no les aplican:
+
+| Página | `dynamic` | `fetchCache` | Estado |
+|---|---|---|---|
+| `app/cuentas/page.tsx` | ✅ | ✅ | ok |
+| `app/cuentas/[id]/page.tsx` | ✅ | ❌ | **arreglar** |
+| `app/casos/page.tsx` | ✅ | ❌ | **arreglar** |
+
+### Primeros pasos sugeridos
+1. Agregar `export const fetchCache = "force-no-store";` a
+   `app/cuentas/[id]/page.tsx` y a `app/casos/page.tsx`.
+2. Agregar `useRouter` + `router.refresh()` en `tab-decisores.tsx` tras cada
+   mutación exitosa: alta, edición y borrado de contacto, "Agregar otro",
+   "Confirmar que esta persona es real" y la derivación.
+3. Reproducir con una empresa `completo` real: agregar un decisor, **recargar
+   la página** (no solo cambiar de pestaña) y confirmar que persiste.
+4. Ojo al verificar en local: si el cambio no aparece aunque el código esté
+   bien, puede ser el bundle viejo de `.next` — ver notas de entorno.
 
 ### Descarte de prospectos ligeros — `7e34eb0`
 
@@ -595,11 +668,38 @@ tres bandas del semáforo están confirmadas con datos reales.
   pedía para el pipeline; **el Prompt 3 sigue pendiente** para los negocios
   perdidos del pipeline, que hoy guardan la razón en texto libre.
 
-## Features pendientes (en orden de prioridad)
+## Pendientes en orden de prioridad
 
-1. **Prompt 3 — razones de pérdida**
-   - Al marcar un negocio como perdido, capturar la razón (precio, competidor,
-     no hay necesidad, timing, etc.).
+### 🔴 0. ARREGLAR EL BUG ABIERTO — decisores e interacciones del pipeline
+**Lo primero de la próxima sesión.** Bloquea el uso normal de la app: el
+vendedor agrega un decisor y se pierde. Ver la sección "BUG ABIERTO" al inicio
+del documento — están las dos causas confirmadas y los primeros pasos. Son dos
+cambios chicos (2 líneas de `fetchCache` + `router.refresh()` en
+`tab-decisores.tsx`), pero hay que arreglar **las dos causas** o el síntoma
+persiste.
+
+### 1. Verificaciones pendientes de esta sesión (rápidas, con la app en la mano)
+- **Pulsación táctil larga en los botones del kanban.** El `onPointerDown` con
+  `stopPropagation` está puesto para que una pulsación de +200ms no arrastre la
+  tarjeta, pero solo se probó con eventos simulados, que no reproducen ese caso.
+  Probar con el dedo en el celular.
+- **Ancho de la línea de actividad del panel a 375px.** No se pudo medir porque
+  `resize_window` no funciona con el panel del navegador oculto. En el peor caso
+  se recorta la cola de "hábiles", no el número de días.
+
+### 2. Features de producto
+
+1. **Prompt 3 — razones de pérdida (pipeline)**
+   - Al marcar un negocio como perdido, capturar la razón con botones en vez de
+     texto libre. **Hoy `empresas.razon_perdido` guarda el label a mano**: los 5
+     perdidos actuales tienen `'Precio muy alto'`, `'No era el momento'` y una
+     nota escrita de corrido. Cualquier check constraint reventaría con esos
+     datos; hay que decidir si se migran, se mapean o se deja la columna en paz.
+   - `perdido-dialog.tsx` ya tiene una lista de 6 razones hardcodeada
+     (`precio_alto`, `proveedor_consolidado`, `no_momento`, `no_decisor`,
+     `sin_respuesta`, `otro`) pero **guarda el label, no el slug**.
+   - El descarte de ligeros (`7e34eb0`) es el modelo a seguir: slugs en `lib/`,
+     validación en el endpoint, sin constraint en la columna.
    - Alimentar análisis de patrones de pérdida.
 
 2. **Prompt 7 — resumen Panorama**
@@ -617,8 +717,12 @@ tres bandas del semáforo están confirmadas con datos reales.
 5. **Prompt 10 — cosméticos fecha cliente**
    - Mejoras visuales en la presentación de fechas en la ficha del cliente.
 
-### Deuda de plataforma (no bloquea features)
+### 3. Deuda de plataforma (no bloquea features)
 
+- **Auditar `router.refresh()` en todo componente que mute datos.** El bug
+  abierto es el tercer caso del mismo patrón (`tab-historial`,
+  `prospecto-ligero-detail`, y ahora `tab-decisores`). Vale revisar el resto:
+  `tab-resumen`, `tab-chat`, `perdido-dialog`, `monto-dialog`, `cadencia-panel`.
 - **Mover `distDir` fuera de OneDrive** en `next.config.mjs`. Es el arreglo
   definitivo al problema de `.next`; hoy se trabaja con el paliativo `attrib`.
 
