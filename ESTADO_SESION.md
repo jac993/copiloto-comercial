@@ -7,9 +7,8 @@ Decisores, consolidación de `hrefLinkedIn` / `TIPO_CONF` / `esStubDeTarea` /
 descarte de prospectos ligeros con razón.
 Commits `d76fd07`–`7e34eb0`.
 
-**⚠️ HAY UN BUG ABIERTO SIN ARREGLAR** — en el pipeline no se guardan decisores
-ni interacciones. Diagnosticado con dos causas confirmadas; ver la sección
-"BUG ABIERTO" más abajo. **Es lo primero que hay que atacar.**
+**Sin bugs abiertos conocidos.** El de decisores/interacciones del pipeline se
+diagnosticó y se arregló en `6693d22` (ver más abajo).
 
 **Si el build local falla con errores raros de archivos, ver la nota de
 `attrib +P -U .next` en Notas de entorno — es el arreglo real, borrar `.next`
@@ -41,23 +40,25 @@ peor que la inconsistencia.
 | `0e02593` | 22 ago | feat: el pie del panel lleva directo al historial de interacciones |
 | `7e34eb0` | 24 ago | feat: descarte de prospectos ligeros con razón y sub-vista Perdidos |
 | `253c68a` | 24 ago | docs: descarte de ligeros + corrección del rango de fechas |
+| `6d53749` | 24 ago | docs: diagnóstico del bug del pipeline |
+| `6693d22` | 24 ago | fix: en el pipeline no se guardaban decisores ni interacciones |
 
 Rama: `main`. Sincronizado con `origin/main`.
 
 ---
 
-## 🔴 BUG ABIERTO — en el pipeline no se guardan decisores ni interacciones
+## ✅ RESUELTO — en el pipeline no se guardaban decisores ni interacciones
 
-**Reportado por el usuario el 24 ago. NO está arreglado.** Se diagnosticó al
-escribir esta nota, así que la próxima sesión arranca con dos causas confirmadas
-en vez de desde cero.
+**Reportado el 24 ago, arreglado el mismo día en `6693d22`.** Se deja el detalle
+completo porque son **tres** variantes del mismo patrón y es el que más veces ha
+reaparecido en este proyecto.
 
 ### Síntoma
 En el **pipeline** (empresas `tipo_registro='completo'`), al agregar un decisor
 o una interacción desde la ficha, el cambio aparece y luego desaparece. Mismo
 síntoma que ya tuvimos dos veces esta sesión con otros componentes.
 
-### Causa 1 (confirmada) — `tab-decisores.tsx` no tiene `router.refresh()`
+### Causa 1 — `tab-decisores.tsx` no tenía `router.refresh()`
 ```
 tab-decisores.tsx            useRouter: 0   router.refresh: 0   ← NINGUNO
 tab-historial.tsx            useRouter: 3   router.refresh: 8
@@ -73,7 +74,17 @@ Ojo con la historia: el revert de `74c8ca9` devolvió el archivo a su estado
 previo a `d76fd07`, que tampoco tenía `router.refresh()`. El revert no causó el
 bug, pero tampoco lo arregló.
 
-### Causa 2 (confirmada) — `app/cuentas/[id]/page.tsx` no tiene `fetchCache`
+**Fix: el refresh quedó en TRES niveles, no solo en el padre.**
+- `TabDecisores` — alta, borrado y borrado de persona encontrada; cubre lo que
+  sube desde las tarjetas.
+- `ContactoCard` — "Confirmar que esta persona es real" y la edición inline
+  solo tocan su `datos` local y **nunca notifican al padre**. Con el refresh
+  solo arriba, editar el nombre de un decisor seguiría perdiéndose.
+- `DecisorSugeridoCard.eliminarPersona` — ver Causa 3.
+
+Resultado: `useRouter` 0 → 4, `router.refresh` 0 → 8.
+
+### Causa 2 — `app/cuentas/[id]/page.tsx` no tenía `fetchCache`
 ```
 app/cuentas/page.tsx        dynamic:SI  fetchCache:SI   ← arreglada el 21 ago
 app/cuentas/[id]/page.tsx   dynamic:SI  fetchCache:NO   ← LA FICHA
@@ -85,11 +96,26 @@ cubre el Data Cache**, así que supabase-js devuelve filas viejas. La nota de
 entorno lo documenta y la memoria del proyecto decía "auditar el resto de
 páginas" — esta es esa auditoría, y faltaban dos.
 
+### Causa 3 — orden: refresh optimista ANTES del fetch
+**No estaba en el diagnóstico; apareció al implementar el fix.**
+`DecisorSugeridoCard.eliminarPersona` llama a `onPersonaEliminada()` de forma
+optimista **antes** del `await fetch(...)`. Como ese callback dispara el
+`router.refresh()` del padre, el refresh leía la BD **cuando todavía no había
+cambiado**. Borrar una persona encontrada habría seguido fallando aunque las
+otras dos causas estuvieran resueltas.
+
+Fix: un `router.refresh()` adicional **después** del `await`, que es el que
+refleja el cambio real. El del padre se dejó (es inocuo y defensivo si algún día
+se llama desde otro lado).
+
+**Regla:** `router.refresh()` va después del `await` de la mutación, nunca junto
+a la actualización optimista del estado local.
+
 ### Por qué se combinan (y por qué confunde tanto)
-Las dos causas se refuerzan: **arreglar solo la Causa 1 puede no alcanzar**,
-porque aunque `router.refresh()` re-ejecute el Server Component, el Data Cache
-le devolvería los mismos datos viejos. Fue justo lo que hizo tan difícil el bug
-del congelamiento. Hay que arreglar **las dos**.
+Las tres causas se refuerzan: **arreglar solo la Causa 1 no alcanza**, porque
+aunque `router.refresh()` re-ejecute el Server Component, el Data Cache le
+devolvería los mismos datos viejos. Fue justo lo que hizo tan difícil el bug
+del congelamiento. Hay que arreglar **las tres**.
 
 ### Auditoría completa de `fetchCache` (hecha el 24 ago)
 Solo 3 páginas son Server Components que leen la BD. Las demás son `"use client"`
@@ -97,20 +123,18 @@ y traen datos por API routes, así que las directivas de página no les aplican:
 
 | Página | `dynamic` | `fetchCache` | Estado |
 |---|---|---|---|
-| `app/cuentas/page.tsx` | ✅ | ✅ | ok |
-| `app/cuentas/[id]/page.tsx` | ✅ | ❌ | **arreglar** |
-| `app/casos/page.tsx` | ✅ | ❌ | **arreglar** |
+| `app/cuentas/page.tsx` | ✅ | ✅ | ya estaba (21 ago) |
+| `app/cuentas/[id]/page.tsx` | ✅ | ✅ | **agregado en `6693d22`** |
+| `app/casos/page.tsx` | ✅ | ✅ | **agregado en `6693d22`** |
 
-### Primeros pasos sugeridos
-1. Agregar `export const fetchCache = "force-no-store";` a
-   `app/cuentas/[id]/page.tsx` y a `app/casos/page.tsx`.
-2. Agregar `useRouter` + `router.refresh()` en `tab-decisores.tsx` tras cada
-   mutación exitosa: alta, edición y borrado de contacto, "Agregar otro",
-   "Confirmar que esta persona es real" y la derivación.
-3. Reproducir con una empresa `completo` real: agregar un decisor, **recargar
-   la página** (no solo cambiar de pestaña) y confirmar que persiste.
-4. Ojo al verificar en local: si el cambio no aparece aunque el código esté
-   bien, puede ser el bundle viejo de `.next` — ver notas de entorno.
+**La auditoría está completa.** No quedan Server Components que lean BD sin
+`fetchCache`.
+
+### Cómo se verificó
+Se cargó la ficha de Oxiquim (poblando la caché), se creó un contacto por API y
+al recargar **apareció** — sin el fix ese segundo request habría servido la
+respuesta cacheada del primero. Luego se borró y desapareció. BD limpia: Oxiquim
+volvió a sus 3 contactos.
 
 ### Descarte de prospectos ligeros — `7e34eb0`
 
@@ -670,14 +694,6 @@ tres bandas del semáforo están confirmadas con datos reales.
 
 ## Pendientes en orden de prioridad
 
-### 🔴 0. ARREGLAR EL BUG ABIERTO — decisores e interacciones del pipeline
-**Lo primero de la próxima sesión.** Bloquea el uso normal de la app: el
-vendedor agrega un decisor y se pierde. Ver la sección "BUG ABIERTO" al inicio
-del documento — están las dos causas confirmadas y los primeros pasos. Son dos
-cambios chicos (2 líneas de `fetchCache` + `router.refresh()` en
-`tab-decisores.tsx`), pero hay que arreglar **las dos causas** o el síntoma
-persiste.
-
 ### 1. Verificaciones pendientes de esta sesión (rápidas, con la app en la mano)
 - **Pulsación táctil larga en los botones del kanban.** El `onPointerDown` con
   `stopPropagation` está puesto para que una pulsación de +200ms no arrastre la
@@ -719,10 +735,12 @@ persiste.
 
 ### 3. Deuda de plataforma (no bloquea features)
 
-- **Auditar `router.refresh()` en todo componente que mute datos.** El bug
-  abierto es el tercer caso del mismo patrón (`tab-historial`,
-  `prospecto-ligero-detail`, y ahora `tab-decisores`). Vale revisar el resto:
-  `tab-resumen`, `tab-chat`, `perdido-dialog`, `monto-dialog`, `cadencia-panel`.
+- **Auditar `router.refresh()` en el resto de componentes que mutan datos.**
+  Ya van tres arreglados (`tab-historial`, `prospecto-ligero-detail`,
+  `tab-decisores`) y es el patrón que más ha reaparecido en este proyecto.
+  Faltan por revisar: `tab-resumen`, `tab-chat`, `perdido-dialog`,
+  `monto-dialog`, `cadencia-panel`. Al revisarlos, mirar también **el orden**:
+  el refresh va después del `await`, no junto al update optimista (Causa 3).
 - **Mover `distDir` fuera de OneDrive** en `next.config.mjs`. Es el arreglo
   definitivo al problema de `.next`; hoy se trabaja con el paliativo `attrib`.
 
