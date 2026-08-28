@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ExternalLink, UserPlus, User, Trash2, Pencil, X, Loader2, CheckCheck, ShieldCheck, ChevronDown, CornerUpRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,22 +45,30 @@ interface TabDecisoresProps {
 }
 
 export function TabDecisores({ contactos, decisoresIA, empresaId, nombreBusqueda }: TabDecisoresProps) {
+  const router = useRouter();
   const [decisoresLocales, setDecisoresLocales] = useState<DecisorIA[]>(decisoresIA);
   // Estado local para soportar eliminaciones sin recargar la página
   const [contactosLocales, setContactosLocales] = useState<Contacto[]>(contactos);
 
+  // router.refresh() tras cada mutación: sin esto el estado local cambia pero
+  // el Server Component nunca se invalida, y al recargar el decisor recién
+  // agregado desaparece. Mismo patrón que tab-historial y
+  // prospecto-ligero-detail; este componente había quedado fuera.
   const eliminarPersonaDecisor = (index: number) => {
     setDecisoresLocales((prev) =>
       prev.map((d, i) => i === index ? { ...d, persona_encontrada: null } : d)
     );
+    router.refresh();
   };
 
   const handleContactoEliminado = (id: string) => {
     setContactosLocales((prev) => prev.filter((c) => c.id !== id));
+    router.refresh();
   };
 
   const handleContactoAgregado = (nuevo: Contacto) => {
     setContactosLocales((prev) => [...prev, nuevo]);
+    router.refresh();
   };
 
   const cargoRegistrado = new Set(contactosLocales.map((c) => c.cargo));
@@ -190,6 +199,9 @@ function ContactoCard({
   empresaId?: string;
   onContactoAgregado?: (c: Contacto) => void;
 }) {
+  // Router propio: confirmar y editar NO notifican al padre (solo tocan `datos`
+  // local), así que necesitan invalidar el Server Component por su cuenta.
+  const router = useRouter();
   const [datos, setDatos] = useState<Contacto>(contacto);
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({
@@ -321,6 +333,7 @@ function ContactoCard({
         body: JSON.stringify({ verificado: true }),
       });
       setDatos((d) => ({ ...d, verificado: true }));
+      router.refresh();
     } finally {
       setVerificando(false);
     }
@@ -347,6 +360,7 @@ function ContactoCard({
       const actualizado = (await res.json()) as Contacto;
       setDatos(actualizado);
       setEditando(false);
+      router.refresh();
     } catch {
       setError("Error al guardar. Intenta de nuevo.");
     } finally {
@@ -652,6 +666,7 @@ function DecisorSugeridoCard({
   onContactoAgregado: (c: Contacto) => void;
   onPersonaEliminada: () => void;
 }) {
+  const router = useRouter();
   const [agregados, setAgregados] = useState<Contacto[]>([]);
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
@@ -710,6 +725,9 @@ function DecisorSugeridoCard({
   };
 
   const eliminarPersona = async () => {
+    // onPersonaEliminada() es optimista y corre ANTES del fetch, así que el
+    // router.refresh() que dispara en el padre leería datos aún viejos. El
+    // refresh que vale es el de acá abajo, después de que la BD ya cambió.
     onPersonaEliminada();
     try {
       await fetch(`/api/empresas/${empresaId}/eliminar-contacto-encontrado`, {
@@ -717,6 +735,7 @@ function DecisorSugeridoCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cargo: decisor.cargo }),
       });
+      router.refresh();
     } catch (err) {
       console.error("Error al eliminar persona:", err);
     }

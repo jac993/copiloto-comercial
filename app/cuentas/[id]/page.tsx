@@ -1,5 +1,9 @@
-// Forzar render dinámico — la ficha cambia cuando la IA actualiza datos
+// Forzar render dinámico — la ficha cambia cuando la IA actualiza datos.
+// fetchCache es obligatorio además de dynamic: sin él el Data Cache de Next
+// sirve filas viejas de supabase-js y los decisores o interacciones recién
+// agregados desaparecen al recargar, aunque estén guardados en BD.
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 // Pantalla de ficha individual de empresa — la más importante del MVP.
 // Server Component: fetches data server-side, sin estado en cliente.

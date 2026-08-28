@@ -1,5 +1,8 @@
-// Forzar render dinámico — los casos los gestiona el vendedor manualmente
+// Forzar render dinámico — los casos los gestiona el vendedor manualmente.
+// fetchCache es obligatorio además de dynamic: sin él el Data Cache sirve
+// filas viejas de supabase-js.
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
