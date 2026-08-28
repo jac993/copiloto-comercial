@@ -49,6 +49,11 @@ export async function GET() {
     .select("id, empresa_id, tipo, fecha, transcripcion, contacto_id")
     .in("tipo", ["whatsapp", "email", "linkedin"])
     .eq("resuelta", false)
+    // Solo los mensajes que ENVIÓ el vendedor pueden estar esperando
+    // respuesta. Una fila con remitente='prospecto' YA ES la respuesta:
+    // alertar sobre ella preguntando "¿contestó?" no tiene sentido. Filtro
+    // defensivo — aunque el insert vuelva a marcarla resuelta=false, no alerta.
+    .eq("remitente", "vendedor")
     // Las tareas de cadencia son recordatorios de ENVIAR, no mensajes
     // enviados esperando respuesta — no deben disparar alertas de 48h.
     .is("cadencia_asignacion_id", null)

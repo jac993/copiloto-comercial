@@ -59,6 +59,10 @@ export async function POST(req: NextRequest) {
       ? "sin_respuesta"
       : (sentimiento && validSentimientos.includes(sentimiento) ? sentimiento as InteraccionInsert["sentimiento"] : null);
 
+    // Se resuelve una sola vez para no duplicar el fallback en los dos usos
+    // de abajo (remitente y resuelta), que deben coincidir siempre.
+    const remitenteFinal = remitente ?? "vendedor";
+
     const interaccionData: InteraccionInsert = {
       empresa_id,
       contacto_id: contacto_id ?? null,
@@ -76,8 +80,12 @@ export async function POST(req: NextRequest) {
       proximo_paso_fecha: tipo === "sin_respuesta" ? sumarDiasHabiles(5) : (proximo_paso_fecha || null),
       badge_estado: tipo === "sin_respuesta" ? "sin_respuesta" : null,
       decision_sugerida: null,
-      remitente: remitente ?? "vendedor",
-      resuelta: false,
+      remitente: remitenteFinal,
+      // `resuelta=false` significa "esperando respuesta", y eso solo aplica a
+      // mensajes del vendedor. Un mensaje del prospecto YA ES la respuesta,
+      // así que nace resuelto: si no, a las 48h se convierte en una alerta
+      // preguntando si contestó justamente quien contestó.
+      resuelta: remitenteFinal === "prospecto",
       no_realizada: false,
     };
 
