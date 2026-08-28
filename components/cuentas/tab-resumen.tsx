@@ -100,6 +100,7 @@ export function TabResumen({
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Error al guardar MEDDIC");
       // Actualizar score calculado por el servidor
       setMeddic((prev) => ({ ...prev, score: json.score ?? prev.score }));
+      router.refresh();
     } catch (e) {
       toast({
         variant: "destructive",
@@ -109,7 +110,7 @@ export function TabResumen({
     } finally {
       setGuardandoMeddic(false);
     }
-  }, [empresaId, toast]);
+  }, [empresaId, toast, router]);
 
   const actualizarComponenteMeddic = useCallback((
     campo: keyof Pick<MeddicData, "metricas" | "comprador_economico" | "criterios_decision" | "proceso_decision" | "dolor_identificado" | "campeon">,
