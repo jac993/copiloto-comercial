@@ -1,6 +1,10 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: 24 ago 2026 — panel lateral de seguimiento de contactos,
+Última actualización: 28 ago 2026 — auditoría de `router.refresh()` cerrada:
+los 5 componentes pendientes revisados, solo `tab-resumen` (guardarMeddic)
+necesitó fix. Commit `b437299`.
+
+Actualización anterior (24 ago): panel lateral de seguimiento de contactos,
 dos acciones apiladas por tarjeta, revert de la barra de actividad en la pestaña
 Decisores, consolidación de `hrefLinkedIn` / `TIPO_CONF` / `esStubDeTarea` /
 `RAZONES_PERDIDA_LIGERO` en `lib/`, fix del cálculo de actividad del panel, y
@@ -17,6 +21,28 @@ no alcanza.**
 Sesión previa (20 ago): rotación de la `service_role` key (deuda de seguridad
 saldada), fix transversal de sincronización de Server Components y cuatro
 mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
+
+---
+
+## Commits del 28 ago 2026
+
+| Hash | Fecha | Descripción |
+|------|-------|-------------|
+| `b437299` | 28 ago | fix: router.refresh() en guardarMeddic de tab-resumen |
+
+### ✅ Auditoría de `router.refresh()` cerrada — `b437299`
+
+Revisados los 5 componentes que quedaban pendientes. Solo uno necesitó fix:
+
+| Componente | Resultado | Detalle |
+|---|---|---|
+| `tab-resumen` | **Fix aplicado** | `guardarMeddic` mutaba la BD sin `router.refresh()`. Agregado después del `await`, y `router` incorporado al array de dependencias del `useCallback`. |
+| `tab-chat` | OK — no necesita | Todos los datos (chat, borradores, feedback) son completamente client-side (`setHistorial`, `setBorradorItems`). Ningún Server Component los renderiza. |
+| `perdido-dialog` | OK — patrón correcto vía callback | El dialog llama `onConfirm()` después del `await`. Su único padre (`vista-kanban`) hace `router.refresh()` en `handleConfirmPerdido`. La cadena es correcta. |
+| `monto-dialog` | OK — intencional | Los padres actualizan estado local (`setEmpresas`, `setMonto`). Hay incluso un comentario explícito en `empresa-tabs.tsx` documentando esta decisión. Sin síntoma de "desaparece". |
+| `cadencia-panel` | OK — refetch propio | `iniciar()` llama `await cargarEstado()` tras el await de la mutación. `detener()` actualiza estado local suficiente para la vista actual. |
+
+La auditoría comenzada en `cfc34a3` (20 ago) está **completa**. Todos los componentes que mutan datos han sido revisados; el patrón está aplicado de forma consistente.
 
 ---
 
@@ -735,12 +761,6 @@ tres bandas del semáforo están confirmadas con datos reales.
 
 ### 3. Deuda de plataforma (no bloquea features)
 
-- **Auditar `router.refresh()` en el resto de componentes que mutan datos.**
-  Ya van tres arreglados (`tab-historial`, `prospecto-ligero-detail`,
-  `tab-decisores`) y es el patrón que más ha reaparecido en este proyecto.
-  Faltan por revisar: `tab-resumen`, `tab-chat`, `perdido-dialog`,
-  `monto-dialog`, `cadencia-panel`. Al revisarlos, mirar también **el orden**:
-  el refresh va después del `await`, no junto al update optimista (Causa 3).
 - **Mover `distDir` fuera de OneDrive** en `next.config.mjs`. Es el arreglo
   definitivo al problema de `.next`; hoy se trabaja con el paliativo `attrib`.
 
