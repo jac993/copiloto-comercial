@@ -1,8 +1,8 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: 28 ago 2026 — auditoría de `router.refresh()` cerrada:
-los 5 componentes pendientes revisados, solo `tab-resumen` (guardarMeddic)
-necesitó fix. Commit `b437299`.
+Última actualización: 28 ago 2026 — auditoría de `router.refresh()` cerrada
+(`b437299`) y fix de las alertas de 48h, que mostraban respuestas del prospecto
+como si fueran mensajes del vendedor esperando respuesta (`2f4692a`).
 
 Actualización anterior (24 ago): panel lateral de seguimiento de contactos,
 dos acciones apiladas por tarjeta, revert de la barra de actividad en la pestaña
@@ -29,6 +29,70 @@ mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
 | Hash | Fecha | Descripción |
 |------|-------|-------------|
 | `b437299` | 28 ago | fix: router.refresh() en guardarMeddic de tab-resumen |
+| `2f4692a` | 28 ago | fix: las alertas de 48h ya no incluyen respuestas del prospecto |
+
+### ✅ RESUELTO — /alertas mostraba respuestas del prospecto como alertas — `2f4692a`
+
+**Síntoma.** En `/alertas` aparecía "Sin respuesta — ¿contestó?" sobre una
+interacción cuyo `remitente` era el **propio prospecto**. La fila que generaba
+la alerta ERA la respuesta: la app preguntaba si había contestado justamente
+quien acababa de contestar.
+
+Caso confirmado: **Alimentos Daily Fresh SpA**, whatsapp del 26 ago 11:33
+(15:33 UTC) — `remitente='prospecto'`, `resuelta=false`, con `parent_id`
+apuntando al mensaje del vendedor de las 10:25, que **sí** se había cerrado
+bien.
+
+#### Causa A — la query nunca filtró por `remitente`
+
+`/api/interacciones/vencidas` filtraba por `tipo`, `resuelta`,
+`cadencia_asignacion_id` y fecha. El `select` **ni siquiera traía la columna
+`remitente`** (sí se consulta más abajo, pero solo para calcular la cadencia).
+Cualquier fila `whatsapp/email/linkedin` sin resolver con +48h hábiles se volvía
+alerta, la hubiera escrito quien la hubiera escrito.
+
+**Fix:** `.eq("remitente", "vendedor")`. Seguro porque las 251 filas tienen
+`remitente` no nulo — se verificó antes: filtrar no descarta filas legacy en
+silencio, que es la trampa recurrente de este proyecto.
+
+#### Causa B — el insert marcaba todo `resuelta: false`
+
+`/api/interacciones/crear` insertaba `resuelta: false` hardcodeado. Esa bandera
+significa **"esperando respuesta"**, y eso solo aplica a mensajes del vendedor.
+Un mensaje del prospecto ya ES la respuesta.
+
+**Fix:** `resuelta: remitenteFinal === "prospecto"`. El fallback
+`remitente ?? "vendedor"` se extrajo a `remitenteFinal` para que las dos ramas
+(`remitente` y `resuelta`) no puedan divergir.
+
+#### El auto-cierre NO tenía la culpa (y por eso el bug era intermitente)
+
+Se auditaron los tres mecanismos de `crear/route.ts` y los tres funcionaban:
+el bulk update excluye a propósito la fila recién creada (`.neq("id", …)`), el
+"Fix 1" del `parent_id` cerró bien el mensaje del vendedor, y
+`cerrarPorRespuesta` no aplica (0 cadencias activas).
+
+**Dato clave descubierto al ejecutar la limpieza:** el `UPDATE` de las 6 filas
+pendientes afectó **0 filas** — ya estaban en `true`. El bulk update de
+`crear/route.ts` (L102-116) barre las filas viejas de la empresa cada vez que se
+registra una interacción nueva **en esa misma empresa**. O sea, las filas mal
+marcadas **se auto-limpian solas**, pero recién cuando hay actividad nueva.
+
+Eso explica por qué el bug era tan difícil de pillar: una fila del prospecto
+alerta durante la ventana entre que se crea y que llega la siguiente
+interacción de esa empresa. Si esa ventana cruza las 48h hábiles, aparece la
+alerta falsa; si no, nunca se ve. **Sin la Causa A arreglada el bug seguiría
+reapareciendo de forma intermitente para siempre.**
+
+#### Alcance medido antes del fix
+
+3 alertas falsas activas de 4 candidatas (solo 1 era legítima). Cruce global
+`remitente` × `resuelta`: `prospecto/false` 5 · `prospecto/true` 63 ·
+`vendedor/false` 48 · `vendedor/true` 135.
+
+**Regla:** cualquier consulta que pregunte "¿esto está esperando respuesta?"
+tiene que filtrar por `remitente='vendedor'`. `resuelta=false` por sí solo no
+significa "pendiente" — significa "no barrido todavía".
 
 ### ✅ Auditoría de `router.refresh()` cerrada — `b437299`
 
