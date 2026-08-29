@@ -1,12 +1,18 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: 28 ago 2026 — auditoría de `router.refresh()` cerrada
+Última actualización: 29 ago 2026 — auditoría de `router.refresh()` cerrada
 (`b437299`), fix de las alertas de 48h, que mostraban respuestas del prospecto
 como si fueran mensajes del vendedor esperando respuesta (`2f4692a`), y
-**FASE 1** de colores de urgencia en el kanban (`5b48b89`).
+**FASE 1** de colores de urgencia en el kanban (`5b48b89`) con su fix de
+visibilidad (`eda7a7f`).
 
 **FASES 2 y 3 pendientes** — su alcance no se definió en esta sesión; hay que
 preguntarle al usuario qué incluyen antes de empezar.
+
+**Queda abierto el diagnóstico de lentitud general.** Se descartó el volumen de
+datos con mediciones (la BD entera pesa < 1 MB) pero nunca se cerró: falta que
+el usuario diga si la lentitud es al navegar o al apretar botones, y si pasa
+también en Vercel. Ver la sección al final.
 
 Actualización anterior (24 ago): panel lateral de seguimiento de contactos,
 dos acciones apiladas por tarjeta, revert de la barra de actividad en la pestaña
@@ -35,6 +41,59 @@ mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
 | `b437299` | 28 ago | fix: router.refresh() en guardarMeddic de tab-resumen |
 | `2f4692a` | 28 ago | fix: las alertas de 48h ya no incluyen respuestas del prospecto |
 | `5b48b89` | 28 ago | feat: borde de urgencia por enfriamiento en las tarjetas del kanban |
+| `c5f7e32` | 28 ago | docs: registrar la FASE 1 de colores de urgencia |
+| `eda7a7f` | 29 ago | fix: el borde de urgencia no se veía en las tarjetas más abandonadas |
+
+### ✅ El borde de urgencia no se veía — `eda7a7f`
+
+Reportado como *"solo se ve el verde, el rojo y el amarillo no se ven o son muy
+tenues"*. **No era intensidad de color.** Dos causas distintas, ninguna de las
+cuales se arreglaba tocando los colores:
+
+**Causa del rojo — la precedencia se comía la señal.** Las 4 empresas en banda
+roja tienen **todas** una tarea vencida:
+```
+Salcobrand  23d / umbral 5 = 4.60   vencida=SI
+Coexpan     24d / umbral 5 = 4.80   vencida=SI
+Ronkol      26d / umbral 4 = 6.50   vencida=SI
+NIU Foods   29d / umbral 7 = 4.14   vencida=SI
+```
+La regla de precedencia de `5b48b89` devolvía `""` cuando `vencida=true`, así
+que quedaban con el `border-red-300` de 1px — el borde **más tenue** de toda la
+tarjeta. **Las empresas más abandonadas del pipeline eran justamente las que
+menos se notaban**, porque abandono y tarea vencida van casi siempre juntos.
+
+Ahora una tarea vencida **es la banda de urgencia máxima** y se lleva el borde
+más fuerte (rojo 6px) en vez de apagarlo.
+
+**Causa del amarillo — no hay datos, y NO es un bug.** Hoy ninguna empresa cae
+entre el 60% y el 100% del umbral. La distribución es bimodal: o se contactaron
+hoy (0 días) o llevan 23-29 días. La banda existe y funciona; se verá cuando
+alguna empresa entre en esa franja. **No perder tiempo buscándole un bug.**
+
+De paso las bandas subieron de `border-l-4` a `border-l-[6px]` y ganaron
+contraste (`red-500`→`red-600`, `yellow-500`→`amber-500`). El **gris se quedó
+en 4px a propósito**, para que no compita con las bandas activas.
+
+**Efecto lateral aceptado explícitamente:** MSD (0 días sin contacto) e IFCO
+(`reunion_agendada`, que va gris por enfriamiento) ahora salen rojas por tener
+tarea vencida. Es correcto según la regla nueva: vencida manda sobre todo.
+
+**Lección para la próxima vez que un color "no se vea":** antes de tocar la
+paleta, calcular con datos reales qué banda le toca a cada fila. Acá el color
+estaba bien y el problema era la lógica de precedencia — cambiar `red-500` por
+`red-600` no habría movido un solo pixel, porque esas tarjetas ni siquiera
+llegaban a `bordeUrgencia()`.
+
+#### ⚠️ Verificación visual pendiente
+
+`tsc` y `npm run build` en verde, y se confirmó en el CSS compilado que Tailwind
+genera las 5 clases nuevas — incluida `.border-l-\[6px\]{border-left-width:6px}`,
+que es arbitraria. **Pero no se miró la pantalla:** el navegador integrado
+fuerza HTTPS contra el dev server HTTP y la navegación se rechaza con
+`navigation to https://localhost:3000 was denied`. Es una limitación nueva del
+entorno, distinta de la de `resize_window` ya documentada. **Vale una mirada en
+el celular o en el navegador de escritorio.**
 
 ### ✅ FASE 1 — colores de urgencia en el kanban — `5b48b89`
 
@@ -180,6 +239,44 @@ Revisados los 5 componentes que quedaban pendientes. Solo uno necesitó fix:
 | `cadencia-panel` | OK — refetch propio | `iniciar()` llama `await cargarEstado()` tras el await de la mutación. `detener()` actualiza estado local suficiente para la vista actual. |
 
 La auditoría comenzada en `cfc34a3` (20 ago) está **completa**. Todos los componentes que mutan datos han sido revisados; el patrón está aplicado de forma consistente.
+
+### 🟡 ABIERTO — "toda la app está lenta" (29 ago, sin cerrar)
+
+Diagnóstico empezado y **no terminado**: falta que el usuario responda si la
+lentitud es al navegar o al apretar botones, y si pasa también en Vercel.
+
+**Descartado con mediciones — el volumen de datos NO es la causa:**
+```
+empresas 34 (18 ligeros / 16 completos) · interacciones 248 (107 KB)
+contactos 101 · cadencia_asignaciones 0 · prioridades_diarias 145
+senales 49 · aprendizajes 0 · api_usage 211 · borradores 10
+```
+La base entera pesa **menos de 1 MB**; la empresa más pesada tiene 16 KB de
+interacciones. A esa escala Postgres resuelve en microsegundos y el planner
+ignora los índices igual. **No perder tiempo agregando índices.** El único
+filtro frecuente sin índice es `resuelta`, y da lo mismo con 248 filas.
+
+**Sospechosos vivos, en orden:**
+1. **El `router.refresh()` de MEDDIC (`b437299`).** Se dispara en **cada clic
+   de semáforo**, y cada uno recarga la ficha entera sin caché. Peor:
+   `tab-resumen.tsx:134` llama `void guardarMeddic(...)` **dentro del updater
+   de `setMeddic`**, y en StrictMode los updaters corren dos veces → posible
+   doble PATCH + doble refresh por clic. **Es un revert de dos líneas si se
+   confirma.**
+2. **La ficha carga la empresa dos veces por render.**
+   `app/cuentas/[id]/page.tsx` llama `getEmpresaCompleta()` en el componente
+   (4 queries en paralelo) y `generateMetadata` la vuelve a llamar **completa**
+   solo para armar el `<title>`, cuando solo necesita `nombre`. Con
+   `fetchCache = "force-no-store"` el Data Cache no puede deduplicar → ~9
+   queries por carga donde bastarían 5.
+3. **`.next` pesa 284 MB dentro de OneDrive.** Está correctamente pinneado
+   (atributos `525328` = DIRECTORY + REPARSE_POINT + PINNED), pero siguen
+   siendo 284 MB que el motor de sync vigila. Si en Vercel va bien y en local
+   no, es esto.
+4. **`/api/interacciones/vencidas` tarda 2,0-2,8 s por llamada**, observado en
+   4 polls seguidos del dev server. Para una query sobre 248 filas es
+   muchísimo y no se investigó. **Es la pista más concreta y más barata de
+   perseguir.**
 
 ---
 
@@ -1089,6 +1186,19 @@ tarjetas de la lista serían 30 peticiones para que el vendedor abra una. El
   está oculto — misma causa por la que fallan los screenshots. Los checks de
   ancho a 375px no se pueden hacer así; `window.innerWidth` sigue reportando el
   tamaño de escritorio aunque la herramienta diga que redimensionó.
+- **⭐ El navegador integrado fuerza HTTPS contra el dev server HTTP** (29 ago).
+  `preview_start` levanta bien el server (`Ready in 2.4s`, `GET /cuentas 200`)
+  pero `navigate` falla con `navigation to https://localhost:3000 was denied`
+  y `get_page_text` devuelve `URL: (non-http)`. El origin de la pestaña aparece
+  como `https://localhost:3000` aunque el server sea HTTP.
+  **Consecuencia: no se puede verificar nada visualmente por esta vía.** Cuando
+  un cambio sea visual, o se mira en el navegador de escritorio / celular, o se
+  verifica indirectamente — por ejemplo, `grep` de las clases en el CSS
+  compilado bajo `.next/static/css/` para confirmar que Tailwind las generó.
+  **Ojo con las clases arbitrarias:** Tailwind las escapa, así que
+  `border-l-[6px]` aparece en el CSS como `.border-l-\[6px\]` y un grep ingenuo
+  da 0 resultados. Buscar la propiedad (`border-left-width:6px`), no el nombre
+  de la clase.
 - **Data Cache de Next.js**: toda ruta GET que lea la BD necesita
   `export const fetchCache = "force-no-store"` además de `dynamic = "force-dynamic"`.
   Sin esto, supabase-js sirve datos viejos.
