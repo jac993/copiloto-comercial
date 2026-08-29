@@ -93,9 +93,9 @@ function bordeUrgencia(empresa: Empresa, dias: number | null): string {
   const ratio = dias / umbral;
   // > 1 y no >= 1: en el umbral exacto todavía no está enfriada, igual que el
   // `dias > umbral` de calcularEnfriamiento. Las dos vistas coinciden.
-  if (ratio > 1) return "border-l-4 border-l-red-500";
-  if (ratio >= 0.6) return "border-l-4 border-l-yellow-500";
-  return "border-l-4 border-l-green-500";
+  if (ratio > 1) return "border-l-[6px] border-l-red-600";
+  if (ratio >= 0.6) return "border-l-[6px] border-l-amber-500";
+  return "border-l-[6px] border-l-green-500";
 }
 
 interface VistaKanbanProps {
@@ -491,11 +491,14 @@ function KanbanCardStatic({
       ? "border border-red-300 dark:border-red-800/50"
       : "border border-border";
 
-  // Precedencia: una tarea vencida es una señal más urgente y más concreta que
-  // el enfriamiento, así que su borde rojo completo gana y no se pinta encima
-  // el borde de urgencia. Sin esto la tarjeta mezclaba dos señales distintas
-  // (recuadro rojo con canto izquierdo verde) y ninguna se leía bien.
-  const urgencia = vencida ? "" : bordeUrgencia(empresa, dias);
+  // Una tarea vencida ES la urgencia máxima, así que se lleva el borde más
+  // fuerte en vez de apagarlo. La versión anterior devolvía "" y la tarjeta
+  // quedaba solo con el border-red-300 de 1px: las 4 empresas más abandonadas
+  // del pipeline (23-29 días sin contacto) eran justamente las que menos se
+  // notaban, porque abandono y tarea vencida van casi siempre juntos.
+  const urgencia = vencida
+    ? "border-l-[6px] border-l-red-600"
+    : bordeUrgencia(empresa, dias);
 
   return (
     <>
