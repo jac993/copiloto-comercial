@@ -1,8 +1,12 @@
 # Estado de sesión — Copiloto Comercial
 
 Última actualización: 28 ago 2026 — auditoría de `router.refresh()` cerrada
-(`b437299`) y fix de las alertas de 48h, que mostraban respuestas del prospecto
-como si fueran mensajes del vendedor esperando respuesta (`2f4692a`).
+(`b437299`), fix de las alertas de 48h, que mostraban respuestas del prospecto
+como si fueran mensajes del vendedor esperando respuesta (`2f4692a`), y
+**FASE 1** de colores de urgencia en el kanban (`5b48b89`).
+
+**FASES 2 y 3 pendientes** — su alcance no se definió en esta sesión; hay que
+preguntarle al usuario qué incluyen antes de empezar.
 
 Actualización anterior (24 ago): panel lateral de seguimiento de contactos,
 dos acciones apiladas por tarjeta, revert de la barra de actividad en la pestaña
@@ -30,6 +34,75 @@ mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
 |------|-------|-------------|
 | `b437299` | 28 ago | fix: router.refresh() en guardarMeddic de tab-resumen |
 | `2f4692a` | 28 ago | fix: las alertas de 48h ya no incluyen respuestas del prospecto |
+| `5b48b89` | 28 ago | feat: borde de urgencia por enfriamiento en las tarjetas del kanban |
+
+### ✅ FASE 1 — colores de urgencia en el kanban — `5b48b89`
+
+Cada tarjeta del pipeline lleva un borde izquierdo según los días hábiles sin
+interacción real, medidos contra el umbral de **su etapa**
+(`UMBRAL_ENFRIAMIENTO` de `lib/enfriamiento.ts`):
+
+| Banda | Color |
+|---|---|
+| > 100% del umbral | 🔴 `border-l-red-500` |
+| 60-100% | 🟡 `border-l-yellow-500` |
+| < 60% | 🟢 `border-l-green-500` |
+| no medible | ⚪ `border-l-border` |
+
+El umbral exacto **todavía no es rojo** (`ratio > 1`, no `>= 1`), igual que el
+`dias > umbral` de `calcularEnfriamiento`, para que las dos vistas coincidan.
+
+**El dato no existía en la pantalla Cuentas.** Hubo que traerlo de la BD y
+bajarlo por props por toda la cadena:
+```
+page.tsx → CuentasClient → VistaKanban → KanbanColumna
+         → KanbanCardDraggable → KanbanCardStatic
+```
+`getDiasSinContactoPorEmpresa()` vive en `lib/queries.ts` y no inline en la
+página porque el header de ese módulo lo exige explícitamente: *"todas las
+queries de la app pasan por aquí, nunca escribir queries inline en
+componentes"*. Por eso la fase tocó **4 archivos y no 3**.
+
+**Qué cuenta como interacción real:** `esStubDeTarea()` de
+`lib/interaccion-meta.ts`, nunca un filtro propio — la regla que dejó el bug
+`5654527`.
+
+**Cuatro casos van a gris a propósito:**
+- Sin interacciones reales. **NO cae a `estado_desde`:** "nunca contactada" y
+  "contactada hace mucho" son estados distintos y deben verse distintos.
+- Conversación pausada — la pausa es decisión consciente del vendedor.
+- `reunion_agendada` — su umbral de 2 días se mide **desde la fecha de la
+  reunión**, no desde la última interacción. Aplicarlo tal cual pintaba la
+  columna entera de rojo el primer día. Hacerlo bien necesita la fecha de la
+  tarea pendiente. Hoy son 2 empresas sin señal.
+- Estados sin umbral definido.
+
+**Precedencia de bordes** (para que la tarjeta nunca muestre dos señales
+pisadas): `ganado`/`perdido` conservan el suyo de `2d76daa` (el estado manda
+sobre la urgencia) → tarea **vencida** gana sobre urgencia (su recuadro rojo
+completo es más concreto; superponerle un canto verde hacía ilegibles a las
+dos) → urgencia.
+
+**La vista de lista no lleva el borde:** la fase se acotó al kanban. El prop ya
+llega a `CuentasClient`, así que extenderlo a `EmpresaCard` es una línea.
+
+Verificado con `tsc --noEmit` y `npm run build`, ambos en verde al primer
+intento. **El resultado visual NO se verificó** — no había dev server corriendo.
+
+#### ⚠️ Dos deudas conocidas que deja esta fase
+
+1. **Kanban y Panorama pueden discrepar.** `/api/panorama` sigue usando su
+   propio criterio de "última interacción real" (solo excluye cadencias
+   pendientes, sin `esStubDeTarea()`), así que una tarjeta puede salir roja en
+   el kanban sin que Panorama la marque enfriada. Es la misma divergencia que
+   ya existía entre Panorama y el panel de seguimiento. Alinear Panorama es
+   trabajo aparte y **probablemente arregle un bug latente ahí**, porque su
+   ancla de enfriamiento hoy cuenta stubs como actividad.
+2. **Una query más en `/cuentas`.** `getDiasSinContactoPorEmpresa()` trae las
+   251 interacciones completas (107 KB) en cada carga. Va dentro del
+   `Promise.all`, así que no agrega latencia serial, pero la página pasó de 5 a
+   6 queries. Hoy es irrelevante por volumen; entra en la lista de cosas a
+   mirar si se retoma el tema de lentitud general.
 
 ### ✅ RESUELTO — /alertas mostraba respuestas del prospecto como alertas — `2f4692a`
 
@@ -825,6 +898,18 @@ tres bandas del semáforo están confirmadas con datos reales.
 
 ### 3. Deuda de plataforma (no bloquea features)
 
+- **FASES 2 y 3 de los colores de urgencia.** La FASE 1 (`5b48b89`) cubrió solo
+  el kanban. **El alcance de las fases 2 y 3 nunca se definió** — hay que
+  preguntarle al usuario qué incluyen antes de tocar nada. Candidatos obvios
+  que quedaron fuera: el mismo borde en la vista de lista (`EmpresaCard`, el
+  prop ya llega a `CuentasClient`) y `reunion_agendada`, que hoy va en gris
+  porque su umbral necesita la fecha de la reunión.
+- **Alinear el criterio de "última interacción real" de `/api/panorama`.**
+  Usa un filtro propio (solo excluye cadencias pendientes) en vez de
+  `esStubDeTarea()`, así que discrepa con el kanban (`5b48b89`) y con el panel
+  de seguimiento. Además su ancla de enfriamiento **cuenta stubs como
+  actividad**, que es exactamente el bug que se arregló en `5654527` para el
+  panel — es probable que Panorama lo siga teniendo.
 - **Mover `distDir` fuera de OneDrive** en `next.config.mjs`. Es el arreglo
   definitivo al problema de `.next`; hoy se trabaja con el paliativo `attrib`.
 
