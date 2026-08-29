@@ -6,7 +6,8 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { unstable_noStore as noStore } from "next/cache";
-import { hoyCL } from "@/lib/fecha";
+import { hoyCL, diasHabilesEntre } from "@/lib/fecha";
+import { esStubDeTarea } from "@/lib/interaccion-meta";
 
 // Crea un cliente fresco con service role key para evitar bloqueos de RLS en inserts/updates.
 // queries.ts solo se ejecuta en el servidor (API routes); la service role key nunca llega al browser.
@@ -289,6 +290,45 @@ export async function getInteraccionesPorEmpresa(empresaId: string): Promise<Int
 
   if (error) throw new Error(`getInteraccionesPorEmpresa: ${error.message}`);
   return data ?? [];
+}
+
+// Convierte un timestamptz a fecha calendario chilena "YYYY-MM-DD".
+// Duplica el helper local de app/api/panorama/route.ts. Segunda copia de un
+// one-liner: si aparece una tercera, consolidar en lib/fecha.ts.
+function fechaCL(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
+}
+
+// Días hábiles desde la última interacción REAL de cada empresa. Alimenta el
+// borde de urgencia de las tarjetas del kanban.
+//
+// "Real" lo define esStubDeTarea() de lib/interaccion-meta.ts — NO un filtro
+// propio. Los stubs de sistema traen contacto_id y fecha reciente, así que
+// inventar el criterio acá haría que el semáforo mienta en verde justo sobre
+// las empresas que dejaron de responder (es el bug de 5654527).
+//
+// Las empresas sin ninguna interacción real quedan FUERA del Record; el
+// consumidor las pinta en gris. No se cae a estado_desde a propósito:
+// "nunca contactada" y "contactada hace mucho" son estados distintos y el
+// vendedor necesita verlos distintos.
+export async function getDiasSinContactoPorEmpresa(): Promise<Record<string, number>> {
+  const { data, error } = await getSupabase()
+    .from("interacciones")
+    .select("*")
+    .order("fecha", { ascending: false });
+
+  if (error) throw new Error(`getDiasSinContactoPorEmpresa: ${error.message}`);
+
+  const hoy = hoyCL();
+  const dias: Record<string, number> = {};
+  // Vienen ordenadas desc, así que la primera real de cada empresa es la
+  // más reciente y las siguientes se descartan.
+  for (const i of (data ?? []) as Interaccion[]) {
+    if (esStubDeTarea(i)) continue;
+    if (i.empresa_id in dias) continue;
+    dias[i.empresa_id] = diasHabilesEntre(fechaCL(i.fecha), hoy);
+  }
+  return dias;
 }
 
 export async function getInteraccionById(id: string): Promise<Interaccion | null> {

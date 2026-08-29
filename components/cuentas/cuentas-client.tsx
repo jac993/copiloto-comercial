@@ -31,6 +31,7 @@ interface CuentasClientProps {
   prospectosCongelados: Empresa[];
   prospectosLigerosPerdidos: Empresa[];
   conteos: Record<string, { interacciones: number; contactos: number }>;
+  diasSinContacto: Record<string, number>;
 }
 
 export function CuentasClient({
@@ -40,6 +41,7 @@ export function CuentasClient({
   prospectosCongelados,
   prospectosLigerosPerdidos,
   conteos,
+  diasSinContacto,
 }: CuentasClientProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogProspecto, setDialogProspecto] = useState(false);
@@ -158,6 +160,7 @@ export function CuentasClient({
               <VistaKanban
                 empresas={empresas}
                 empresasVencidasIds={empresasVencidasIds}
+                diasSinContacto={diasSinContacto}
               />
             )}
           </>

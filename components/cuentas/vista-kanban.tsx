@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { construirBorradorCaso, BORRADOR_CASO_STORAGE_KEY } from "@/lib/borradorCaso";
 import { formatCLP, formatCLPCompacto } from "@/lib/moneda";
+import { UMBRAL_ENFRIAMIENTO } from "@/lib/enfriamiento";
 import type { Empresa, EstadoEmpresa } from "@/lib/types";
 
 // Columnas visibles en orden (excluye "perdido" — tiene sección aparte)
@@ -62,12 +63,50 @@ function labelReactivacion(
   return { texto: vencida ? "Reactivar ahora" : `Reactivar en ${texto}`, vencida };
 }
 
+// Borde izquierdo de urgencia: días hábiles sin interacción real contra el
+// umbral de enfriamiento de SU etapa (lib/enfriamiento.ts).
+//   > 100% del umbral  → rojo
+//   60-100%            → amarillo
+//   < 60%              → verde
+//   no medible         → gris
+function bordeUrgencia(empresa: Empresa, dias: number | null): string {
+  // Ganado y perdido: el estado manda sobre la urgencia y su borde ya lo pinta
+  // cardBorderFondo. Devolver "" evita superponer dos bordes izquierdos.
+  if (empresa.estado === "ganado" || empresa.estado === "perdido") return "";
+
+  const GRIS = "border-l-4 border-l-border";
+  // Pausada: la pausa es una decisión consciente del vendedor, no un descuido.
+  // Mismo criterio con el que Panorama no alerta sobre estas empresas.
+  if (empresa.conversacion_pausada_at !== null) return GRIS;
+  // reunion_agendada queda gris en Fase 1: su umbral (2 días) se mide DESDE la
+  // fecha de la reunión, no desde la última interacción. Aplicarlo acá pintaría
+  // casi toda la columna en rojo el primer día. Necesita la fecha de la tarea
+  // pendiente para hacerse bien.
+  if (empresa.estado === "reunion_agendada") return GRIS;
+  // Sin interacciones reales: "nunca contactada" no es urgencia, es otra cosa.
+  // A propósito NO se cae a estado_desde.
+  if (dias === null) return GRIS;
+
+  const umbral = UMBRAL_ENFRIAMIENTO[empresa.estado];
+  if (umbral === undefined) return GRIS;
+
+  const ratio = dias / umbral;
+  // > 1 y no >= 1: en el umbral exacto todavía no está enfriada, igual que el
+  // `dias > umbral` de calcularEnfriamiento. Las dos vistas coinciden.
+  if (ratio > 1) return "border-l-4 border-l-red-500";
+  if (ratio >= 0.6) return "border-l-4 border-l-yellow-500";
+  return "border-l-4 border-l-green-500";
+}
+
 interface VistaKanbanProps {
   empresas: Empresa[];
   empresasVencidasIds: string[];
+  // empresa_id → días hábiles sin interacción real. Las empresas ausentes del
+  // objeto no tienen ninguna y se pintan en gris.
+  diasSinContacto: Record<string, number>;
 }
 
-export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: VistaKanbanProps) {
+export function VistaKanban({ empresas: empresasInit, empresasVencidasIds, diasSinContacto }: VistaKanbanProps) {
   const router = useRouter();
   // Estado local para actualización optimista al hacer drag
   const [empresas, setEmpresas] = useState<Empresa[]>(empresasInit);
@@ -190,6 +229,7 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
                 accentColor={col.accentColor}
                 items={items}
                 vencidasSet={vencidasSet}
+                diasSinContacto={diasSinContacto}
                 draggingId={draggingId}
                 onMarcarPerdido={setDialogEmpresa}
               />
@@ -221,6 +261,7 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
                     key={empresa.id}
                     empresa={empresa}
                     vencida={vencidasSet.has(empresa.id)}
+                    dias={diasSinContacto[empresa.id] ?? null}
                     esPerdido
                     onMarcarPerdido={() => {}}
                   />
@@ -236,6 +277,7 @@ export function VistaKanban({ empresas: empresasInit, empresasVencidasIds }: Vis
             <KanbanCardStatic
               empresa={draggingEmpresa}
               vencida={vencidasSet.has(draggingEmpresa.id)}
+              dias={diasSinContacto[draggingEmpresa.id] ?? null}
               esPerdido={false}
               onMarcarPerdido={() => {}}
               isOverlay
@@ -321,6 +363,7 @@ function KanbanColumna({
   accentColor,
   items,
   vencidasSet,
+  diasSinContacto,
   draggingId,
   onMarcarPerdido,
 }: {
@@ -329,6 +372,7 @@ function KanbanColumna({
   accentColor: string;
   items: Empresa[];
   vencidasSet: Set<string>;
+  diasSinContacto: Record<string, number>;
   draggingId: string | null;
   onMarcarPerdido: (e: Empresa) => void;
 }) {
@@ -362,6 +406,7 @@ function KanbanColumna({
             key={empresa.id}
             empresa={empresa}
             vencida={vencidasSet.has(empresa.id)}
+            dias={diasSinContacto[empresa.id] ?? null}
             isDraggingThis={draggingId === empresa.id}
             onMarcarPerdido={() => onMarcarPerdido(empresa)}
           />
@@ -380,11 +425,13 @@ function ColumnaVacia() {
 function KanbanCardDraggable({
   empresa,
   vencida,
+  dias,
   isDraggingThis,
   onMarcarPerdido,
 }: {
   empresa: Empresa;
   vencida: boolean;
+  dias: number | null;
   isDraggingThis: boolean;
   onMarcarPerdido: () => void;
 }) {
@@ -405,6 +452,7 @@ function KanbanCardDraggable({
       <KanbanCardStatic
         empresa={empresa}
         vencida={vencida}
+        dias={dias}
         esPerdido={false}
         onMarcarPerdido={onMarcarPerdido}
       />
@@ -417,12 +465,14 @@ function KanbanCardDraggable({
 function KanbanCardStatic({
   empresa,
   vencida,
+  dias,
   esPerdido,
   onMarcarPerdido,
   isOverlay = false,
 }: {
   empresa: Empresa;
   vencida: boolean;
+  dias: number | null;
   esPerdido: boolean;
   onMarcarPerdido: () => void;
   isOverlay?: boolean;
@@ -441,12 +491,18 @@ function KanbanCardStatic({
       ? "border border-red-300 dark:border-red-800/50"
       : "border border-border";
 
+  // Precedencia: una tarea vencida es una señal más urgente y más concreta que
+  // el enfriamiento, así que su borde rojo completo gana y no se pinta encima
+  // el borde de urgencia. Sin esto la tarjeta mezclaba dos señales distintas
+  // (recuadro rojo con canto izquierdo verde) y ninguna se leía bien.
+  const urgencia = vencida ? "" : bordeUrgencia(empresa, dias);
+
   return (
     <>
     <div
       className={`relative group rounded-xl bg-card p-3
         hover:border-primary/40 hover:shadow-sm transition-all
-        ${cardBorderFondo}
+        ${cardBorderFondo} ${urgencia}
         ${isOverlay ? "shadow-lg rotate-1 scale-105" : ""}`}
     >
       <div className="flex items-start gap-2">

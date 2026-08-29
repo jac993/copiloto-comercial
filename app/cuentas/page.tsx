@@ -15,6 +15,7 @@ import {
   getProspectosCongelados,
   getProspectosLigerosPerdidos,
   getConteosPorEmpresa,
+  getDiasSinContactoPorEmpresa,
 } from "@/lib/queries";
 import type { Empresa } from "@/lib/types";
 
@@ -25,20 +26,25 @@ export default async function CuentasPage() {
   let prospectosCongelados: Empresa[] = [];
   let prospectosLigerosPerdidos: Empresa[] = [];
   let conteos: Record<string, { interacciones: number; contactos: number }> = {};
+  // Días hábiles desde la última interacción real, por empresa. Las que no
+  // tienen ninguna quedan fuera del objeto → el kanban las pinta en gris.
+  let diasSinContacto: Record<string, number> = {};
   let errorCarga: string | null = null;
 
   try {
-    const [emps, interaccionesVencidas, ligeros, congelados, perdidos] = await Promise.all([
+    const [emps, interaccionesVencidas, ligeros, congelados, perdidos, dias] = await Promise.all([
       getEmpresas(),
       getInteraccionesConProximoPaso(),
       getProspectosLigeros(),
       getProspectosCongelados(),
       getProspectosLigerosPerdidos(),
+      getDiasSinContactoPorEmpresa(),
     ]);
     empresas = emps;
     prospectosLigeros = ligeros;
     prospectosCongelados = congelados;
     prospectosLigerosPerdidos = perdidos;
+    diasSinContacto = dias;
     // IDs de empresas con al menos un próximo paso vencido
     const idsUnicos = Array.from(new Set(interaccionesVencidas.map((i) => i.empresa_id)));
     empresasVencidasIds = idsUnicos;
@@ -89,6 +95,7 @@ export default async function CuentasPage() {
         prospectosCongelados={prospectosCongelados}
         prospectosLigerosPerdidos={prospectosLigerosPerdidos}
         conteos={conteos}
+        diasSinContacto={diasSinContacto}
       />
     </div>
   );
