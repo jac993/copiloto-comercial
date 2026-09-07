@@ -2,9 +2,10 @@
 
 Última actualización: 29 ago 2026 — auditoría de `router.refresh()` cerrada
 (`b437299`), fix de las alertas de 48h, que mostraban respuestas del prospecto
-como si fueran mensajes del vendedor esperando respuesta (`2f4692a`), y
+como si fueran mensajes del vendedor esperando respuesta (`2f4692a`),
 **FASE 1** de colores de urgencia en el kanban (`5b48b89`) con su fix de
-visibilidad (`eda7a7f`).
+visibilidad (`eda7a7f`), y el paso de **borde a fondo suave** + línea de
+tiempos, extendido a la lista del pipeline (`64534cf`).
 
 **FASES 2 y 3 pendientes** — su alcance no se definió en esta sesión; hay que
 preguntarle al usuario qué incluyen antes de empezar.
@@ -43,6 +44,85 @@ mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
 | `5b48b89` | 28 ago | feat: borde de urgencia por enfriamiento en las tarjetas del kanban |
 | `c5f7e32` | 28 ago | docs: registrar la FASE 1 de colores de urgencia |
 | `eda7a7f` | 29 ago | fix: el borde de urgencia no se veía en las tarjetas más abandonadas |
+| `64534cf` | 29 ago | feat: fondo suave de urgencia y línea de tiempos en las tarjetas del pipeline |
+
+### ✅ De borde a fondo suave + línea de tiempos — `64534cf`
+
+El borde izquierdo de 6px se reemplazó por un **fondo suave en toda la tarjeta**
+(`bg-red-50` / `bg-amber-50` / `bg-green-50`, con variantes dark al 20%), y sin
+fondo cuando no hay nada que medir. Se agregó una línea compacta de contexto:
+
+| Vista | Formato |
+|---|---|
+| `empresa-card` (ancho completo) | `12 días en esta etapa · último contacto hace 23 días hábiles` |
+| `vista-kanban` (columna de 220px) | `12d en etapa · 23d hábiles sin contacto` |
+
+**Alcance nuevo:** la lista del pipeline (`empresa-card.tsx`) ahora también tiñe.
+Antes el color vivía solo en el kanban.
+
+#### `lib/urgencia-visual.ts` — módulo nuevo
+
+La lógica de bandas salió de `vista-kanban.tsx` porque pasó a tener dos
+consumidores. **No se puso en `lib/enfriamiento.ts` a propósito:** ese módulo se
+declara *"lógica PURA de reglas"* y no debe conocer Tailwind. Este es capa de
+presentación, igual que `lib/interaccion-meta.ts`. Exporta `fondoUrgencia()`,
+`diasEnEtapa()` y `lineaTiempos()`.
+
+#### ⭐ La trampa de `cn()` vs. template literal
+
+`vista-kanban` armaba su `className` con un **template literal crudo** y tenía
+`bg-card` fijo. Con un string plano, `bg-card` y `bg-red-50` **conviven en el
+DOM y gana el orden del CSS, no el de las clases** — el fondo podía no
+aplicarse nunca. Ese `className` pasó a `cn()`, que usa `twMerge` y resuelve el
+choque.
+
+`empresa-card` no necesitó el cambio: el componente `Card` de `ui/card.tsx` ya
+compone su `className` con `cn()` internamente, así que ahí basta con pasar la
+clase de fondo por prop.
+
+**Regla:** antes de agregar una clase que compite con otra ya presente
+(`bg-*`, `border-*`, `text-*`), verificar si ese `className` pasa por `cn()`.
+Si no pasa, o se migra a `cn()` o se quita la clase base a mano.
+
+#### Decisiones tomadas con el usuario
+
+- **Tarea vencida → fondo rojo suave.** Conserva además su `border-red-300`, que
+  es código anterior a esta feature y no correspondía borrar sin pedirlo.
+- **Ganado y perdido conservan su fondo propio:** el estado manda sobre urgencia.
+- **"Por calificar" queda SIN CAMBIOS.** `ProspectoLigeroCard` ya tiene un badge
+  de días con semáforo propio desde `creado_en` (0-3 / 4-7 / +7), con cortes
+  distintos. Sumarle un fondo por días sin contacto habría puesto **dos
+  semáforos contradictorios en la misma tarjeta**: un prospecto creado hace 2
+  días (badge verde) sin interacciones podría salir con fondo rojo. Además todos
+  los ligeros tienen `estado='prospecto'`, así que compartirían umbral 7, y el
+  modelo de enfriamiento se diseñó para el pipeline.
+- **Días en etapa desde `estado_desde`, no `creado_en`.** Para un ligero
+  promovido, `creado_en` es cuándo se dio de alta **como ligero**, no cuándo
+  entró al pipeline.
+- **La etiqueta dice "días hábiles" explícitamente.** El dato viene de
+  `diasHabilesEntre`: Salcobrand marca **23** cuando en días corridos son ~32.
+  Omitirlo haría parecer el abandono menor de lo que es.
+
+`EmpresaCard` recibe también el prop `vencida`, que no estaba en el pedido, para
+que lista y kanban no muestren colores distintos para la misma empresa.
+`CuentasClient` arma un `Set` de vencidas en vez de `.includes()` por tarjeta.
+
+#### ⚠️ Sin verificación visual (otra vez)
+
+`tsc` y `npm run build` en verde, y en el CSS compilado se confirma que las 3
+clases de fondo se generan y que `border-left-width:6px` **ya no aparece** — o
+sea, el borde viejo quedó efectivamente fuera. **Pero no se miró la pantalla:**
+el navegador integrado sigue sin alcanzar `localhost`.
+
+**Dos cosas que conviene revisar con la app delante:**
+1. Los fondos suaves sobre `border border-border` pueden dar **poco contraste
+   entre tarjetas adyacentes** en el kanban, donde van apiladas con `space-y-2`.
+2. **`empresa-card` quedó densa:** badge de estado, industria, línea de tiempos
+   nueva, barra de score, badge MEDDIC, próximo paso y `tiempoRelativo`. Son 7
+   bloques de información. Si resulta cargada, la línea de tiempos es la
+   candidata natural a fusionarse con el `tiempoRelativo` de abajo — que además
+   mide algo parecido pero distinto (`actualizado_en` del registro vs. último
+   contacto real).
 
 ### ✅ El borde de urgencia no se veía — `eda7a7f`
 
