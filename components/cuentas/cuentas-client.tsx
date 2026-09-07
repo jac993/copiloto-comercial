@@ -230,7 +230,12 @@ export function CuentasClient({
                   {prospectosLigeros.length} por calificar · sin investigar aún
                 </p>
                 {prospectosLigeros.map((p) => (
-                  <ProspectoLigeroCard key={p.id} empresa={p} conteo={conteos[p.id]} />
+                  <ProspectoLigeroCard
+                    key={p.id}
+                    empresa={p}
+                    conteo={conteos[p.id]}
+                    dias={diasSinContacto[p.id] ?? null}
+                  />
                 ))}
               </>
             )
@@ -255,7 +260,11 @@ export function CuentasClient({
                         Recontactar el {fechaLegible(p.prospecto_congelado_hasta)}
                       </p>
                     )}
-                    <ProspectoLigeroCard empresa={p} conteo={conteos[p.id]} />
+                    <ProspectoLigeroCard
+                      empresa={p}
+                      conteo={conteos[p.id]}
+                      dias={diasSinContacto[p.id] ?? null}
+                    />
                   </div>
                 ))}
               </>
@@ -286,7 +295,11 @@ export function CuentasClient({
                           {labelRazonPerdida(p.prospecto_ligero_perdido_razon)}
                         </p>
                       )}
-                      <ProspectoLigeroCard empresa={p} conteo={conteos[p.id]} />
+                      <ProspectoLigeroCard
+                      empresa={p}
+                      conteo={conteos[p.id]}
+                      dias={diasSinContacto[p.id] ?? null}
+                    />
                     </div>
                   ))}
                 </div>

@@ -26,28 +26,44 @@ export function fondoUrgencia(
   // el estado manda sobre la urgencia.
   if (empresa.estado === "ganado" || empresa.estado === "perdido") return "";
 
-  const ROJO = "bg-red-50 dark:bg-red-950/20";
+  const ROJO_INTENSO = "bg-red-100 dark:bg-red-950/40";
+  const ROJO_SUAVE = "bg-red-50 dark:bg-red-950/20";
 
-  // Una tarea vencida es urgencia máxima y gana sobre el enfriamiento.
-  if (vencida) return ROJO;
+  // Congelado a futuro: el vendedor lo pospuso a propósito, igual que una
+  // conversación pausada. Teñirlo sería castigarlo por una decisión suya.
+  const congelado =
+    empresa.prospecto_congelado_hasta !== null &&
+    empresa.prospecto_congelado_hasta > hoyCL();
 
-  // Pausada: decisión consciente del vendedor, no un descuido.
-  if (empresa.conversacion_pausada_at !== null) return "";
-  // reunion_agendada: su umbral se mide DESDE la fecha de la reunión,
-  // no desde la última interacción. Sin ese dato no se puede teñir bien.
-  if (empresa.estado === "reunion_agendada") return "";
-  // Sin interacciones reales no hay nada que medir.
-  if (dias === null) return "";
+  // Casos en los que no hay nada que medir: pausada y congelada son
+  // decisiones conscientes; reunion_agendada mide su umbral DESDE la fecha
+  // de la reunión, no desde la última interacción.
+  const medible =
+    empresa.conversacion_pausada_at === null &&
+    !congelado &&
+    empresa.estado !== "reunion_agendada";
 
-  const umbral = UMBRAL_ENFRIAMIENTO[empresa.estado];
-  if (umbral === undefined) return "";
+  let banda = "";
+  if (medible && dias !== null) {
+    const umbral = UMBRAL_ENFRIAMIENTO[empresa.estado];
+    if (umbral !== undefined) {
+      const ratio = dias / umbral;
+      // Cuatro bandas: sin la de > 2 el modelo se saturaba y una empresa
+      // 20% pasada del umbral se veía igual que una 430% pasada.
+      banda =
+        ratio > 2 ? ROJO_INTENSO
+        : ratio > 1 ? ROJO_SUAVE
+        : ratio >= 0.6 ? "bg-amber-50 dark:bg-amber-950/20"
+        : "bg-green-50 dark:bg-green-950/20";
+    }
+  }
 
-  const ratio = dias / umbral;
-  // > 1 y no >= 1: en el umbral exacto todavía no está enfriada, igual
-  // que el `dias > umbral` de calcularEnfriamiento.
-  if (ratio > 1) return ROJO;
-  if (ratio >= 0.6) return "bg-amber-50 dark:bg-amber-950/20";
-  return "bg-green-50 dark:bg-green-950/20";
+  // Una tarea vencida es urgencia máxima: pone piso en rojo suave, pero NO
+  // rebaja el rojo intenso si el enfriamiento ya lo justificaba. Antes hacía
+  // return antes de calcular el ratio, así que una vencida con ratio 4 se
+  // habría visto menos grave que una no vencida con ratio 3.
+  if (vencida) return banda === ROJO_INTENSO ? ROJO_INTENSO : ROJO_SUAVE;
+  return banda;
 }
 
 // Días CALENDARIO en la etapa actual. Calendario y no hábiles porque

@@ -201,11 +201,13 @@ export function EmpresaCard({ empresa, dias, vencida }: EmpresaCardProps) {
           </div>
 
           {/* Dos acciones explícitas: la tarjeta ya no navega por sí sola */}
-          <div className="flex flex-col gap-2 mt-3">
-            <Button className="w-full h-11 text-xs" onClick={() => setPanelAbierto(true)}>
+          {/* En fila: acá hay ancho completo, así que las etiquetas largas
+              entran sin acortar (a diferencia del kanban de 220px). */}
+          <div className="flex flex-row gap-2 mt-3">
+            <Button className="flex-1 h-11 text-xs" onClick={() => setPanelAbierto(true)}>
               Seguimiento contactos
             </Button>
-            <Button asChild variant="outline" className="w-full h-11 text-xs">
+            <Button asChild variant="outline" className="flex-1 h-11 text-xs">
               <Link href={`/cuentas/${empresa.id}`}>Detalle empresa</Link>
             </Button>
           </div>

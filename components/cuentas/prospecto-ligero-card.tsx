@@ -6,8 +6,8 @@ import { Building2, Globe, Users, MessageSquare } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PanelSeguimientoContactos } from "@/components/cuentas/panel-seguimiento-contactos";
+import { fondoUrgencia, lineaTiempos } from "@/lib/urgencia-visual";
 import type { Empresa } from "@/lib/types";
-import { hoyCL } from "@/lib/fecha";
 
 // Iniciales de la empresa (máx 2 caracteres)
 function getIniciales(nombre: string): string {
@@ -19,38 +19,36 @@ function getIniciales(nombre: string): string {
     .toUpperCase();
 }
 
-// Días calendario transcurridos desde la creación (zona Chile)
-function diasDesdeCreacion(creadoEn: string): number {
-  const fechaCreacion = new Date(creadoEn).toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
-  const hoy = hoyCL();
-  return Math.round((Date.parse(hoy) - Date.parse(fechaCreacion)) / 86_400_000);
-}
-
-// Color del badge según urgencia: reciente (verde) → atención (ámbar) → acción (naranja/rojo)
-function estiloBadgeDias(dias: number): string {
-  if (dias <= 3) return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
-  if (dias <= 7) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
-  return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400";
-}
-
 interface ProspectoLigeroCardProps {
   empresa: Empresa;
   conteo?: { interacciones: number; contactos: number };
+  // Días hábiles sin interacción real. null = sin interacciones registradas.
+  dias: number | null;
 }
 
 // Tarjeta de la lista "Por calificar": prospecto ligero sin ficha IA.
 // Clickable → /cuentas/[id] (la bifurcación a la vista ligera vive en 4b).
-export function ProspectoLigeroCard({ empresa, conteo }: ProspectoLigeroCardProps) {
+export function ProspectoLigeroCard({ empresa, conteo, dias }: ProspectoLigeroCardProps) {
   const [panelAbierto, setPanelAbierto] = useState(false);
   const iniciales = getIniciales(empresa.nombre);
   const contactos = conteo?.contactos ?? 0;
   const interacciones = conteo?.interacciones ?? 0;
-  const dias = diasDesdeCreacion(empresa.creado_en);
-  const etiquetaDias = dias === 0 ? "Hoy" : dias === 1 ? "1 día" : `${dias} días`;
+  // `vencida` va fijo en false: un ligero todavía no está calificado, así que
+  // la señal de "tarea vencida" del pipeline no se le aplica.
+  // OJO — esto NO es porque el dato no exista: `empresasVencidasIds` sale de
+  // getInteraccionesConProximoPaso(), que NO filtra por tipo_registro (a
+  // diferencia de /api/interacciones/vencidas, que sí excluye ligeros). Hoy
+  // hay 2 ligeros con tarea vencida en BD; es una decisión, no una limitación.
+  // El umbral sale solo: todos se crean con estado='prospecto', que en
+  // UMBRAL_ENFRIAMIENTO ya vale 7. Los congelados quedan sin teñir.
+  const fondo = fondoUrgencia(empresa, dias, false);
+  // estadoDesde en null → lineaTiempos devuelve solo el último contacto. En un
+  // ligero estado_desde no significa nada: nunca entró al pipeline.
+  const tiempos = lineaTiempos(null, dias, false);
 
   return (
     <>
-      <Card className="border border-l-4 border-l-[#F97316] hover:border-primary/30 hover:shadow-md transition-all">
+      <Card className={`border border-l-4 border-l-[#F97316] hover:border-primary/30 hover:shadow-md transition-all ${fondo}`}>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             {/* Avatar con iniciales — naranja suave, coherente con el brand */}
@@ -79,19 +77,20 @@ export function ProspectoLigeroCard({ empresa, conteo }: ProspectoLigeroCardProp
                   <MessageSquare className="h-3 w-3" />
                   {interacciones} {interacciones === 1 ? "interacción" : "interacciones"}
                 </span>
-                <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full ${estiloBadgeDias(dias)}`}>
-                  {etiquetaDias}
-                </span>
               </div>
+
+              {tiempos && (
+                <p className="text-xs text-muted-foreground mt-1.5">{tiempos}</p>
+              )}
             </div>
           </div>
 
           {/* Dos acciones explícitas: la tarjeta ya no navega por sí sola */}
-          <div className="flex flex-col gap-2 mt-3">
-            <Button className="w-full h-11 text-xs" onClick={() => setPanelAbierto(true)}>
+          <div className="flex flex-row gap-2 mt-3">
+            <Button className="flex-1 h-11 text-xs" onClick={() => setPanelAbierto(true)}>
               Seguimiento contactos
             </Button>
-            <Button asChild variant="outline" className="w-full h-11 text-xs">
+            <Button asChild variant="outline" className="flex-1 h-11 text-xs">
               <Link href={`/cuentas/${empresa.id}`}>Detalle empresa</Link>
             </Button>
           </div>

@@ -529,23 +529,28 @@ function KanbanCardStatic({
 
       {/* Acciones. onPointerDown detiene la propagación para que dnd-kit no
           interprete la pulsación como el inicio de un arrastre: el TouchSensor
-          arranca a los 200ms y una pulsación algo lenta se comería el clic. */}
+          arranca a los 200ms y una pulsación algo lenta se comería el clic.
+
+          Van en fila: en 220px cada botón queda en ~105px, así que las
+          etiquetas son cortas. Apilados entraban completas (80ba3b9), pero se
+          priorizó el ahorro de alto. h-11 explícito para no caer bajo los
+          44px táctiles de CLAUDE.md. */}
       {!isOverlay && (
-        <div className="flex flex-col gap-2 mt-2.5">
+        <div className="flex flex-row gap-1.5 mt-2.5">
           <Button
-            className="w-full h-11 text-[11px] px-2"
+            className="flex-1 h-11 text-[11px] px-1"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => setPanelAbierto(true)}
           >
-            Seguimiento contactos
+            Contactos
           </Button>
           <Button
             asChild
             variant="outline"
-            className="w-full h-11 text-[11px] px-2"
+            className="flex-1 h-11 text-[11px] px-1"
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <Link href={`/cuentas/${empresa.id}`}>Detalle empresa</Link>
+            <Link href={`/cuentas/${empresa.id}`}>Ver ficha</Link>
           </Button>
         </div>
       )}
