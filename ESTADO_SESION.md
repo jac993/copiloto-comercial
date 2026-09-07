@@ -1,14 +1,18 @@
 # Estado de sesión — Copiloto Comercial
 
-Última actualización: 29 ago 2026 — auditoría de `router.refresh()` cerrada
-(`b437299`), fix de las alertas de 48h, que mostraban respuestas del prospecto
-como si fueran mensajes del vendedor esperando respuesta (`2f4692a`),
-**FASE 1** de colores de urgencia en el kanban (`5b48b89`) con su fix de
-visibilidad (`eda7a7f`), y el paso de **borde a fondo suave** + línea de
-tiempos, extendido a la lista del pipeline (`64534cf`).
+Última actualización: **7 sep 2026** — cuarta banda de urgencia con contraste
+real (`40941a1`, `52f44ea`), botones en fila, urgencia extendida a
+"Por calificar", y **Panorama convertido en tab dentro de Cuentas**
+(`798438c`).
 
-**FASES 2 y 3 pendientes** — su alcance no se definió en esta sesión; hay que
-preguntarle al usuario qué incluyen antes de empezar.
+Sesión del 28-29 ago: auditoría de `router.refresh()` cerrada (`b437299`), fix
+de las alertas de 48h que mostraban respuestas del prospecto como si fueran
+mensajes del vendedor esperando respuesta (`2f4692a`), **FASE 1** de colores
+de urgencia en el kanban (`5b48b89`) con su fix de visibilidad (`eda7a7f`), y
+el paso de **borde a fondo suave** + línea de tiempos (`64534cf`).
+
+**FASES 2 y 3 pendientes** — su alcance no se definió; hay que preguntarle al
+usuario qué incluyen antes de empezar.
 
 **Queda abierto el diagnóstico de lentitud general.** Se descartó el volumen de
 datos con mediciones (la BD entera pesa < 1 MB) pero nunca se cerró: falta que
@@ -32,6 +36,111 @@ no alcanza.**
 Sesión previa (20 ago): rotación de la `service_role` key (deuda de seguridad
 saldada), fix transversal de sincronización de Server Components y cuatro
 mejoras a prospectos ligeros. Commits `385d269`–`ee95da1`.
+
+---
+
+## Commits del 7 sep 2026
+
+| Hash | Descripción |
+|------|-------------|
+| `40941a1` | feat: 4a banda de urgencia, botones en fila y urgencia en "Por calificar" |
+| `52f44ea` | fix: más contraste entre las bandas de urgencia |
+| `798438c` | feat: Panorama pasa a ser un tab dentro de Cuentas |
+
+### ⭐ El modelo de bandas se saturaba — `40941a1` + `52f44ea`
+
+Reportado como *"una empresa con 6 días y otra con 30 aparecen del mismo
+color"*. **No era un bug de umbrales:** los dos casos daban ratio > 1 y caían
+en la misma banda. Con 3 bandas, una empresa 20% pasada del umbral se veía
+**idéntica** a una 430% pasada.
+
+**Se agregó una cuarta banda** (`ratio > 2`) y, en un segundo pase, se les dio
+contraste real: los dos rojos originales (`bg-red-50` #FEF2F2 vs `bg-red-100`
+#FEE2E2) eran indistinguibles a simple vista, así que la banda nueva tampoco
+se notaba. La rampa final:
+
+| Banda | Ratio | Clase |
+|---|---|---|
+| Verde | < 0.6 | `bg-green-50` |
+| Ámbar | 0.6–1.0 | `bg-amber-50` |
+| Naranja | 1–2 | `bg-orange-100` |
+| Rojo | > 2 | `bg-red-200` |
+
+Verificado con datos reales: Salcobrand (29d, ratio 5.80) ya se distingue de
+CCU (6d, ratio 1.20).
+
+**`vencida` dejó de ser cortocircuito y pasó a ser PISO.** Antes hacía `return`
+antes de calcular el ratio, así que con la banda nueva una empresa vencida con
+ratio 4 se habría visto **menos grave** que una no vencida con ratio 3.
+
+**Regla que dejó este bug:** antes de tocar la paleta porque "un color no se
+ve", calcular con datos reales qué banda le toca a cada fila. Las dos veces que
+pasó en este proyecto el color estaba bien y el problema era la lógica.
+
+### Botones en fila y urgencia en "Por calificar" — `40941a1`
+
+- **Botones de apilados a fila** en las tres tarjetas. En el kanban las
+  etiquetas tuvieron que acortarse a "Contactos" / "Ver ficha": la columna mide
+  220px y en fila cada botón queda en ~105px. Eso **revierte el criterio de
+  `80ba3b9`**, que los apiló justamente para que entraran completas.
+  **Se mantiene `h-11` (44px)** — el usuario descartó bajar a `h-8`/`h-9` al
+  ver que viola el mínimo táctil de CLAUDE.md.
+- **"Por calificar" ahora también se tiñe**, revirtiendo la decisión de
+  `64534cf`. Se elimina su badge de días desde `creado_en`, que medía otra cosa
+  con otros cortes y habría quedado contradiciendo al fondo (badge verde sobre
+  fondo rojo). La línea de tiempos va **sin** "días en etapa": `estado_desde`
+  no significa nada en un ligero, que nunca entró al pipeline.
+- **Los congelados quedan SIN teñir**, igual que las conversaciones pausadas.
+  Un congelado es un prospecto pospuesto a propósito hasta una fecha; pintarlo
+  de rojo por llevar 40 días sin contacto sería castigarlo por una decisión del
+  vendedor.
+
+⚠️ **`ProspectoLigeroCard` recibe `vencida` fijo en `false` por decisión, no
+por falta de dato.** `empresasVencidasIds` sale de
+`getInteraccionesConProximoPaso()`, que **NO** filtra por `tipo_registro` (a
+diferencia de `/api/interacciones/vencidas`, que sí excluye ligeros). Hoy hay
+2 ligeros con tarea vencida en BD que quedan sin esa señal.
+
+### ✅ Panorama como tab dentro de Cuentas — `798438c`
+
+`app/panorama/page.tsx` se extrae a `components/cuentas/panorama-seccion.tsx`
+y se muestra como tercer tab: **Pipeline | Panorama | Por calificar**, con
+Pipeline como default. El botón sale del nav, que queda en 4 items.
+
+**El costo del endpoint no aumentó — bajó.** La preocupación era que
+`/api/panorama`, el más pesado de la app, pasara a dispararse en cada carga de
+Cuentas. No ocurre: el componente ya era un Client Component que fetchea en un
+`useEffect` al montar, así que basta montarlo perezosamente. Y una vez abierto
+**no se desmonta** — se oculta con `hidden` — porque con desmontaje puro cada
+ida y vuelta entre tabs habría refetcheado, peor que una carga por visita.
+
+Adaptaciones de página a panel:
+- El CSS scopeado pierde `min-height:100vh`, `max-width:900px` y
+  `margin:0 auto`, y gana borde y esquinas redondeadas. **El ancho y el
+  centrado los pone ahora el wrapper de la ruta**, así que cada contexto define
+  su envoltorio y el panel solo se ocupa de su interior.
+- Se quita el `<h1>` en el tab (Cuentas ya tiene el suyo); la ruta `/panorama`
+  sí lo conserva. La línea de conteo queda en ambos.
+- El estado vacío decía *"Agrega empresas en la sección Cuentas"* con botón
+  "Ir a Cuentas" — absurdo estando dentro de Cuentas. Ahora es "Ver pipeline"
+  con un callback: `setSeccion("pipeline")` en el tab,
+  `router.push("/cuentas")` en la ruta.
+- **El botón flotante se oculta en Panorama.** Sin ese caso caía en el `else` y
+  mostraba "Nuevo prospecto", que pertenece a Por calificar.
+
+`/panorama` se mantiene como wrapper delgado (4.76 kB → **1.54 kB**) para no
+romper favoritos. Se verificó que `nav.tsx` era la única referencia real.
+
+**La trampa del lint, otra vez:** sacar el item dejaba `Radar` importado sin
+uso, lo que **rompe el build de Vercel**. Es el mismo error de `80ba3b9` y del
+`router` el 20 ago. Por eso los dos cambios fueron en el mismo commit.
+
+#### ⚠️ Deuda que deja: la paleta de Panorama es oscura fija
+
+No respeta el tema claro/oscuro, contra lo que pide CLAUDE.md. Nunca lo hizo,
+pero ahora es más visible: es un rectángulo `#0F0F0F` embebido en una pantalla
+de fondo `#FAFAFA`. Convertirlo a Tailwind con la clase `dark` implica
+reescribir sus ~60 líneas de CSS scopeado.
 
 ---
 
@@ -1075,6 +1184,20 @@ tres bandas del semáforo están confirmadas con datos reales.
 
 ### 3. Deuda de plataforma (no bloquea features)
 
+- **Pasar la paleta de Panorama a Tailwind con la clase `dark`.** Hoy es una
+  paleta oscura fija (`--bg:#0F0F0F`) inyectada por `dangerouslySetInnerHTML`,
+  que ignora el tema de la app y contradice CLAUDE.md. Desde `798438c` es más
+  visible, porque quedó embebida como panel dentro de una pantalla clara. Son
+  ~60 líneas de CSS scopeado a reescribir.
+- **Decidir si los ligeros deben teñirse por tarea vencida.**
+  `ProspectoLigeroCard` recibe `vencida={false}` fijo por decisión de producto,
+  pero el dato existe: `getInteraccionesConProximoPaso()` no filtra por
+  `tipo_registro`. Hoy hay 2 ligeros con tarea vencida sin esa señal. Cambiarlo
+  es una línea.
+- **Verificar visualmente el tab Panorama.** Los colores de urgencia sí los
+  confirmó el usuario, pero el panel oscuro dentro de Cuentas en modo claro
+  nunca se miró — el navegador integrado no alcanza `localhost` (ver Notas de
+  entorno).
 - **FASES 2 y 3 de los colores de urgencia.** La FASE 1 (`5b48b89`) cubrió solo
   el kanban. **El alcance de las fases 2 y 3 nunca se definió** — hay que
   preguntarle al usuario qué incluyen antes de tocar nada. Candidatos obvios
