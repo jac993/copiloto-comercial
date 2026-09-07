@@ -9,11 +9,12 @@ import { VistaKanban } from "@/components/cuentas/vista-kanban";
 import { InvestigarDialog } from "@/components/cuentas/investigar-dialog";
 import { NuevoProspectoDialog } from "@/components/cuentas/nuevo-prospecto-dialog";
 import { ProspectoLigeroCard } from "@/components/cuentas/prospecto-ligero-card";
+import { PanoramaSeccion } from "@/components/cuentas/panorama-seccion";
 import { labelRazonPerdida } from "@/lib/prospecto-ligero";
 import type { Empresa } from "@/lib/types";
 
 type Vista = "lista" | "pipeline";
-type Seccion = "pipeline" | "por_calificar";
+type Seccion = "pipeline" | "panorama" | "por_calificar";
 type SubVista = "activos" | "congelados" | "perdidos";
 
 // Formateador local de display. Duplica el de prospecto-ligero-detail.tsx a
@@ -47,6 +48,16 @@ export function CuentasClient({
   const [dialogProspecto, setDialogProspecto] = useState(false);
   const [vista, setVista] = useState<Vista>("lista");
   const [seccion, setSeccion] = useState<Seccion>("pipeline");
+  // Panorama se monta perezosamente y NO se desmonta al cambiar de tab.
+  // /api/panorama es el endpoint más pesado de la app: con desmontaje puro,
+  // cada ida y vuelta entre tabs lo refetchearía. Así entrar a Cuentas no lo
+  // gatilla, y una vez abierto no vuelve a pedirlo.
+  const [panoramaMontado, setPanoramaMontado] = useState(false);
+
+  const irASeccion = (s: Seccion) => {
+    if (s === "panorama") setPanoramaMontado(true);
+    setSeccion(s);
+  };
   const [subVista, setSubVista] = useState<SubVista>("activos");
 
   // Set en vez de .includes() por tarjeta — mismo patrón que VistaKanban.
@@ -65,11 +76,11 @@ export function CuentasClient({
 
   return (
     <div className="relative pb-24">
-      {/* Toggle de sección: Pipeline | Por calificar (siempre visible) */}
+      {/* Toggle de sección: Pipeline | Panorama | Por calificar (siempre visible) */}
       <div className="px-4 pt-4">
         <div className="inline-flex items-center border border-input rounded-xl overflow-hidden text-sm font-semibold">
           <button
-            onClick={() => setSeccion("pipeline")}
+            onClick={() => irASeccion("pipeline")}
             className={`px-4 h-9 transition-colors ${
               seccion === "pipeline"
                 ? "bg-primary text-white"
@@ -79,7 +90,17 @@ export function CuentasClient({
             Pipeline
           </button>
           <button
-            onClick={() => setSeccion("por_calificar")}
+            onClick={() => irASeccion("panorama")}
+            className={`px-4 h-9 transition-colors ${
+              seccion === "panorama"
+                ? "bg-primary text-white"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            Panorama
+          </button>
+          <button
+            onClick={() => irASeccion("por_calificar")}
             className={`px-4 h-9 transition-colors ${
               seccion === "por_calificar"
                 ? "bg-primary text-white"
@@ -91,7 +112,16 @@ export function CuentasClient({
         </div>
       </div>
 
-      {seccion === "pipeline" ? (
+      {/* Montado perezosamente y ocultado con `hidden` en vez de desmontado,
+          para no refetchear /api/panorama en cada cambio de tab. */}
+      {panoramaMontado && (
+        <div className="px-4 pt-4" hidden={seccion !== "panorama"}>
+          <PanoramaSeccion onVerPipeline={() => setSeccion("pipeline")} />
+        </div>
+      )}
+
+      {seccion !== "panorama" && (
+      seccion === "pipeline" ? (
         empresas.length === 0 ? (
           <EstadoVacio onAgregarClick={() => setDialogOpen(true)} />
         ) : (
@@ -307,11 +337,15 @@ export function CuentasClient({
             )
           )}
         </div>
+      )
       )}
 
       {/* Botón flotante — cambia según la sección */}
       <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
-        {seccion === "pipeline" ? (
+        {/* Panorama es solo lectura: ni "Investigar empresa" ni "Nuevo
+            prospecto" tienen sentido ahí. Sin este caso caería en el else y
+            mostraría "Nuevo prospecto", que pertenece a Por calificar. */}
+        {seccion === "panorama" ? null : seccion === "pipeline" ? (
           <Button
             size="lg"
             className="rounded-2xl shadow-xl shadow-primary/30 gap-2 pr-5 h-14"

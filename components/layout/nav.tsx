@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Building2, Radar, BarChart2, Settings, Bell } from "lucide-react";
+import { Sun, Building2, BarChart2, Settings, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
@@ -43,12 +43,8 @@ const navItems = [
     icon: Building2,
     description: "Empresas, decisores e interacciones",
   },
-  {
-    href: "/panorama",
-    label: "Panorama",
-    icon: Radar,
-    description: "Vista general de prospectos",
-  },
+  // Panorama salió del nav: ahora es un tab dentro de Cuentas. La ruta
+  // /panorama sigue existiendo como wrapper para no romper favoritos.
   {
     href: "/rendimiento",
     label: "Rendimiento",
