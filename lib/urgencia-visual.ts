@@ -26,8 +26,11 @@ export function fondoUrgencia(
   // el estado manda sobre la urgencia.
   if (empresa.estado === "ganado" || empresa.estado === "perdido") return "";
 
-  const ROJO_INTENSO = "bg-red-100 dark:bg-red-950/40";
-  const ROJO_SUAVE = "bg-red-50 dark:bg-red-950/20";
+  // Rampa verde → ámbar → naranja → rojo. Los dos rojos anteriores
+  // (red-50 / red-100) eran indistinguibles a simple vista: #FEF2F2 vs
+  // #FEE2E2. El objetivo es que la banda se lea sin mirar los números.
+  const CRITICO = "bg-red-200 dark:bg-red-950/50";
+  const ALTO = "bg-orange-100 dark:bg-orange-950/30";
 
   // Congelado a futuro: el vendedor lo pospuso a propósito, igual que una
   // conversación pausada. Teñirlo sería castigarlo por una decisión suya.
@@ -51,8 +54,8 @@ export function fondoUrgencia(
       // Cuatro bandas: sin la de > 2 el modelo se saturaba y una empresa
       // 20% pasada del umbral se veía igual que una 430% pasada.
       banda =
-        ratio > 2 ? ROJO_INTENSO
-        : ratio > 1 ? ROJO_SUAVE
+        ratio > 2 ? CRITICO
+        : ratio > 1 ? ALTO
         : ratio >= 0.6 ? "bg-amber-50 dark:bg-amber-950/20"
         : "bg-green-50 dark:bg-green-950/20";
     }
@@ -62,7 +65,7 @@ export function fondoUrgencia(
   // rebaja el rojo intenso si el enfriamiento ya lo justificaba. Antes hacía
   // return antes de calcular el ratio, así que una vencida con ratio 4 se
   // habría visto menos grave que una no vencida con ratio 3.
-  if (vencida) return banda === ROJO_INTENSO ? ROJO_INTENSO : ROJO_SUAVE;
+  if (vencida) return banda === CRITICO ? CRITICO : ALTO;
   return banda;
 }
 
