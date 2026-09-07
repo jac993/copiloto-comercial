@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { PanelSeguimientoContactos } from "@/components/cuentas/panel-seguimiento-contactos";
+import { fondoUrgencia, lineaTiempos } from "@/lib/urgencia-visual";
 import type { Empresa, EstadoEmpresa, MeddicData } from "@/lib/types";
 
 // Colores semánticos por estado — reflejan la etapa del pipeline
@@ -84,9 +85,13 @@ function getAvatarColor(score: number): string {
 
 interface EmpresaCardProps {
   empresa: Empresa;
+  // Días hábiles sin interacción real. null = sin interacciones registradas.
+  dias: number | null;
+  // Tiene al menos una tarea con próximo paso vencido.
+  vencida: boolean;
 }
 
-export function EmpresaCard({ empresa }: EmpresaCardProps) {
+export function EmpresaCard({ empresa, dias, vencida }: EmpresaCardProps) {
   const [panelAbierto, setPanelAbierto] = useState(false);
   const estadoConf = ESTADO_CONFIG[empresa.estado];
   const iniciales = getIniciales(empresa.nombre);
@@ -99,9 +104,15 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
       ? "border-l-[3px] border-l-gray-300 dark:border-l-gray-600 opacity-75 hover:border-l-gray-300"
       : "";
 
+  const fondo = fondoUrgencia(empresa, dias, vencida);
+  // Formato largo: acá hay ancho completo, a diferencia del kanban.
+  const tiempos = lineaTiempos(empresa.estado_desde, dias, false);
+
   return (
     <>
-      <Card className={`border hover:border-primary/30 hover:shadow-md transition-all ${cardBorderFondo}`}>
+      {/* Card compone su className con cn(), así que twMerge resuelve solo
+          el choque entre su bg-card y el bg-* de urgencia. */}
+      <Card className={`border hover:border-primary/30 hover:shadow-md transition-all ${cardBorderFondo} ${fondo}`}>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             {/* Avatar con iniciales */}
@@ -129,6 +140,10 @@ export function EmpresaCard({ empresa }: EmpresaCardProps) {
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">
                   {empresa.industria}
                 </p>
+              )}
+
+              {tiempos && (
+                <p className="text-xs text-muted-foreground mt-0.5">{tiempos}</p>
               )}
 
               {/* Barra de score */}

@@ -30,7 +30,8 @@ import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { construirBorradorCaso, BORRADOR_CASO_STORAGE_KEY } from "@/lib/borradorCaso";
 import { formatCLP, formatCLPCompacto } from "@/lib/moneda";
-import { UMBRAL_ENFRIAMIENTO } from "@/lib/enfriamiento";
+import { fondoUrgencia, lineaTiempos } from "@/lib/urgencia-visual";
+import { cn } from "@/lib/utils";
 import type { Empresa, EstadoEmpresa } from "@/lib/types";
 
 // Columnas visibles en orden (excluye "perdido" — tiene sección aparte)
@@ -61,41 +62,6 @@ function labelReactivacion(
   const vencida = fecha <= hoy;
   const texto = fecha.toLocaleDateString("es-CL", { month: "short", year: "numeric" });
   return { texto: vencida ? "Reactivar ahora" : `Reactivar en ${texto}`, vencida };
-}
-
-// Borde izquierdo de urgencia: días hábiles sin interacción real contra el
-// umbral de enfriamiento de SU etapa (lib/enfriamiento.ts).
-//   > 100% del umbral  → rojo
-//   60-100%            → amarillo
-//   < 60%              → verde
-//   no medible         → gris
-function bordeUrgencia(empresa: Empresa, dias: number | null): string {
-  // Ganado y perdido: el estado manda sobre la urgencia y su borde ya lo pinta
-  // cardBorderFondo. Devolver "" evita superponer dos bordes izquierdos.
-  if (empresa.estado === "ganado" || empresa.estado === "perdido") return "";
-
-  const GRIS = "border-l-4 border-l-border";
-  // Pausada: la pausa es una decisión consciente del vendedor, no un descuido.
-  // Mismo criterio con el que Panorama no alerta sobre estas empresas.
-  if (empresa.conversacion_pausada_at !== null) return GRIS;
-  // reunion_agendada queda gris en Fase 1: su umbral (2 días) se mide DESDE la
-  // fecha de la reunión, no desde la última interacción. Aplicarlo acá pintaría
-  // casi toda la columna en rojo el primer día. Necesita la fecha de la tarea
-  // pendiente para hacerse bien.
-  if (empresa.estado === "reunion_agendada") return GRIS;
-  // Sin interacciones reales: "nunca contactada" no es urgencia, es otra cosa.
-  // A propósito NO se cae a estado_desde.
-  if (dias === null) return GRIS;
-
-  const umbral = UMBRAL_ENFRIAMIENTO[empresa.estado];
-  if (umbral === undefined) return GRIS;
-
-  const ratio = dias / umbral;
-  // > 1 y no >= 1: en el umbral exacto todavía no está enfriada, igual que el
-  // `dias > umbral` de calcularEnfriamiento. Las dos vistas coinciden.
-  if (ratio > 1) return "border-l-[6px] border-l-red-600";
-  if (ratio >= 0.6) return "border-l-[6px] border-l-amber-500";
-  return "border-l-[6px] border-l-green-500";
 }
 
 interface VistaKanbanProps {
@@ -491,22 +457,22 @@ function KanbanCardStatic({
       ? "border border-red-300 dark:border-red-800/50"
       : "border border-border";
 
-  // Una tarea vencida ES la urgencia máxima, así que se lleva el borde más
-  // fuerte en vez de apagarlo. La versión anterior devolvía "" y la tarjeta
-  // quedaba solo con el border-red-300 de 1px: las 4 empresas más abandonadas
-  // del pipeline (23-29 días sin contacto) eran justamente las que menos se
-  // notaban, porque abandono y tarea vencida van casi siempre juntos.
-  const urgencia = vencida
-    ? "border-l-[6px] border-l-red-600"
-    : bordeUrgencia(empresa, dias);
+  const fondo = fondoUrgencia(empresa, dias, vencida);
+  const tiempos = lineaTiempos(empresa.estado_desde, dias, true);
 
   return (
     <>
+    {/* cn() en vez de template literal: twMerge resuelve el choque entre
+        bg-card y el bg-* de urgencia. Con el string crudo ganaba el orden
+        del CSS, no el de las clases, y el fondo podía no aplicarse nunca. */}
     <div
-      className={`relative group rounded-xl bg-card p-3
-        hover:border-primary/40 hover:shadow-sm transition-all
-        ${cardBorderFondo} ${urgencia}
-        ${isOverlay ? "shadow-lg rotate-1 scale-105" : ""}`}
+      className={cn(
+        "relative group rounded-xl bg-card p-3",
+        "hover:border-primary/40 hover:shadow-sm transition-all",
+        cardBorderFondo,
+        fondo,
+        isOverlay && "shadow-lg rotate-1 scale-105"
+      )}
     >
       <div className="flex items-start gap-2">
         <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
@@ -524,6 +490,12 @@ function KanbanCardStatic({
       {empresa.valor_estimado_clp !== null && (
         <p className="text-xs font-semibold text-[#22C55E] mt-1 pl-4 tabular-nums">
           {formatCLP(empresa.valor_estimado_clp)}
+        </p>
+      )}
+
+      {tiempos && (
+        <p className="text-xs text-muted-foreground mt-1 pl-4 leading-tight">
+          {tiempos}
         </p>
       )}
 

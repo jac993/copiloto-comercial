@@ -49,6 +49,9 @@ export function CuentasClient({
   const [seccion, setSeccion] = useState<Seccion>("pipeline");
   const [subVista, setSubVista] = useState<SubVista>("activos");
 
+  // Set en vez de .includes() por tarjeta — mismo patrón que VistaKanban.
+  const vencidasSet = new Set(empresasVencidasIds);
+
   // Cargar preferencia desde localStorage al montar
   useEffect(() => {
     const saved = localStorage.getItem("copiloto_vista") as Vista | null;
@@ -150,7 +153,12 @@ export function CuentasClient({
             {vista === "lista" && (
               <div className="px-4 space-y-3">
                 {empresas.map((empresa) => (
-                  <EmpresaCard key={empresa.id} empresa={empresa} />
+                  <EmpresaCard
+                    key={empresa.id}
+                    empresa={empresa}
+                    dias={diasSinContacto[empresa.id] ?? null}
+                    vencida={vencidasSet.has(empresa.id)}
+                  />
                 ))}
               </div>
             )}
