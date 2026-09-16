@@ -612,51 +612,44 @@ export function HoyClient() {
 
         {/* Tareas de hoy — prioridades de IA + tareas con fecha, unificadas */}
         <section>
-          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-            <Target className="h-4 w-4 text-primary shrink-0" />
-            <h2 className="font-semibold text-base shrink-0">Tareas</h2>
-            {/* Pills de filtro: Vencidas / Tareas / Realizadas */}
-            <div className="flex gap-1 ml-0.5">
-              <button
-                onClick={() => { setFiltroTareas("vencidas"); setMostrarTodas(false); }}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                  filtroTareas === "vencidas"
-                    ? countVencidas > 0
-                      ? "bg-red-600 text-white border-red-600"
-                      : "bg-primary text-white border-primary"
-                    : countVencidas > 0
-                      ? "bg-red-50 text-red-600 border-red-300 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                }`}
-              >
-                Vencidas{countVencidas > 0 ? ` (${countVencidas})` : ""}
-              </button>
-              <button
-                onClick={() => { setFiltroTareas("tareas"); setMostrarTodas(false); }}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                  filtroTareas === "tareas"
-                    ? "bg-primary text-white border-primary"
-                    : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                }`}
-              >
-                Tareas{countTareas > 0 ? ` (${countTareas})` : ""}
-              </button>
-              <button
-                onClick={() => { setFiltroTareas("realizadas"); setMostrarTodas(false); }}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                  filtroTareas === "realizadas"
-                    ? "bg-green-600 text-white border-green-600"
-                    : countRealizadas > 0
-                      ? "bg-green-50 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                }`}
-              >
-                ✓ Realizadas{countRealizadas > 0 ? ` (${countRealizadas})` : ""}
-              </button>
-            </div>
-            <span className="ml-auto text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full shrink-0">
-              {countVencidas + countTareas}
-            </span>
+          {/* Card tabs: Vencidas | Tareas de hoy | Realizadas */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <button
+              onClick={() => { setFiltroTareas("vencidas"); setMostrarTodas(false); }}
+              className="flex flex-col gap-1 rounded-2xl p-3 border text-left transition-all"
+              style={
+                filtroTareas === "vencidas"
+                  ? { background: "rgba(127,0,0,0.35)", borderColor: "rgba(255,45,45,0.45)", boxShadow: "0 0 20px rgba(255,45,45,0.35), 0 0 50px rgba(255,45,45,0.12)", opacity: 1 }
+                  : { background: "#1A1A1A", borderColor: "#2a2a2a", opacity: 0.55 }
+              }
+            >
+              <span className="text-3xl font-black leading-none" style={{ color: filtroTareas === "vencidas" ? "#FF4444" : "white" }}>{countVencidas}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: filtroTareas === "vencidas" ? "rgba(255,100,100,0.8)" : "rgba(255,255,255,0.55)" }}>Vencidas</span>
+            </button>
+            <button
+              onClick={() => { setFiltroTareas("tareas"); setMostrarTodas(false); }}
+              className="flex flex-col gap-1 rounded-2xl p-3 border text-left transition-all"
+              style={
+                filtroTareas === "tareas"
+                  ? { background: "rgba(80,50,0,0.5)", borderColor: "rgba(255,208,0,0.45)", boxShadow: "0 0 20px rgba(255,208,0,0.3), 0 0 50px rgba(255,208,0,0.1)", opacity: 1 }
+                  : { background: "#1A1A1A", borderColor: "#2a2a2a", opacity: 0.55 }
+              }
+            >
+              <span className="text-3xl font-black leading-none" style={{ color: filtroTareas === "tareas" ? "#FFD000" : "white" }}>{countTareas}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: filtroTareas === "tareas" ? "rgba(255,208,0,0.8)" : "rgba(255,255,255,0.55)" }}>Tareas de hoy</span>
+            </button>
+            <button
+              onClick={() => { setFiltroTareas("realizadas"); setMostrarTodas(false); }}
+              className="flex flex-col gap-1 rounded-2xl p-3 border text-left transition-all"
+              style={
+                filtroTareas === "realizadas"
+                  ? { background: "rgba(0,60,30,0.5)", borderColor: "rgba(0,255,135,0.4)", boxShadow: "0 0 20px rgba(0,255,135,0.3), 0 0 50px rgba(0,255,135,0.1)", opacity: 1 }
+                  : { background: "#1A1A1A", borderColor: "#2a2a2a", opacity: 0.55 }
+              }
+            >
+              <span className="text-3xl font-black leading-none" style={{ color: filtroTareas === "realizadas" ? "#00FF87" : "white" }}>{countRealizadas}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: filtroTareas === "realizadas" ? "rgba(0,255,135,0.8)" : "rgba(255,255,255,0.55)" }}>Realizadas</span>
+            </button>
           </div>
 
           {/* Barra IA (timestamp + chip "usa IA") — solo en la pestaña Tareas */}

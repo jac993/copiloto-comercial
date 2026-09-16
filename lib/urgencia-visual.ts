@@ -29,8 +29,8 @@ export function fondoUrgencia(
   // Rampa verde → ámbar → naranja → rojo. Los dos rojos anteriores
   // (red-50 / red-100) eran indistinguibles a simple vista: #FEF2F2 vs
   // #FEE2E2. El objetivo es que la banda se lea sin mirar los números.
-  const CRITICO = "bg-red-200 dark:bg-red-950/50";
-  const ALTO = "bg-orange-100 dark:bg-orange-950/30";
+  const CRITICO = "bg-red-950/70";
+  const ALTO = "bg-orange-950/50";
 
   // Congelado a futuro: el vendedor lo pospuso a propósito, igual que una
   // conversación pausada. Teñirlo sería castigarlo por una decisión suya.
@@ -56,8 +56,8 @@ export function fondoUrgencia(
       banda =
         ratio > 2 ? CRITICO
         : ratio > 1 ? ALTO
-        : ratio >= 0.6 ? "bg-amber-50 dark:bg-amber-950/20"
-        : "bg-green-50 dark:bg-green-950/20";
+        : ratio >= 0.6 ? "bg-amber-950/25"
+        : "bg-green-950/20";
     }
   }
 

@@ -76,38 +76,44 @@ export function CuentasClient({
 
   return (
     <div className="relative pb-24">
-      {/* Toggle de sección: Pipeline | Panorama | Por calificar (siempre visible) */}
+      {/* Card tabs: Pipeline | Panorama | Por calificar */}
       <div className="px-4 pt-4">
-        <div className="inline-flex items-center border border-input rounded-xl overflow-hidden text-sm font-semibold">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => irASeccion("pipeline")}
-            className={`px-4 h-9 transition-colors ${
+            className="flex flex-col gap-1 rounded-2xl p-3 border text-left transition-all"
+            style={
               seccion === "pipeline"
-                ? "bg-primary text-white"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            }`}
+                ? { background: "linear-gradient(135deg,#4C1D95,#2E1065)", borderColor: "rgba(167,139,250,0.5)", boxShadow: "0 0 20px rgba(167,139,250,0.4), 0 0 50px rgba(167,139,250,0.15)", opacity: 1 }
+                : { background: "#1A1A1A", borderColor: "#2a2a2a", opacity: 0.55 }
+            }
           >
-            Pipeline
+            <span className="text-3xl font-black leading-none" style={{ color: seccion === "pipeline" ? "#C4B5FD" : "white" }}>{empresas.length}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: seccion === "pipeline" ? "rgba(196,181,253,0.8)" : "rgba(255,255,255,0.55)" }}>Pipeline</span>
           </button>
           <button
             onClick={() => irASeccion("panorama")}
-            className={`px-4 h-9 transition-colors ${
+            className="flex flex-col gap-1 rounded-2xl p-3 border text-left transition-all"
+            style={
               seccion === "panorama"
-                ? "bg-primary text-white"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            }`}
+                ? { background: "linear-gradient(135deg,#155E75,#083344)", borderColor: "rgba(34,211,238,0.5)", boxShadow: "0 0 20px rgba(34,211,238,0.4), 0 0 50px rgba(34,211,238,0.15)", opacity: 1 }
+                : { background: "#1A1A1A", borderColor: "#2a2a2a", opacity: 0.55 }
+            }
           >
-            Panorama
+            <span className="text-3xl font-black leading-none" style={{ color: seccion === "panorama" ? "#22D3EE" : "white" }}>—</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: seccion === "panorama" ? "rgba(34,211,238,0.8)" : "rgba(255,255,255,0.55)" }}>Panorama</span>
           </button>
           <button
             onClick={() => irASeccion("por_calificar")}
-            className={`px-4 h-9 transition-colors ${
+            className="flex flex-col gap-1 rounded-2xl p-3 border text-left transition-all"
+            style={
               seccion === "por_calificar"
-                ? "bg-primary text-white"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            }`}
+                ? { background: "rgba(60,25,0,0.7)", borderColor: "rgba(255,122,26,0.5)", boxShadow: "0 0 20px rgba(255,122,26,0.35), 0 0 50px rgba(255,122,26,0.12)", opacity: 1 }
+                : { background: "#1A1A1A", borderColor: "#2a2a2a", opacity: 0.55 }
+            }
           >
-            Por calificar{prospectosLigeros.length > 0 ? ` (${prospectosLigeros.length})` : ""}
+            <span className="text-3xl font-black leading-none" style={{ color: seccion === "por_calificar" ? "#FF7A1A" : "white" }}>{prospectosLigeros.length}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: seccion === "por_calificar" ? "rgba(255,122,26,0.8)" : "rgba(255,255,255,0.55)" }}>Por calificar</span>
           </button>
         </div>
       </div>

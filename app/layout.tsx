@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning className="dark">
       <body className={inter.className}>
         <Providers>
           {/* Layout responsivo: sidebar en desktop, bottom nav en móvil */}
@@ -25,7 +25,7 @@ export default function RootLayout({
             <Sidebar />
 
             {/* Contenido principal — margen izquierdo solo en desktop */}
-            <main className="flex-1 md:ml-64 pb-20 md:pb-0">
+            <main className="flex-1 md:ml-[60px] pb-20 md:pb-0">
               {children}
             </main>
           </div>

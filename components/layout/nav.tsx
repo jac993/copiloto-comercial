@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sun, Building2, BarChart2, Settings, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 
 // Carga el conteo de interacciones vencidas sin respuesta (sin bloquear el render)
 function useBadgeVencidas() {
@@ -29,37 +30,93 @@ function useBadgeVencidas() {
   return total;
 }
 
-// Secciones principales del copiloto
+// Secciones principales del copiloto — usadas también por BottomNav
 const navItems = [
-  {
-    href: "/",
-    label: "Hoy",
-    icon: Sun,
-    description: "Tu agenda y prioridades del día",
-  },
-  {
-    href: "/cuentas",
-    label: "Cuentas",
-    icon: Building2,
-    description: "Empresas, decisores e interacciones",
-  },
-  // Panorama salió del nav: ahora es un tab dentro de Cuentas. La ruta
-  // /panorama sigue existiendo como wrapper para no romper favoritos.
-  {
-    href: "/rendimiento",
-    label: "Rendimiento",
-    icon: BarChart2,
-    description: "Evaluaciones semanales con IA",
-  },
-  {
-    href: "/configuracion",
-    label: "Configuración",
-    icon: Settings,
-    description: "Integraciones, casos y costos",
-  },
+  { href: "/", label: "Hoy", icon: Sun, description: "Tu agenda y prioridades del día" },
+  { href: "/cuentas", label: "Cuentas", icon: Building2, description: "Empresas, decisores e interacciones" },
+  // Panorama salió del nav: ahora es un tab dentro de Cuentas.
+  { href: "/rendimiento", label: "Rendimiento", icon: BarChart2, description: "Evaluaciones semanales con IA" },
+  { href: "/configuracion", label: "Configuración", icon: Settings, description: "Integraciones, casos y costos" },
 ];
 
-// Navegación inferior para móvil
+// Logo One Label — círculo naranja con peel effect en la esquina superior derecha
+function OneLabelLogo() {
+  return (
+    <svg viewBox="0 0 120 120" width="40" height="40" aria-label="One Label">
+      <defs>
+        <clipPath id="ol-clip"><circle cx="60" cy="60" r="56"/></clipPath>
+        <filter id="ol-peel" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="1" dy="1" stdDeviation="2" floodOpacity="0.35"/>
+        </filter>
+      </defs>
+      {/* Sombra del círculo */}
+      <circle cx="62" cy="63" r="56" fill="rgba(0,0,0,0.22)"/>
+      {/* Círculo naranja principal */}
+      <circle cx="60" cy="60" r="56" fill="#F97316"/>
+      {/* Recorte esquina superior derecha (el "despegue") */}
+      <path d="M 88 4 L 116 4 L 116 32 Q 104 20 88 4 Z" fill="#0D0D0D" clipPath="url(#ol-clip)"/>
+      {/* Cara visible del peel */}
+      <path d="M 88 4 Q 104 20 116 32 Q 108 14 88 4 Z" fill="#E8E8E8" filter="url(#ol-peel)"/>
+      {/* Texto "one" */}
+      <text x="60" y="66" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="40" fill="white" textAnchor="middle">one</text>
+      {/* Texto "label" */}
+      <text x="60" y="85" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="14" fill="white" textAnchor="middle" letterSpacing="4.5">label</text>
+      {/* Símbolo registrado */}
+      <text x="106" y="56" fontFamily="Arial, sans-serif" fontSize="11" fill="white">®</text>
+    </svg>
+  );
+}
+
+// Ítem de navegación del sidebar — ícono cuadrado + tooltip flotante al hover
+function NavIconItem({
+  href,
+  icon: Icon,
+  label,
+  pathname,
+  badge,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  pathname: string;
+  badge?: number;
+}) {
+  const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+  return (
+    <div className="relative group">
+      <Link
+        href={href}
+        className={cn(
+          "relative flex items-center justify-center rounded-xl transition-all w-11 h-11 border",
+          isActive
+            ? "bg-orange-500/10 text-orange-400 border-orange-500/60"
+            : "text-gray-500 hover:bg-white/5 hover:text-gray-300 border-transparent"
+        )}
+        style={
+          isActive
+            ? { boxShadow: "0 0 16px rgba(255,122,26,0.5), 0 0 40px rgba(255,122,26,0.2), inset 0 0 12px rgba(255,122,26,0.08)" }
+            : undefined
+        }
+      >
+        <Icon className="h-5 w-5 shrink-0" strokeWidth={isActive ? 2.5 : 1.8} />
+        {/* Badge de alertas */}
+        {badge != null && badge > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+            {badge}
+          </span>
+        )}
+      </Link>
+      {/* Tooltip que aparece a la derecha al hover */}
+      <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-[100] pointer-events-none">
+        <div className="bg-[#1a1a1a] border border-[#333] text-gray-200 text-xs font-medium px-3 py-1.5 rounded-lg whitespace-nowrap shadow-xl">
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Navegación inferior para móvil — sin cambios funcionales
 export function BottomNav() {
   const pathname = usePathname();
   const alertas = useBadgeVencidas();
@@ -113,78 +170,45 @@ export function BottomNav() {
   );
 }
 
-// Sidebar izquierdo para desktop
+// Sidebar izquierdo para desktop — slim (60px), solo íconos con tooltips
 export function Sidebar() {
   const pathname = usePathname();
   const alertas = useBadgeVencidas();
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:left-0 md:z-50 border-r border-[#2a2a2a] bg-[#1A1A1A]">
-      {/* Logo / nombre de la app */}
-      <div className="flex h-28 items-center justify-center pt-2 border-b border-[#2a2a2a]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png.png" alt="Copiloto Comercial" style={{ height: 96, width: "auto" }} />
+    <aside
+      className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:left-0 md:z-50 border-r border-[#1e1e1e] bg-[#080808]"
+      style={{ width: 60 }}
+    >
+      {/* Logo One Label */}
+      <div className="flex items-center justify-center border-b border-[#1e1e1e] shrink-0" style={{ height: 70 }}>
+        <Link href="/" aria-label="Inicio">
+          <OneLabelLogo />
+        </Link>
       </div>
 
-      {/* Links de navegación */}
-      <nav className="flex flex-col gap-1 p-3 flex-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+      {/* Navegación principal */}
+      <nav className="flex flex-col items-center gap-2 py-3 flex-1">
+        {/* Hoy, Cuentas, Rendimiento */}
+        {navItems.slice(0, 3).map((item) => (
+          <NavIconItem key={item.href} href={item.href} icon={item.icon} label={item.label} pathname={pathname} />
+        ))}
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all border-l-2",
-                isActive
-                  ? "bg-orange-500/20 text-orange-400 border-orange-500"
-                  : "text-gray-400 hover:bg-white/5 hover:text-gray-200 border-transparent"
-              )}
-            >
-              <Icon className="h-5 w-5 shrink-0" strokeWidth={isActive ? 2.5 : 1.8} />
-              <div className="flex flex-col">
-                <span>{item.label}</span>
-                {!isActive && (
-                  <span className="text-xs opacity-50">{item.description}</span>
-                )}
-              </div>
-            </Link>
-          );
-        })}
+        {/* Alertas — siempre visible, badge cuando hay vencidas */}
+        <NavIconItem
+          href="/alertas"
+          icon={Bell}
+          label="Alertas"
+          pathname={pathname}
+          badge={alertas > 0 ? alertas : undefined}
+        />
 
-        {/* Alertas — solo visible cuando hay interacciones vencidas */}
-        {alertas > 0 && (
-          <Link
-            href="/alertas"
-            className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all mt-1 border-l-2",
-              pathname.startsWith("/alertas")
-                ? "bg-red-500/20 text-red-400 border-red-500"
-                : "bg-red-500/10 text-red-400 hover:bg-red-500/20 border-transparent"
-            )}
-          >
-            <div className="relative">
-              <Bell className="h-5 w-5 shrink-0" />
-            </div>
-            <div className="flex items-center justify-between flex-1">
-              <span>Alertas</span>
-              <span className="text-xs font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
-                {alertas}
-              </span>
-            </div>
-          </Link>
-        )}
+        {/* Separador flexible */}
+        <div className="flex-1" />
+
+        {/* Configuración al fondo */}
+        <NavIconItem href="/configuracion" icon={Settings} label="Configuración" pathname={pathname} />
       </nav>
-
-      {/* Footer del sidebar */}
-      <div className="p-3 border-t border-[#2a2a2a]">
-        <p className="text-xs text-gray-600 text-center px-2">
-          Solo para tu uso personal
-        </p>
-      </div>
     </aside>
   );
 }
