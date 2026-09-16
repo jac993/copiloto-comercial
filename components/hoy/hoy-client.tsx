@@ -509,13 +509,13 @@ export function HoyClient() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Header con gradiente violeta→fucsia — compacto */}
-      <header className="gradient-hoy px-4 pt-6 pb-4 md:pt-5">
+      {/* Header oscuro — mismo tratamiento que Cuentas y Rendimiento */}
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border px-4 pt-4 pb-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-white/70 text-xs font-medium capitalize">{hoy}</p>
+            <p className="text-muted-foreground text-xs font-medium capitalize">{hoy}</p>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <h1 className="text-white text-xl font-extrabold">Buenos días 👋</h1>
+              <h1 className="text-foreground text-xl font-extrabold">Buenos días 👋</h1>
               <HelpTooltip
                 titulo="¿Para qué sirve esta pantalla?"
                 explicacion="Es tu agenda diaria. Muestra las 5 cuentas más importantes para contactar hoy, ordenadas por prioridad. Cada mañana revísala antes de empezar a trabajar."
@@ -523,21 +523,19 @@ export function HoyClient() {
               />
             </div>
           </div>
-          <div className="bg-white/20 rounded-xl p-1">
-            <ThemeToggle />
-          </div>
+          <ThemeToggle />
         </div>
 
         {/* Resumen de IA (aparece después de priorizar) */}
         {resumenDia && (
-          <div className="mt-2 bg-white/15 rounded-xl px-3 py-2">
-            <p className="text-white/90 text-xs leading-relaxed">✨ {resumenDia}</p>
+          <div className="mt-2 rounded-xl px-3 py-2 bg-orange-500/10 border border-orange-500/25">
+            <p className="text-orange-100/90 text-xs leading-relaxed">✨ {resumenDia}</p>
           </div>
         )}
 
         {/* Barra de progreso del día */}
         <div className="mt-3">
-          <div className="flex justify-between text-white/80 text-xs font-medium mb-1.5">
+          <div className="flex justify-between text-muted-foreground text-xs font-medium mb-1.5">
             <div className="flex items-center gap-1">
               <span>
                 {cargandoMetricas
@@ -552,9 +550,9 @@ export function HoyClient() {
             </div>
             <span>{porcentaje}%</span>
           </div>
-          <div className="h-1.5 rounded-full bg-white/20">
+          <div className="h-1.5 rounded-full bg-white/10">
             <div
-              className="h-1.5 rounded-full bg-white transition-all duration-700"
+              className="h-1.5 rounded-full bg-gradient-to-r from-[#FF9A4A] to-[#FF7A1A] shadow-[0_0_10px_rgba(255,122,26,0.5)] transition-all duration-700"
               style={{ width: `${porcentaje}%` }}
             />
           </div>

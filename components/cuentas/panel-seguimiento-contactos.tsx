@@ -31,10 +31,25 @@ import type { Contacto, Interaccion, TipoInteraccion } from "@/lib/types";
 // Semáforo de actividad POR CONTACTO, en días hábiles desde su última
 // interacción. Umbrales de persona: UMBRAL_ENFRIAMIENTO de lib/enfriamiento.ts
 // mide la empresa completa por etapa, que es otra cosa.
+// Cada nivel trae además su paleta neón: tiñe la tarjeta completa, el acento
+// lateral, la píldora y la barra, para que la temperatura del contacto se lea
+// de un vistazo sin tener que leer la etiqueta.
 const NIVELES_ACTIVIDAD = [
-  { max: 5,        label: "Activo",      barra: "bg-[#22C55E]", pct: 100 },
-  { max: 10,       label: "Enfriándose", barra: "bg-[#F59E0B]", pct: 55  },
-  { max: Infinity, label: "Frío",        barra: "bg-[#DC2626]", pct: 20  },
+  {
+    max: 5, label: "Activo", pct: 100,
+    color: "#00FF87", tinte: "rgba(0,60,30,0.45)",
+    borde: "rgba(0,255,135,0.32)", glow: "0 0 10px rgba(0,255,135,0.45)",
+  },
+  {
+    max: 10, label: "Enfriándose", pct: 55,
+    color: "#FFD000", tinte: "rgba(70,45,0,0.45)",
+    borde: "rgba(255,208,0,0.30)", glow: "0 0 10px rgba(255,208,0,0.40)",
+  },
+  {
+    max: Infinity, label: "Frío", pct: 20,
+    color: "#FF4444", tinte: "rgba(60,5,5,0.45)",
+    borde: "rgba(255,68,68,0.28)", glow: "0 0 10px rgba(255,45,45,0.40)",
+  },
 ];
 const nivelActividad = (d: number) => NIVELES_ACTIVIDAD.find((n) => d <= n.max)!;
 
@@ -50,8 +65,8 @@ const tieneNombre = (c: Contacto) => c.nombre != null && c.nombre.trim() !== "";
 
 const CHIP =
   "shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2.5 h-7 rounded-lg " +
-  "bg-[#FFF7ED] text-[#C2410C] hover:bg-[#FFEDD5] dark:bg-[#431407]/40 " +
-  "dark:text-orange-300 dark:hover:bg-[#431407]/60 transition-colors";
+  "bg-orange-500/10 text-orange-300 border border-orange-500/25 " +
+  "hover:bg-orange-500/20 hover:border-orange-500/45 transition-colors";
 
 type Estado = "idle" | "cargando" | "listo" | "error";
 
@@ -207,13 +222,19 @@ export function PanelSeguimientoContactos({
 
           {estado === "listo" && contactos.length > 0 && (
             <div className="space-y-4">
-              <p className="text-xs text-muted-foreground px-1">
-                {conActividad.length} con actividad · {sinContactar.length} sin contactar
-              </p>
+              <div className="flex items-center gap-2 px-1">
+                <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-400/20">
+                  {conActividad.length} con actividad
+                </span>
+                <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-lg bg-white/5 text-muted-foreground border border-white/10">
+                  {sinContactar.length} sin contactar
+                </span>
+              </div>
 
               {conActividad.length > 0 && (
                 <section>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+                  <p className="flex items-center gap-2 text-xs font-bold text-emerald-300/90 uppercase tracking-wider mb-2 px-1">
+                    <span className="h-3 w-[3px] rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(0,255,135,0.6)]" />
                     Con actividad
                   </p>
                   <div className="space-y-2">
@@ -232,10 +253,11 @@ export function PanelSeguimientoContactos({
 
               {sinContactar.length > 0 && (
                 <section>
-                  <p className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wide mb-2 px-1">
+                  <p className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                    <span className="h-3 w-[3px] rounded-full bg-white/25" />
                     Sin contactar aún
                   </p>
-                  <div className="space-y-2 opacity-60">
+                  <div className="space-y-2 opacity-70">
                     {sinContactar.map((c) => (
                       <FilaContacto
                         key={c.id} contacto={c} ultima={null}
@@ -282,14 +304,28 @@ function FilaContacto({
   const sinCanales = !contacto.telefono && !contacto.email && !contacto.linkedin_url;
 
   return (
-    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+    <div
+      className="relative rounded-2xl border overflow-hidden transition-all"
+      style={{
+        background: nivel?.tinte ?? "#141414",
+        borderColor: nivel?.borde ?? "#262626",
+      }}
+    >
+      {/* Acento lateral con el color de la temperatura */}
+      {nivel && (
+        <span
+          className="absolute left-0 top-0 bottom-0 w-[3px]"
+          style={{ background: nivel.color, boxShadow: nivel.glow }}
+        />
+      )}
+
       {/* Cabecera como <button> real: acá SÍ puede serlo porque no contiene
           otros interactivos — el detalle expandido es hermano, no hijo. */}
       <button
         onClick={onToggle}
-        className="w-full text-left p-3 flex items-start gap-3 hover:bg-muted/30 transition-colors"
+        className="w-full text-left p-3 pl-4 flex items-start gap-3 hover:bg-white/[0.04] transition-colors"
       >
-        <div className="h-9 w-9 rounded-xl bg-[#FFF7ED] dark:bg-[#431407]/50 flex items-center justify-center text-xs font-bold text-[#F97316] shrink-0">
+        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#FF9A4A] to-[#C2410C] ring-1 ring-orange-300/25 shadow-[0_0_12px_rgba(255,122,26,0.25)] flex items-center justify-center text-xs font-bold text-white shrink-0">
           {iniciales(contacto)}
         </div>
         <div className="flex-1 min-w-0">
@@ -309,12 +345,25 @@ function FilaContacto({
                       ? "Contactado hoy"
                       : `Hace ${dias} ${dias === 1 ? "día hábil" : "días hábiles"}`}
                   </span>
-                  <span className="text-xs font-semibold shrink-0">{nivel.label}</span>
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider shrink-0 px-2 py-0.5 rounded-md border"
+                    style={{
+                      color: nivel.color,
+                      background: `${nivel.color}1A`,
+                      borderColor: nivel.borde,
+                    }}
+                  >
+                    {nivel.label}
+                  </span>
                 </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full ${nivel.barra}`}
-                    style={{ width: `${nivel.pct}%` }}
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${nivel.pct}%`,
+                      background: nivel.color,
+                      boxShadow: nivel.glow,
+                    }}
                   />
                 </div>
               </>
@@ -329,7 +378,7 @@ function FilaContacto({
       </button>
 
       {expandido && (
-        <div className="border-t border-border bg-muted/20 px-3 py-2.5 space-y-2">
+        <div className="border-t border-white/10 bg-black/25 px-3 pl-4 py-2.5 space-y-2">
           {contacto.telefono && (
             <Canal Icon={Phone} valor={contacto.telefono}>
               <a href={`tel:${contacto.telefono.replace(/\s+/g, "")}`} className={CHIP}>
