@@ -39,31 +39,17 @@ const navItems = [
   { href: "/configuracion", label: "Configuración", icon: Settings, description: "Integraciones, casos y costos" },
 ];
 
-// Logo One Label — círculo naranja con peel effect en la esquina superior derecha
+// Logo One Label — archivo real en public/one-label.png
 function OneLabelLogo() {
   return (
-    <svg viewBox="0 0 120 120" width="40" height="40" aria-label="One Label">
-      <defs>
-        <clipPath id="ol-clip"><circle cx="60" cy="60" r="56"/></clipPath>
-        <filter id="ol-peel" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="1" dy="1" stdDeviation="2" floodOpacity="0.35"/>
-        </filter>
-      </defs>
-      {/* Sombra del círculo */}
-      <circle cx="62" cy="63" r="56" fill="rgba(0,0,0,0.22)"/>
-      {/* Círculo naranja principal */}
-      <circle cx="60" cy="60" r="56" fill="#F97316"/>
-      {/* Recorte esquina superior derecha (el "despegue") */}
-      <path d="M 88 4 L 116 4 L 116 32 Q 104 20 88 4 Z" fill="#0D0D0D" clipPath="url(#ol-clip)"/>
-      {/* Cara visible del peel */}
-      <path d="M 88 4 Q 104 20 116 32 Q 108 14 88 4 Z" fill="#E8E8E8" filter="url(#ol-peel)"/>
-      {/* Texto "one" */}
-      <text x="60" y="66" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="40" fill="white" textAnchor="middle">one</text>
-      {/* Texto "label" */}
-      <text x="60" y="85" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="14" fill="white" textAnchor="middle" letterSpacing="4.5">label</text>
-      {/* Símbolo registrado */}
-      <text x="106" y="56" fontFamily="Arial, sans-serif" fontSize="11" fill="white">®</text>
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/one-label.png"
+      alt="One Label"
+      width={40}
+      height={40}
+      className="h-10 w-10 object-contain"
+    />
   );
 }
 
