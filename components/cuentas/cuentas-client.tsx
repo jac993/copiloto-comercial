@@ -218,39 +218,49 @@ export function CuentasClient({
         <EstadoVacioLigero onNuevo={() => setDialogProspecto(true)} />
       ) : (
         <div className="px-4 pt-3 space-y-3">
-          {/* Sub-toggle Activos | Congelados | Perdidos */}
-          <div className="inline-flex items-center border border-input rounded-xl overflow-hidden text-xs font-semibold">
+          {/* Sub-toggle Activos | Congelados | Perdidos — cajas de color compactas */}
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => setSubVista("activos")}
-              className={`px-3.5 h-8 transition-colors ${
+              className="flex flex-col gap-0.5 rounded-xl px-3 py-2.5 border text-left transition-all"
+              style={
                 subVista === "activos"
-                  ? "bg-primary text-white"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
+                  ? { background: "rgba(0,60,30,0.5)", borderColor: "rgba(0,255,135,0.4)", boxShadow: "0 0 14px rgba(0,255,135,0.25), 0 0 36px rgba(0,255,135,0.08)", opacity: 1 }
+                  : { background: "#141414", borderColor: "#262626", opacity: 0.6 }
+              }
             >
-              Activos ({prospectosLigeros.length})
+              <span className="text-2xl font-black leading-none" style={{ color: subVista === "activos" ? "#00FF87" : "white" }}>{prospectosLigeros.length}</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: subVista === "activos" ? "#5BFFB0" : "rgba(255,255,255,0.8)" }}>Activos</span>
             </button>
             <button
               onClick={() => setSubVista("congelados")}
-              className={`px-3.5 h-8 transition-colors inline-flex items-center gap-1.5 ${
+              className="flex flex-col gap-0.5 rounded-xl px-3 py-2.5 border text-left transition-all"
+              style={
                 subVista === "congelados"
-                  ? "bg-primary text-white"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
+                  ? { background: "rgba(8,47,73,0.65)", borderColor: "rgba(56,189,248,0.45)", boxShadow: "0 0 14px rgba(56,189,248,0.28), 0 0 36px rgba(56,189,248,0.08)", opacity: 1 }
+                  : { background: "#141414", borderColor: "#262626", opacity: 0.6 }
+              }
             >
-              <Snowflake className="h-3 w-3" />
-              Congelados ({prospectosCongelados.length})
+              <span className="text-2xl font-black leading-none" style={{ color: subVista === "congelados" ? "#38BDF8" : "white" }}>{prospectosCongelados.length}</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider" style={{ color: subVista === "congelados" ? "#7DD3FC" : "rgba(255,255,255,0.8)" }}>
+                <Snowflake className="h-3 w-3 shrink-0" />
+                Congelados
+              </span>
             </button>
             <button
               onClick={() => setSubVista("perdidos")}
-              className={`px-3.5 h-8 transition-colors inline-flex items-center gap-1.5 ${
+              className="flex flex-col gap-0.5 rounded-xl px-3 py-2.5 border text-left transition-all"
+              style={
                 subVista === "perdidos"
-                  ? "bg-primary text-white"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
+                  ? { background: "rgba(70,5,5,0.6)", borderColor: "rgba(255,68,68,0.45)", boxShadow: "0 0 14px rgba(255,45,45,0.28), 0 0 36px rgba(255,45,45,0.08)", opacity: 1 }
+                  : { background: "#141414", borderColor: "#262626", opacity: 0.6 }
+              }
             >
-              <XCircle className="h-3 w-3" />
-              Perdidos ({prospectosLigerosPerdidos.length})
+              <span className="text-2xl font-black leading-none" style={{ color: subVista === "perdidos" ? "#FF4444" : "white" }}>{prospectosLigerosPerdidos.length}</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider" style={{ color: subVista === "perdidos" ? "#FF7A7A" : "rgba(255,255,255,0.8)" }}>
+                <XCircle className="h-3 w-3 shrink-0" />
+                Perdidos
+              </span>
             </button>
           </div>
 

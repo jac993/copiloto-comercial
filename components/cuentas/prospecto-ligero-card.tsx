@@ -48,11 +48,16 @@ export function ProspectoLigeroCard({ empresa, conteo, dias }: ProspectoLigeroCa
 
   return (
     <>
-      <Card className={`border border-l-4 border-l-[#F97316] hover:border-primary/30 hover:shadow-md transition-all ${fondo}`}>
-        <CardContent className="p-4">
+      <Card
+        className={`relative overflow-hidden rounded-2xl border border-white/[0.07] transition-all hover:border-orange-500/40 hover:-translate-y-0.5 hover:shadow-[0_8px_28px_-10px_rgba(255,122,26,0.45)] ${fondo}`}
+      >
+        {/* Acento lateral en degradado */}
+        <span className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#FF9A4A] via-[#FF7A1A] to-[#B33C00]" />
+
+        <CardContent className="p-4 pl-5">
           <div className="flex items-start gap-3">
-            {/* Avatar con iniciales — naranja suave, coherente con el brand */}
-            <div className="h-11 w-11 rounded-2xl bg-[#FFF7ED] dark:bg-[#431407]/50 flex items-center justify-center font-bold text-sm shrink-0 text-[#F97316]">
+            {/* Avatar con iniciales — degradado de marca con halo suave */}
+            <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-[#FF9A4A] to-[#C2410C] ring-1 ring-orange-300/25 shadow-[0_0_14px_rgba(255,122,26,0.28)] flex items-center justify-center font-bold text-sm shrink-0 text-white">
               {iniciales || <Building2 className="h-5 w-5" />}
             </div>
 
@@ -68,29 +73,38 @@ export function ProspectoLigeroCard({ empresa, conteo, dias }: ProspectoLigeroCa
                 </p>
               )}
 
-              <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#FFF7ED] text-[#C2410C] dark:bg-[#431407]/40 dark:text-orange-300">
+              <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-400/20">
                   <Users className="h-3 w-3" />
                   {contactos} {contactos === 1 ? "contacto" : "contactos"}
                 </span>
-                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#FFF7ED] text-[#C2410C] dark:bg-[#431407]/40 dark:text-orange-300">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-sky-500/10 text-sky-300 border border-sky-400/20">
                   <MessageSquare className="h-3 w-3" />
                   {interacciones} {interacciones === 1 ? "interacción" : "interacciones"}
                 </span>
               </div>
 
               {tiempos && (
-                <p className="text-xs text-muted-foreground mt-1.5">{tiempos}</p>
+                <p className="text-xs text-muted-foreground mt-2">{tiempos}</p>
               )}
             </div>
           </div>
 
-          {/* Dos acciones explícitas: la tarjeta ya no navega por sí sola */}
-          <div className="flex flex-row gap-2 mt-3">
-            <Button className="flex-1 h-11 text-xs" onClick={() => setPanelAbierto(true)}>
+          {/* Dos acciones explícitas: la tarjeta ya no navega por sí sola.
+              min-h-0 en desktop vence el target táctil de 44px del base layer,
+              que dejaba el botón desproporcionado frente a su etiqueta. */}
+          <div className="flex flex-row items-center gap-2 mt-3.5">
+            <Button
+              className="h-11 md:h-9 md:min-h-0 px-4 text-sm font-semibold rounded-xl"
+              onClick={() => setPanelAbierto(true)}
+            >
               Seguimiento contactos
             </Button>
-            <Button asChild variant="outline" className="flex-1 h-11 text-xs">
+            <Button
+              asChild
+              variant="outline"
+              className="h-11 md:h-9 md:min-h-0 px-4 text-sm font-medium rounded-xl border-white/10 hover:border-orange-500/40 hover:text-orange-300"
+            >
               <Link href={`/cuentas/${empresa.id}`}>Detalle empresa</Link>
             </Button>
           </div>
