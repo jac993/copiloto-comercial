@@ -118,12 +118,12 @@ export default function RendimientoPage() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <header className="bg-gradient-to-r from-[#F97316] to-[#EA580C] px-5 pt-10 pb-7 md:pt-8">
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border px-5 py-4">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-white/70 text-sm font-medium">Tu progreso</p>
+            <p className="text-muted-foreground text-sm font-medium">Tu progreso</p>
             <div className="flex items-center gap-2 mt-1">
-              <h1 className="text-white text-2xl md:text-3xl font-extrabold">Rendimiento</h1>
+              <h1 className="text-foreground text-2xl md:text-3xl font-extrabold">Rendimiento</h1>
               <HelpTooltip
                 titulo="¿Para qué sirve esta pantalla?"
                 explicacion="Muestra tu historial de evaluaciones semanales generadas por IA. Cada semana la IA analiza tus misiones, contactos y resultados para darte coaching específico."
@@ -134,7 +134,7 @@ export default function RendimientoPage() {
           <Button
             onClick={evaluarSemana}
             disabled={evaluando}
-            className="bg-white/20 hover:bg-white/30 text-white border-0 gap-2 shrink-0"
+            className="bg-orange-500/15 hover:bg-orange-500/25 text-orange-400 border border-orange-500/40 gap-2 shrink-0"
             size="sm"
           >
             {evaluando ? (

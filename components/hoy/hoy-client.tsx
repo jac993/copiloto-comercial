@@ -624,7 +624,7 @@ export function HoyClient() {
               }
             >
               <span className="text-3xl font-black leading-none" style={{ color: filtroTareas === "vencidas" ? "#FF4444" : "white" }}>{countVencidas}</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: filtroTareas === "vencidas" ? "rgba(255,100,100,0.8)" : "rgba(255,255,255,0.55)" }}>Vencidas</span>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: filtroTareas === "vencidas" ? "#FF7A7A" : "rgba(255,255,255,0.85)" }}>Vencidas</span>
             </button>
             <button
               onClick={() => { setFiltroTareas("tareas"); setMostrarTodas(false); }}
@@ -636,7 +636,7 @@ export function HoyClient() {
               }
             >
               <span className="text-3xl font-black leading-none" style={{ color: filtroTareas === "tareas" ? "#FFD000" : "white" }}>{countTareas}</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: filtroTareas === "tareas" ? "rgba(255,208,0,0.8)" : "rgba(255,255,255,0.55)" }}>Tareas de hoy</span>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: filtroTareas === "tareas" ? "#FFDD44" : "rgba(255,255,255,0.85)" }}>Tareas de hoy</span>
             </button>
             <button
               onClick={() => { setFiltroTareas("realizadas"); setMostrarTodas(false); }}
@@ -648,7 +648,7 @@ export function HoyClient() {
               }
             >
               <span className="text-3xl font-black leading-none" style={{ color: filtroTareas === "realizadas" ? "#00FF87" : "white" }}>{countRealizadas}</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: filtroTareas === "realizadas" ? "rgba(0,255,135,0.8)" : "rgba(255,255,255,0.55)" }}>Realizadas</span>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: filtroTareas === "realizadas" ? "#5BFFB0" : "rgba(255,255,255,0.85)" }}>Realizadas</span>
             </button>
           </div>
 

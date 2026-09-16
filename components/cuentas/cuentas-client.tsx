@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Zap, Building2, Search, List, Columns3, Plus, ClipboardList, Snowflake, XCircle } from "lucide-react";
+import { Zap, Building2, Search, List, Columns3, Plus, ClipboardList, Snowflake, XCircle, Binoculars } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EmpresaCard } from "@/components/cuentas/empresa-card";
@@ -89,7 +89,7 @@ export function CuentasClient({
             }
           >
             <span className="text-3xl font-black leading-none" style={{ color: seccion === "pipeline" ? "#C4B5FD" : "white" }}>{empresas.length}</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: seccion === "pipeline" ? "rgba(196,181,253,0.8)" : "rgba(255,255,255,0.55)" }}>Pipeline</span>
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: seccion === "pipeline" ? "#DDD6FE" : "rgba(255,255,255,0.85)" }}>Pipeline</span>
           </button>
           <button
             onClick={() => irASeccion("panorama")}
@@ -100,8 +100,8 @@ export function CuentasClient({
                 : { background: "#1A1A1A", borderColor: "#2a2a2a", opacity: 0.55 }
             }
           >
-            <span className="text-3xl font-black leading-none" style={{ color: seccion === "panorama" ? "#22D3EE" : "white" }}>—</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: seccion === "panorama" ? "rgba(34,211,238,0.8)" : "rgba(255,255,255,0.55)" }}>Panorama</span>
+            <Binoculars className="h-8 w-8 shrink-0" strokeWidth={2.2} style={{ color: seccion === "panorama" ? "#22D3EE" : "white" }} />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: seccion === "panorama" ? "#67E8F9" : "rgba(255,255,255,0.85)" }}>Panorama</span>
           </button>
           <button
             onClick={() => irASeccion("por_calificar")}
@@ -113,7 +113,7 @@ export function CuentasClient({
             }
           >
             <span className="text-3xl font-black leading-none" style={{ color: seccion === "por_calificar" ? "#FF7A1A" : "white" }}>{prospectosLigeros.length}</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: seccion === "por_calificar" ? "rgba(255,122,26,0.8)" : "rgba(255,255,255,0.55)" }}>Por calificar</span>
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: seccion === "por_calificar" ? "#FFA94D" : "rgba(255,255,255,0.85)" }}>Por calificar</span>
           </button>
         </div>
       </div>
