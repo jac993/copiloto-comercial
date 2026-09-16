@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
-  Sun, Zap, Target, TrendingUp, RefreshCw,
+  Sun, Zap, TrendingUp, RefreshCw,
   ChevronDown, AlertCircle, CheckCircle2,
   XCircle, MinusCircle, ClipboardCheck, Loader2, Pencil,
 } from "lucide-react";
