@@ -424,9 +424,22 @@ create table rendimiento_ejecutivo (
 --   Lo que si seria un problema es RLS ACTIVADA SIN POLICIES: ahi cualquier
 --   acceso que no sea service_role devuelve 0 filas en silencio.
 --
---   PENDIENTE: integraciones NO aparece en esa lista de 5, asi que no se sabe
---   si tiene RLS activada, ni con que policies. Es la tabla que guarda los
---   tokens OAuth de Gmail en texto plano (ver B.8). Sigue sin responder.
+--   integraciones  [VERIFICADO 2026-09-22]: rls_habilitada = true,
+--   n_policies = 0. RLS activada sin ninguna policy = deny-all para los roles
+--   normales. La clave publicable (anon) no puede leer los tokens: devuelve
+--   cero filas. Cierra la peor via de exposicion.
+--
+--   PERO no da el tema por cerrado, por dos razones:
+--     1. La app entra con SUPABASE_SERVICE_ROLE_KEY, que hace BYPASS de RLS.
+--        Por eso el sync de Gmail sigue funcionando. Quien tenga esa clave
+--        lee los tokens igual.
+--     2. RLS es control de acceso, NO cifrado. access_token y refresh_token
+--        siguen en TEXTO PLANO: un dump, un backup o el dashboard los
+--        muestran en claro. El aviso de B.8 sigue vigente.
+--
+--   Ademas es el unico caso del proyecto con RLS activada y 0 policies. Si
+--   algun dia se migra ese acceso a la clave publicable, devolvera cero filas
+--   en silencio, sin error.
 
 
 -- ===========================================================================
@@ -438,21 +451,35 @@ create table rendimiento_ejecutivo (
 -- Verificado: 0 archivos de supabase/ las define. ('resuelta' aparece solo
 -- dentro de un comentario de add_no_realizada.sql, nunca como definicion.)
 --
---   interacciones.resuelta                  <- CRITICA: es el filtro central de
---                                              las tareas pendientes de /hoy
---   interacciones.badge_estado
---   interacciones.decision_sugerida
---   contactos.verificado
---   metricas_diarias.prioridades_cache
---   metricas_diarias.prioridades_generadas_en
---   metricas_diarias.notas_dia
---   empresas.conversacion_pausada_at
---   empresas.meddic
---   empresas.valor_estimado_clp
+-- ✅ VERIFICADO 2026-09-22: las 10 existen en la BD, con estos tipos y
+-- defaults reales. Seccion C cerrada.
 --
--- Confirmado por la consulta 3 (2026-09-22): las 10 EXISTEN en la BD.
--- [PENDIENTE: sus tipos y defaults reales - la consulta 3 solo devolvio
---  existe/falta, no data_type ni column_default]
+-- Forma en que se formalizarian en M5 (todos no-ops contra la BD viva,
+-- existen para poder reconstruir el esquema desde cero):
+--
+--   alter table contactos
+--     add column if not exists verificado boolean null default false;
+--
+--   alter table empresas
+--     add column if not exists conversacion_pausada_at timestamptz null,
+--     add column if not exists meddic                  jsonb       null,
+--     add column if not exists valor_estimado_clp      bigint      null;
+--
+--   alter table interacciones
+--     add column if not exists badge_estado      text    null,
+--     add column if not exists decision_sugerida text    null,
+--     add column if not exists resuelta          boolean null default false;
+--
+--   alter table metricas_diarias
+--     add column if not exists notas_dia                 text        null,
+--     add column if not exists prioridades_cache         jsonb       null,
+--     add column if not exists prioridades_generadas_en  timestamptz null;
+--
+-- OJO con interacciones.resuelta: es el filtro central de las tareas
+-- pendientes de /hoy y es NULLABLE con default false. Por eso el codigo
+-- filtra con .neq("resuelta", true) en vez de .eq("resuelta", false)
+-- (app/api/metricas/hoy/route.ts:137): asi captura tanto false como los
+-- NULL de filas anteriores al default.
 --
 -- ---------------------------------------------------------------------------
 -- CORRECCION: empresas.angulo_entrada NO es una columna
@@ -491,11 +518,11 @@ create table rendimiento_ejecutivo (
 --
 -- Queda abierto:
 --
--- 1. Tipos y defaults de las 10 columnas de la Seccion C. La consulta 3 solo
---    devolvio existe/falta. Sin eso no se puede escribir M5.
--- 2. RLS de integraciones: no aparecio en la lista de tablas sin RLS, asi que
---    no se sabe si la tiene activada ni con que policies. Es la que guarda los
---    tokens OAuth de Gmail en texto plano.
+-- 1. [CERRADO 2026-09-22] Tipos y defaults de las 10 columnas de la Seccion C.
+--    Ya se puede escribir M5 con los ALTER de esa seccion.
+-- 2. [PARCIAL 2026-09-22] RLS de integraciones verificado (activada, 0
+--    policies). Queda pendiente decidir si se cifran los tokens OAuth, que
+--    RLS no resuelve.
 -- 3. [CERRADO 2026-09-22] casos_exito y debug_logs se eliminaron de la BD con
 --    la migracion 20260922_m5c_borrar_tablas_muertas.sql.
 --
