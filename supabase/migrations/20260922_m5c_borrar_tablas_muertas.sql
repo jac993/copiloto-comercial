@@ -1,0 +1,49 @@
+-- =============================================================
+-- M5c: Eliminar tablas sin uso detectadas en auditoría
+-- casos_exito: 0 referencias en código
+-- debug_logs: solo 1 insert de debugging temporal (eliminado en código)
+--
+-- Evidencia (búsqueda en app/, lib/, components/, hooks/):
+--   casos_exito -> 0 referencias. No confundir con la tabla "casos",
+--     que SÍ se usa (5 llamadas, ver baseline B.3). casos_exito parece
+--     un resto de una versión anterior.
+--   debug_logs  -> 1 insert en app/api/preparacion/route.ts, dentro de
+--     un bloque marcado "DEBUG TEMPORAL". Nadie la leía. El bloque se
+--     eliminó del código en el mismo commit que esta migración, así que
+--     al aplicarla ya no queda nada escribiéndole.
+--
+-- ⚠️ ANTES DE EJECUTAR — leer esto:
+--   DROP TABLE es IRREVERSIBLE y se lleva los datos. casos_exito nunca
+--   fue introspeccionada: no sabemos cuántas filas tiene ni qué
+--   contiene. Conviene mirarla primero:
+--
+--     select count(*) from casos_exito;
+--     select * from casos_exito limit 20;
+--
+--   Si tiene datos que valga la pena conservar, exportarlos antes.
+--
+--   Si alguna otra tabla tuviera una FK apuntando a casos_exito, el
+--   DROP falla (haría falta CASCADE). Ninguna de las 10 tablas del
+--   baseline la referencia, pero no se verificó contra el resto:
+--
+--     select conname, conrelid::regclass
+--     from pg_constraint
+--     where confrelid = 'casos_exito'::regclass;
+--
+--   Alternativa más conservadora, si preferís una red de seguridad:
+--   renombrarlas en vez de borrarlas, y hacer el DROP en unas semanas.
+--     alter table casos_exito rename to zz_borrar_casos_exito;
+--     alter table debug_logs  rename to zz_borrar_debug_logs;
+-- =============================================================
+
+DROP TABLE IF EXISTS casos_exito;
+DROP TABLE IF EXISTS debug_logs;
+
+-- Para aplicar: pegar en SQL Editor de Supabase y ejecutar.
+-- Este proyecto no tiene CLI ni runner de migraciones: cada archivo de
+-- supabase/migrations/ se ejecuta a mano (misma convención que
+-- 20260713_cadencias.sql).
+--
+-- Después de aplicarla, actualizar supabase/schema_baseline_20260922.sql:
+--   - B.6  debug_logs   -> marcar como ELIMINADA
+--   - B.11 casos_exito  -> marcar como ELIMINADA

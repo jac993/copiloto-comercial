@@ -531,26 +531,6 @@ ${casosRelevantes.length > 0
 ${ejemplosAprobados}
 `.trim();
 
-    // DEBUG TEMPORAL — insertar en debug_logs para inspeccionar desde Supabase
-    if (canal !== "llamada") {
-      await supabase.from('debug_logs').insert({
-        endpoint: 'preparacion',
-        empresa_id: empresaId,
-        datos: {
-          nombre: empresa.nombre,
-          rubro: empresa.industria,
-          dolor_principal: decisorFicha?.dolor_especifico ?? ficha?.por_que_necesitan_etiquetas,
-          angulo_entrada: ficha?.angulo_entrada,
-          decisor_nombre: decisorNombre,
-          decisor_cargo: decisorCargo,
-          historial_texto_len: historialTexto?.length,
-          contexto_vendedor: empresa.notas_vendedor,
-          ficha_completa: ficha,
-        },
-        created_at: new Date().toISOString(),
-      });
-    }
-
     // Texto (whatsapp/correo/linkedin): buildPromptBorradores con SYSTEM_PROMPT_VALE.
     // Ahora recibe el tipo con su instrucción (antes solo la veía llamada) y el
     // contexto estratégico completo para que el selector de técnica de VALE opere.
