@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
       remitente === "prospecto" || texto?.trim() === "Respondió al contacto";
     if (esRespuestaProspecto) {
       try {
-        await cerrarPorRespuesta(supabase, empresa_id);
+        await cerrarPorRespuesta(supabase, empresa_id, contacto_id ?? null);
       } catch (e) {
         console.error("[CADENCIA_CIERRE_AUTO]", e instanceof Error ? e.message : e);
       }

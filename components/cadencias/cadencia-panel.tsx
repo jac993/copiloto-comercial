@@ -1,13 +1,16 @@
 "use client";
 
 // =============================================================
-// Panel de cadencia de una empresa. Dos estados:
-// • Con cadencia activa → línea de progreso "Paso X de Y ·
-//   Próximo: [canal], [fecha]" + botón Detener.
-// • Sin cadencia → botón "Iniciar cadencia" que abre el selector
-//   con la sugerida pre-marcada según etapa y PREVIEW de la
-//   secuencia adaptada a los canales del decisor (adaptarCadencia,
-//   pura — cero IA, cero costo).
+// Panel de cadencias de una empresa.
+// • Una línea de progreso POR CADA cadencia activa ("Paso X de Y ·
+//   Próximo: [canal], [fecha]" + botón Detener).
+// • El botón "Iniciar cadencia" CONVIVE con las activas: desde M3 la
+//   regla es una cadencia por CONTACTO, no por empresa, así que se
+//   pueden correr varios decisores de la misma cuenta en paralelo.
+// • El selector trae la sugerida pre-marcada según etapa y un PREVIEW
+//   de la secuencia adaptada a los canales del decisor (adaptarCadencia,
+//   pura — cero IA, cero costo). Los contactos que ya tienen cadencia
+//   activa salen deshabilitados.
 // =============================================================
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -27,6 +30,7 @@ interface CadenciaConPasos extends CadenciaPlantilla {
 
 interface AsignacionEstado {
   id: string;
+  contacto_id: string;
   cadencia_nombre: string;
   contacto_nombre: string | null;
   paso_actual: number;
@@ -59,7 +63,7 @@ export function CadenciaPanel({
 }) {
   const [contactosFetched, setContactosFetched] = useState<Contacto[] | null>(null);
   const contactos = contactosProp ?? contactosFetched ?? [];
-  const [asignacion, setAsignacion] = useState<AsignacionEstado | null>(null);
+  const [asignaciones, setAsignaciones] = useState<AsignacionEstado[]>([]);
   const [cargando, setCargando] = useState(true);
   const [selectorAbierto, setSelectorAbierto] = useState(false);
   const [cadencias, setCadencias] = useState<CadenciaConPasos[] | null>(null);
@@ -72,8 +76,8 @@ export function CadenciaPanel({
     try {
       const res = await fetch(`/api/cadencias/asignacion?empresaId=${empresaId}`, { cache: "no-store" });
       if (res.ok) {
-        const data = await res.json() as { asignacion: AsignacionEstado | null };
-        setAsignacion(data.asignacion);
+        const data = await res.json() as { asignaciones?: AsignacionEstado[] };
+        setAsignaciones(data.asignaciones ?? []);
       }
     } finally {
       setCargando(false);
@@ -107,12 +111,22 @@ export function CadenciaPanel({
       const sugerida = data.cadencias.find((c) => c.etapa_pipeline === estado) ?? data.cadencias[0];
       if (sugerida) setCadenciaId(sugerida.id);
       // Pre-seleccionar el primer contacto con al menos un canal
-      const conCanal = listaContactos.find((c) => canalesDisponibles(c).size > 0);
+      const ocupados = new Set(asignaciones.map((a) => a.contacto_id));
+      const conCanal = listaContactos.find(
+        (c) => canalesDisponibles(c).size > 0 && !ocupados.has(c.id)
+      );
       if (conCanal) setContactoId(conCanal.id);
     } catch {
       setError("No se pudieron cargar las cadencias. Intenta de nuevo.");
     }
   };
+
+  // Contactos que YA tienen cadencia activa: no pueden iniciar otra (el
+  // índice único por contacto lo rechazaría con 409).
+  const contactosOcupados = useMemo(
+    () => new Set(asignaciones.map((a) => a.contacto_id)),
+    [asignaciones]
+  );
 
   const cadenciaSel = cadencias?.find((c) => c.id === cadenciaId) ?? null;
   const contactoSel = contactos.find((c) => c.id === contactoId) ?? null;
@@ -150,16 +164,17 @@ export function CadenciaPanel({
     }
   };
 
-  const detener = async () => {
-    if (!asignacion) return;
+  // Recibe el id de la fila concreta: con varias activas ya no alcanza con
+  // "la" asignación.
+  const detener = async (asignacionId: string) => {
     setGuardando(true);
     try {
       await fetch("/api/cadencias/cerrar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asignacion_id: asignacion.id, motivo: "manual" }),
+        body: JSON.stringify({ asignacion_id: asignacionId, motivo: "manual" }),
       });
-      setAsignacion(null);
+      setAsignaciones((prev) => prev.filter((a) => a.id !== asignacionId));
     } finally {
       setGuardando(false);
     }
@@ -167,162 +182,176 @@ export function CadenciaPanel({
 
   if (cargando) return null;
 
-  // ── Estado: cadencia activa — línea de progreso ─────────────
-  if (asignacion) {
-    return (
-      <div className="rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-3 flex-wrap">
-        <ListChecks className="h-4 w-4 text-primary shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">
-            {asignacion.cadencia_nombre}
-            {asignacion.contacto_nombre ? ` · ${asignacion.contacto_nombre}` : ""}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Paso {asignacion.paso_actual} de {asignacion.total_pasos}
-            {asignacion.proximo_canal && asignacion.proxima_fecha
-              ? ` · Próximo: ${asignacion.proximo_canal}, ${fechaCorta(asignacion.proxima_fecha)}`
-              : ""}
-          </p>
-        </div>
-        <button
-          onClick={() => void detener()}
-          disabled={guardando}
-          className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1 shrink-0 min-h-[32px]"
-        >
-          {guardando ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-          Detener
-        </button>
+  // ── Una línea de progreso por cadencia activa ───────────────
+  const lineasActivas = asignaciones.map((a) => (
+    <div
+      key={a.id}
+      className="rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-3 flex-wrap"
+    >
+      <ListChecks className="h-4 w-4 text-primary shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold">
+          {a.cadencia_nombre}
+          {a.contacto_nombre ? ` · ${a.contacto_nombre}` : ""}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Paso {a.paso_actual} de {a.total_pasos}
+          {a.proximo_canal && a.proxima_fecha
+            ? ` · Próximo: ${a.proximo_canal}, ${fechaCorta(a.proxima_fecha)}`
+            : ""}
+        </p>
       </div>
-    );
-  }
+      <button
+        onClick={() => void detener(a.id)}
+        disabled={guardando}
+        className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1 shrink-0 min-h-[32px]"
+      >
+        {guardando ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+        Detener
+      </button>
+    </div>
+  ));
 
-  // ── Estado: sin cadencia — botón + selector con preview ─────
+  // ── Activas + botón Iniciar. El botón CONVIVE con las activas ──
   if (!selectorAbierto) {
     return (
-      <button
-        onClick={() => void abrirSelector()}
-        className="w-full rounded-2xl border border-dashed border-border px-4 py-3 flex items-center gap-2 text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
-      >
-        <ListChecks className="h-4 w-4" />
-        Iniciar cadencia de seguimiento
-      </button>
+      <div className="space-y-2">
+        {lineasActivas}
+        <button
+          onClick={() => void abrirSelector()}
+          className="w-full rounded-2xl border border-dashed border-border px-4 py-3 flex items-center gap-2 text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+        >
+          <ListChecks className="h-4 w-4" />
+          {asignaciones.length > 0
+            ? "Iniciar cadencia con otro decisor"
+            : "Iniciar cadencia de seguimiento"}
+        </button>
+      </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold flex items-center gap-2">
-          <ListChecks className="h-4 w-4 text-primary" /> Iniciar cadencia
-        </p>
-        <button
-          onClick={() => setSelectorAbierto(false)}
-          className="text-muted-foreground hover:text-foreground"
-          aria-label="Cerrar"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {!cadencias && !error && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando cadencias...
-        </div>
-      )}
-
-      {cadencias && (
-        <>
-          {/* Decisor */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Decisor</label>
-            <select
-              value={contactoId ?? ""}
-              onChange={(e) => setContactoId(e.target.value || null)}
-              className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="">Selecciona un decisor...</option>
-              {contactos.map((c) => {
-                const canales = canalesDisponibles(c);
-                return (
-                  <option key={c.id} value={c.id} disabled={canales.size === 0}>
-                    {c.nombre ?? c.cargo ?? "Sin nombre"}
-                    {canales.size === 0 ? " (sin canales de contacto)" : ""}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          {/* Cadencia — la sugerida según etapa viene pre-marcada */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Cadencia</label>
-            <select
-              value={cadenciaId ?? ""}
-              onChange={(e) => setCadenciaId(e.target.value || null)}
-              className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              {cadencias.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre}{c.etapa_pipeline === estado ? " (sugerida)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Preview de la secuencia adaptada a los canales del decisor */}
-          {preview && preview.pasos.length > 0 && (
-            <div className="rounded-xl bg-muted/40 px-3 py-2.5 space-y-1.5">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Secuencia adaptada
-              </p>
-              {preview.pasos.map((p) => (
-                <p key={p.pasoId} className="text-xs flex items-center gap-1.5">
-                  <span className="text-muted-foreground shrink-0">{fechaCorta(p.fecha)}</span>
-                  <span>{CANAL_PASO_EMOJI[p.canal]} {CANAL_PASO_LABEL[p.canal]}</span>
-                  {p.canal !== p.canalOriginal && (
-                    <span className="text-[10px] text-muted-foreground">(reemplaza {CANAL_PASO_LABEL[p.canalOriginal]})</span>
-                  )}
-                  <span className="text-muted-foreground truncate">— {p.intencion}</span>
-                </p>
-              ))}
-              {canalesOmitidosTexto && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 pt-1">
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  Sin datos de contacto: se omitieron pasos de {canalesOmitidosTexto}
-                </p>
-              )}
-            </div>
-          )}
-          {preview && preview.pasos.length === 0 && (
-            <p className="text-xs text-destructive flex items-center gap-1.5">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-              Ningún paso es ejecutable con los canales de este decisor.
-            </p>
-          )}
-
-          {error && (
-            <p className="text-xs text-destructive flex items-center gap-1.5">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
-            </p>
-          )}
-
-          <Button
-            onClick={() => void iniciar()}
-            disabled={guardando || !contactoId || !cadenciaId || !preview || preview.pasos.length === 0}
-            className="w-full gap-1.5"
-            size="sm"
+    <div className="space-y-2">
+      {lineasActivas}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold flex items-center gap-2">
+            <ListChecks className="h-4 w-4 text-primary" /> Iniciar cadencia
+          </p>
+          <button
+            onClick={() => setSelectorAbierto(false)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Cerrar"
           >
-            {guardando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Iniciar cadencia
-          </Button>
-        </>
-      )}
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
-      {error && !cadencias && (
-        <p className="text-xs text-destructive flex items-center gap-1.5">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
-        </p>
-      )}
+        {!cadencias && !error && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando cadencias...
+          </div>
+        )}
+
+        {cadencias && (
+          <>
+            {/* Decisor */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Decisor</label>
+              <select
+                value={contactoId ?? ""}
+                onChange={(e) => setContactoId(e.target.value || null)}
+                className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">Selecciona un decisor...</option>
+                {contactos.map((c) => {
+                  const canales = canalesDisponibles(c);
+                  const ocupado = contactosOcupados.has(c.id);
+                  return (
+                    <option key={c.id} value={c.id} disabled={canales.size === 0 || ocupado}>
+                      {c.nombre ?? c.cargo ?? "Sin nombre"}
+                      {ocupado
+                        ? " (ya tiene cadencia activa)"
+                        : canales.size === 0
+                          ? " (sin canales de contacto)"
+                          : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Cadencia — la sugerida según etapa viene pre-marcada */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Cadencia</label>
+              <select
+                value={cadenciaId ?? ""}
+                onChange={(e) => setCadenciaId(e.target.value || null)}
+                className="w-full text-sm rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {cadencias.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}{c.etapa_pipeline === estado ? " (sugerida)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Preview de la secuencia adaptada a los canales del decisor */}
+            {preview && preview.pasos.length > 0 && (
+              <div className="rounded-xl bg-muted/40 px-3 py-2.5 space-y-1.5">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  Secuencia adaptada
+                </p>
+                {preview.pasos.map((p) => (
+                  <p key={p.pasoId} className="text-xs flex items-center gap-1.5">
+                    <span className="text-muted-foreground shrink-0">{fechaCorta(p.fecha)}</span>
+                    <span>{CANAL_PASO_EMOJI[p.canal]} {CANAL_PASO_LABEL[p.canal]}</span>
+                    {p.canal !== p.canalOriginal && (
+                      <span className="text-[10px] text-muted-foreground">(reemplaza {CANAL_PASO_LABEL[p.canalOriginal]})</span>
+                    )}
+                    <span className="text-muted-foreground truncate">— {p.intencion}</span>
+                  </p>
+                ))}
+                {canalesOmitidosTexto && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 pt-1">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    Sin datos de contacto: se omitieron pasos de {canalesOmitidosTexto}
+                  </p>
+                )}
+              </div>
+            )}
+            {preview && preview.pasos.length === 0 && (
+              <p className="text-xs text-destructive flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Ningún paso es ejecutable con los canales de este decisor.
+              </p>
+            )}
+
+            {error && (
+              <p className="text-xs text-destructive flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
+              </p>
+            )}
+
+            <Button
+              onClick={() => void iniciar()}
+              disabled={guardando || !contactoId || !cadenciaId || !preview || preview.pasos.length === 0}
+              className="w-full gap-1.5"
+              size="sm"
+            >
+              {guardando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Iniciar cadencia
+            </Button>
+          </>
+        )}
+
+        {error && !cadencias && (
+          <p className="text-xs text-destructive flex items-center gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

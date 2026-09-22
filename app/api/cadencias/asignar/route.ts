@@ -37,16 +37,23 @@ export async function POST(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // Validar que no exista asignación activa (el unique index respalda ante carrera)
-    const { data: existente } = await supabase
+    // Validar que ESTE CONTACTO no tenga ya una cadencia activa. La regla
+    // pasó de una-por-empresa a una-por-persona (M3): varios contactos de la
+    // misma empresa pueden estar en cadencia a la vez.
+    // Sin maybeSingle() y leyendo error: con maybeSingle, 2+ filas devuelven
+    // data=null con el error descartado, el pre-check pasaba y afloraba el
+    // 23505 crudo del índice.
+    const { data: existentes, error: eExistente } = await supabase
       .from("cadencia_asignaciones")
       .select("id")
-      .eq("empresa_id", empresa_id)
-      .eq("estado", "activa")
-      .maybeSingle();
-    if (existente) {
+      .eq("contacto_id", contacto_id)
+      .eq("estado", "activa");
+    if (eExistente) {
+      return NextResponse.json({ error: eExistente.message }, { status: 500 });
+    }
+    if (existentes && existentes.length > 0) {
       return NextResponse.json(
-        { error: "Esta empresa ya tiene una cadencia activa. Deténla antes de iniciar otra." },
+        { error: "Este contacto ya tiene una cadencia activa. Detenla antes de iniciar otra." },
         { status: 409 }
       );
     }
@@ -106,11 +113,11 @@ export async function POST(req: NextRequest) {
       .single();
     if (eAsig || !asignacion) {
       // Carrera: dos requests simultáneos pasan el pre-check y el segundo choca
-      // con el índice único (una activa por empresa) → Postgres 23505. Devolver
+      // con el índice único (una activa por contacto) → Postgres 23505. Devolver
       // 409 amistoso en vez de 500 crudo.
       if ((eAsig as { code?: string } | null)?.code === "23505") {
         return NextResponse.json(
-          { error: "Esta empresa ya tiene una cadencia activa. Deténla antes de iniciar otra." },
+          { error: "Este contacto ya tiene una cadencia activa. Detenla antes de iniciar otra." },
           { status: 409 }
         );
       }
