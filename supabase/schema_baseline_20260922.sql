@@ -53,22 +53,33 @@
 --   Por eso supabase/schema.sql quedo con los 7 valores de EstadoEmpresa,
 --   no con los 6 observados en datos.
 --
--- Estado del CHECK en la BD viva: RESUELTO (introspeccion 2026-09-22).
---   pg_constraint devolvio SOLO dos CHECK en empresas:
---     empresas_score_prioridad_check -> score_prioridad between 0 and 100
---     empresas_tipo_registro_check   -> tipo_registro in ('ligero','completo')
---   NO hay ningun CHECK sobre estado. El de schema.sql (con 'reunion' y
---   'cliente') no existe en la BD: se elimino, o nunca llego a aplicarse.
---   Por eso conviven filas con 'en_conversacion' y 'reunion_agendada'.
+-- Estado del CHECK en la BD viva: EL CHECK SI EXISTE (corregido 2026-09-22).
+--   empresas tiene TRES constraints CHECK:
+--     empresas_estado_check           -> sobre estado  <-- SI EXISTE
+--     empresas_score_prioridad_check  -> score_prioridad between 0 and 100
+--     empresas_tipo_registro_check    -> tipo_registro in ('ligero','completo')
 --
---   CONSECUENCIA: hoy empresas.estado acepta CUALQUIER texto. El CHECK de 7
---   valores que quedo en supabase/schema.sql documenta la INTENCION, no una
---   restriccion vigente. Hacerlo cumplir requiere un ALTER TABLE ... ADD
---   CONSTRAINT aparte (fuera del alcance de M1).
+--   CORRECCION DE UN ERROR DE ESTE ARCHIVO:
+--   La version anterior afirmaba que NO habia CHECK sobre estado y que la
+--   columna aceptaba cualquier texto. Era FALSO. Se baso en una salida de
+--   pg_constraint que solo listaba dos constraints y venia incompleta.
+--   empresas_estado_check estuvo ahi todo el tiempo.
 --
---   Los dos CHECK que si existen YA estan documentados en el repo:
---     supabase/schema.sql:50
---     supabase/migrations/20260721_tipo_registro.sql:5-6
+--   Se intento agregar un segundo CHECK (empresas_estado_check_real, ver
+--   migrations/20260922_m2b_check_estado_empresa.sql). Se creo duplicado y se
+--   elimino enseguida. La BD quedo con los 3 constraints de arriba.
+--
+--   ✅ VERIFICADO 2026-09-22: empresas_estado_check contiene exactamente
+--   7 valores:
+--     prospecto, contactado, en_conversacion,
+--     reunion_agendada, cotizado, ganado, perdido.
+--   Coincide con schema.sql. Seccion A cerrada.
+--
+--   Nota historica: el CHECK inline ORIGINAL de schema.sql permitia otros 6
+--   valores ('reunion' y 'cliente' entre ellos) y no admitia
+--   'en_conversacion' ni 'reunion_agendada'. Como esas filas existen, el
+--   constraint fue reemplazado en algun momento sin quedar registrado en
+--   ninguna migracion del repo. Hoy BD y schema.sql estan alineados.
 
 
 -- ===========================================================================

@@ -1,5 +1,21 @@
+-- #############################################################
+-- ##  NO RE-EJECUTAR - MIGRACION REVERTIDA (2026-09-22)       ##
+-- ##                                                         ##
+-- ##  Se aplico y resulto INNECESARIA: empresas_estado_check  ##
+-- ##  YA EXISTIA en la BD. Este ALTER creo un CHECK           ##
+-- ##  DUPLICADO (empresas_estado_check_real) que se elimino   ##
+-- ##  enseguida. La BD quedo con 3 constraints y ninguno de   ##
+-- ##  ellos viene de este archivo.                            ##
+-- ##                                                          ##
+-- ##  La premisa de abajo ("el CHECK nunca fue aplicado") es  ##
+-- ##  FALSA. Venia de una salida incompleta de pg_constraint  ##
+-- ##  que solo listaba dos de los tres constraints.           ##
+-- ##                                                          ##
+-- ##  Se conserva como registro de lo que se intento.         ##
+-- #############################################################
+--
 -- =============================================================
--- M2b: Agregar CHECK real sobre empresas.estado
+-- M2b: Agregar CHECK real sobre empresas.estado   [REVERTIDA]
 -- Detectado en auditoría: schema.sql tenía el CHECK documentado
 -- pero nunca fue aplicado a la BD real.
 -- Verificado: 0 filas con valores fuera del set permitido.
