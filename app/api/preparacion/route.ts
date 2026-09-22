@@ -169,10 +169,14 @@ export async function POST(req: NextRequest) {
     const [empresa, historialTexto, feedbackRows, rechazadosRows, senalesRows, aprendizajes, negativosRows] = await Promise.all([
       getEmpresaCompleta(empresaId),
       getHistorialResumido(empresaId, contactoId),
-      // Ejemplos aprobados por el vendedor para este canal — few-shot de estilo
+      // Ejemplos aprobados por el vendedor para este canal — few-shot de estilo.
+      // Acotado a esta empresa: version_vendedor es el texto literal enviado a un
+      // cliente y suele nombrarlo, así que sin este filtro el borrador de una
+      // cuenta llegaba al prompt de otra como "referencia de tono".
       supabase
         .from("borradores_feedback")
         .select("canal, tipo_borrador, borrador_ia, version_vendedor, notas")
+        .eq("empresa_id", empresaId)
         .eq("evaluacion", "positivo")
         .eq("canal", canal)
         .order("creado_en", { ascending: false })
@@ -202,11 +206,13 @@ export async function POST(req: NextRequest) {
         .then((r) => r.data ?? []),
       // Patrones confirmados del vendedor, relevantes al cargo del decisor
       getAprendizajesPorCargo(decisorCargo).catch(() => []),
-      // Razones de rechazo recientes en este canal (cualquier empresa) — lecciones
-      // de estilo globales; el vendedor las escribe al presionar 👎
+      // Razones de rechazo recientes en este canal para esta empresa — el vendedor
+      // las escribe al presionar 👎. Antes se leían de cualquier empresa; el campo
+      // contiene el mensaje real del vendedor, así que se acota igual que arriba.
       supabase
         .from("borradores_feedback")
         .select("version_vendedor")
+        .eq("empresa_id", empresaId)
         .eq("evaluacion", "negativo")
         .eq("canal", canal)
         .not("version_vendedor", "is", null)
