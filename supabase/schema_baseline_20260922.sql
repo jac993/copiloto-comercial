@@ -53,11 +53,22 @@
 --   Por eso supabase/schema.sql quedo con los 7 valores de EstadoEmpresa,
 --   no con los 6 observados en datos.
 --
--- Estado del CHECK en la BD viva: DESCONOCIDO.
---   No se corrio la consulta 1.2 (pg_constraint sobre empresas). Como hay
---   filas con 'en_conversacion' y 'reunion_agendada' - valores que el CHECK
---   original de schema.sql prohibia - el CHECK original NO puede seguir
---   vigente: o se elimino, o se reemplazo. Falta confirmarlo antes de M5.
+-- Estado del CHECK en la BD viva: RESUELTO (introspeccion 2026-09-22).
+--   pg_constraint devolvio SOLO dos CHECK en empresas:
+--     empresas_score_prioridad_check -> score_prioridad between 0 and 100
+--     empresas_tipo_registro_check   -> tipo_registro in ('ligero','completo')
+--   NO hay ningun CHECK sobre estado. El de schema.sql (con 'reunion' y
+--   'cliente') no existe en la BD: se elimino, o nunca llego a aplicarse.
+--   Por eso conviven filas con 'en_conversacion' y 'reunion_agendada'.
+--
+--   CONSECUENCIA: hoy empresas.estado acepta CUALQUIER texto. El CHECK de 7
+--   valores que quedo en supabase/schema.sql documenta la INTENCION, no una
+--   restriccion vigente. Hacerlo cumplir requiere un ALTER TABLE ... ADD
+--   CONSTRAINT aparte (fuera del alcance de M1).
+--
+--   Los dos CHECK que si existen YA estan documentados en el repo:
+--     supabase/schema.sql:50
+--     supabase/migrations/20260721_tipo_registro.sql:5-6
 
 
 -- ===========================================================================
@@ -79,8 +90,8 @@
 --     c) debug_logs.id es int8 NOT NULL sin default pero es PK. Eso implica
 --        GENERATED AS IDENTITY o un bigserial; information_schema.columns no
 --        lo distingue y la consulta no pidio is_identity. Queda anotado.
---     d) NINGUNA de las 10 declara RLS en este baseline porque la consulta de
---        RLS del plan M0 no se corrio. Ver el aviso de integraciones.
+--     d) Los CREATE TABLE de abajo no declaran RLS. El estado real de RLS se
+--        documenta aparte, en B.12.
 --
 -- ---------------------------------------------------------------------------
 -- HALLAZGOS: BD vs lib/types.ts
@@ -361,8 +372,45 @@ create table rendimiento_ejecutivo (
 );
 
 
+-- ---------------------------------------------------------------------------
+-- B.11 OTRAS TABLAS DE LA BD - revisadas 2026-09-22
+-- ---------------------------------------------------------------------------
+--   casos_exito   [PENDIENTE - sin introspeccion todavia]
+--     Existe en la BD y NO tiene DDL en el repo, pero tampoco la usa NADIE:
+--     cero apariciones de "casos_exito" en app/, lib/, components/ y supabase/.
+--     El codigo usa la tabla "casos" (ver B.3), que es otra. Todo indica que
+--     es un resto de una version anterior. Antes de documentarla conviene
+--     decidir si se borra: documentar una tabla muerta la vuelve permanente.
+--
+--   api_usage, aprendizajes, patrones_conversion, senales
+--     NO van en este baseline: ya tienen DDL versionado en el repo.
+--       senales              -> supabase/schema.sql:129
+--       aprendizajes         -> supabase/schema.sql:151
+--       patrones_conversion  -> supabase/schema.sql:181
+--       api_usage            -> supabase/migrations/add_api_usage.sql:1
+--     Copiarlas aca crearia una segunda fuente de verdad para la misma tabla,
+--     que es exactamente el problema que este archivo existe para terminar.
+--
+-- ---------------------------------------------------------------------------
+-- B.12 RLS - estado verificado 2026-09-22
+-- ---------------------------------------------------------------------------
+--   Sin RLS habilitado (5): borradores, cadencias, cadencia_pasos,
+--                           cadencia_asignaciones, prioridades_diarias.
+--
+--   ESTO NO ES UN HALLAZGO DE SEGURIDAD POR SI SOLO. Es el estado buscado del
+--   proyecto: schema.sql desactiva RLS explicitamente en sus 8 tablas con el
+--   comentario "app de uso personal, un solo usuario", y la app entra siempre
+--   con SUPABASE_SERVICE_ROLE_KEY, que hace bypass de RLS de todas formas.
+--   Lo que si seria un problema es RLS ACTIVADA SIN POLICIES: ahi cualquier
+--   acceso que no sea service_role devuelve 0 filas en silencio.
+--
+--   PENDIENTE: integraciones NO aparece en esa lista de 5, asi que no se sabe
+--   si tiene RLS activada, ni con que policies. Es la tabla que guarda los
+--   tokens OAuth de Gmail en texto plano (ver B.8). Sigue sin responder.
+
+
 -- ===========================================================================
--- SECCION C - LAS 11 COLUMNAS SIN DDL EN EL REPO
+-- SECCION C - LAS 10 COLUMNAS SIN DDL EN EL REPO
 -- ===========================================================================
 --
 -- Columnas de tablas YA definidas en supabase/schema.sql que el codigo lee y
@@ -381,9 +429,30 @@ create table rendimiento_ejecutivo (
 --   empresas.conversacion_pausada_at
 --   empresas.meddic
 --   empresas.valor_estimado_clp
---   empresas.angulo_entrada
 --
--- [PENDIENTE: tipos y defaults reales - consulta 3 del plan M0]
+-- Confirmado por la consulta 3 (2026-09-22): las 10 EXISTEN en la BD.
+-- [PENDIENTE: sus tipos y defaults reales - la consulta 3 solo devolvio
+--  existe/falta, no data_type ni column_default]
+--
+-- ---------------------------------------------------------------------------
+-- CORRECCION: empresas.angulo_entrada NO es una columna
+-- ---------------------------------------------------------------------------
+-- La consulta 3 la reporto como "FALTA EN LA BD". Es correcto, y es lo
+-- esperado: nunca fue una columna. Listarla aca fue un error de este archivo.
+--
+-- angulo_entrada es una CLAVE DENTRO del jsonb empresas.ficha_ia:
+--   lib/types.ts:80-91  -> interface FichaIA { ... angulo_entrada: string ... }
+--   lib/types.ts:79     -> comentario: "se guarda en empresas.ficha_ia"
+--   lib/types.ts:30     -> interface Empresa { ficha_ia: FichaIA | null }
+-- Los 30+ usos en el codigo son todos empresa.ficha_ia.angulo_entrada o
+-- ficha?.angulo_entrada. Ninguno la lee como columna de empresas.
+-- lib/queries.ts:724 la escribe dentro de la ficha y :733 copia su valor a la
+-- columna real razon_de_contacto_actual.
+--
+-- NO CREAR esta columna. Quedaria siempre NULL, nadie la leeria, y un lector
+-- futuro la confundiria con el dato real que vive en ficha_ia.
+-- El error original fue derivar la lista de columnas de un grep de nombres sin
+-- distinguir columnas de claves jsonb.
 --
 -- Estas columnas se formalizan en M5 con ALTER TABLE ... ADD COLUMN IF NOT
 -- EXISTS, que seran no-ops contra la BD viva. Existen para que el repo pueda
@@ -394,13 +463,20 @@ create table rendimiento_ejecutivo (
 -- LO QUE FALTA PARA CERRAR EL BASELINE POR COMPLETO
 -- ===========================================================================
 --
--- La Seccion B esta cerrada. Quedan tres cabos, todos fuera de esas 10 tablas:
+-- CERRADO en esta pasada:
+--   * Seccion A: no hay CHECK sobre empresas.estado en la BD.
+--   * Seccion B: las 10 tablas, con columnas, constraints e indices.
+--   * Seccion C: confirmado que 10 de las 11 columnas existen, y que la que
+--     faltaba (angulo_entrada) nunca debio estar en la lista.
 --
--- 1. Consulta 3 -> completar la Seccion C con tipos y defaults reales de las
---    11 columnas indocumentadas. Habilita M5.
--- 2. Consulta 1.2 (pg_constraint sobre empresas) -> quitar de la Seccion A la
---    nota "Estado del CHECK: DESCONOCIDO".
--- 3. Consulta de RLS del plan M0 -> confirmar el estado de RLS de las 10
---    tablas de la Seccion B, con prioridad en integraciones (tokens OAuth).
+-- Queda abierto:
+--
+-- 1. Tipos y defaults de las 10 columnas de la Seccion C. La consulta 3 solo
+--    devolvio existe/falta. Sin eso no se puede escribir M5.
+-- 2. RLS de integraciones: no aparecio en la lista de tablas sin RLS, asi que
+--    no se sabe si la tiene activada ni con que policies. Es la que guarda los
+--    tokens OAuth de Gmail en texto plano.
+-- 3. Decidir que hacer con casos_exito (tabla sin uso) y con debug_logs
+--    (tabla temporal de depuracion). Borrarlas es mas barato que documentarlas.
 --
 -- El encabezado NO EJECUTAR se queda. Siempre.
