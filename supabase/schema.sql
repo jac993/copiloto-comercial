@@ -32,9 +32,18 @@ create table empresas (
   tamano_estimado         text,                      -- "micro / pequeña / mediana / grande"
   region                  text,
   estado                  text not null default 'prospecto'
+                          -- Set corregido 2026-09-22 por introspeccion de la BD viva.
+                          -- La columna es TEXT (no el enum estado_empresa de
+                          -- add_ficha_columns.sql, que nunca se aplico: su ADD COLUMN
+                          -- IF NOT EXISTS fue no-op porque la columna ya existia).
+                          -- Valores anteriores 'reunion' y 'cliente' NUNCA existieron
+                          -- en datos ni en codigo: eran un error de este archivo.
+                          -- 'ganado' no tiene filas hoy, pero lo escribe el Kanban
+                          -- (components/cuentas/vista-kanban.tsx:44) y lo consultan
+                          -- metricas/hoy, panorama y rendimiento. Debe estar permitido.
                           check (estado in (
-                            'prospecto','contactado','reunion',
-                            'cotizado','cliente','perdido'
+                            'prospecto','contactado','en_conversacion',
+                            'reunion_agendada','cotizado','ganado','perdido'
                           )),
   razon_de_contacto_actual text,                     -- por qué contactar AHORA (generado por IA)
   score_prioridad         smallint default 0

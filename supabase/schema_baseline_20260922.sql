@@ -1,0 +1,196 @@
+-- ###########################################################################
+-- ##                                                                       ##
+-- ##                    NO EJECUTAR - SOLO DOCUMENTACION                   ##
+-- ##                                                                       ##
+-- ##  Este archivo NO es una migracion. No lo pegues en el SQL editor de   ##
+-- ##  Supabase. Es el retrato de lo que HAY en la base de datos viva, para ##
+-- ##  que el repositorio deje de mentir sobre su propio esquema.           ##
+-- ##                                                                       ##
+-- ##  Correrlo sobre la BD de produccion no arregla nada y puede fallar a  ##
+-- ##  mitad de camino dejando el esquema inconsistente.                    ##
+-- ##                                                                       ##
+-- ###########################################################################
+--
+-- Baseline generado: 2026-09-22
+-- Motivo: la auditoria (AUDITORIA_SEGUIMIENTO.md) encontro que el codigo
+--         consulta 23 tablas pero el repo solo define 13. Las otras 10 se
+--         crearon a mano en el dashboard de Supabase y nunca se versionaron.
+--
+-- Como se aplican las migraciones en este proyecto:
+--   NO hay CLI de Supabase ni runner. No existe supabase/config.toml y
+--   package.json solo tiene dev/build/start/lint. Cada archivo de
+--   supabase/migrations/ se pego a mano en el SQL editor (ver el comentario
+--   de 20260713_cadencias.sql: "Ejecutada por el usuario en Supabase").
+--   Consecuencia: LA BD VIVA ES LA FUENTE DE VERDAD, NO ESTE REPO.
+
+
+-- ===========================================================================
+-- SECCION A - empresas.estado  [VERIFICADO POR INTROSPECCION 2026-09-22]
+-- ===========================================================================
+--
+-- Resultado de las consultas M0:
+--   * information_schema.columns -> data_type = 'text'  (NO es USER-DEFINED)
+--   * El ENUM estado_empresa de add_ficha_columns.sql NUNCA se aplico a la
+--     columna: su "ADD COLUMN IF NOT EXISTS estado estado_empresa" fue un
+--     no-op porque schema.sql ya habia creado la columna como text.
+--   * Valores presentes en datos (6):
+--       prospecto, perdido, contactado, en_conversacion, cotizado,
+--       reunion_agendada
+--   * Sin datos corruptos.
+--
+-- ATENCION - diferencia entre "valores en datos" y "valores permitidos":
+--   'ganado' NO aparece en los datos (aun no hay negocios ganados), pero SI
+--   lo escribe y lo lee el codigo:
+--     - components/cuentas/vista-kanban.tsx:44   columna "Ganado" del Kanban
+--     - app/api/metricas/hoy/route.ts:70         .eq("estado","ganado")
+--     - app/api/panorama/route.ts:75             .not("estado","in","(ganado,perdido)")
+--     - app/api/rendimiento/route.ts:80          e.estado === "ganado"
+--     - lib/types.ts:160                         EstadoEmpresa incluye "ganado"
+--   PATCH /api/empresas/[id]/estado NO valida contra una whitelist en runtime
+--   (confia en el tipo de TypeScript), asi que un CHECK sin 'ganado' haria
+--   fallar el arrastre del Kanban a la columna Ganado con un error de BD.
+--
+--   Por eso supabase/schema.sql quedo con los 7 valores de EstadoEmpresa,
+--   no con los 6 observados en datos.
+--
+-- Estado del CHECK en la BD viva: DESCONOCIDO.
+--   No se corrio la consulta 1.2 (pg_constraint). Como hay filas con
+--   'en_conversacion' y 'reunion_agendada' - valores que el CHECK original
+--   de schema.sql prohibia - el CHECK original NO puede seguir vigente:
+--   o se elimino, o se reemplazo. Falta confirmarlo antes de M5.
+
+
+-- ===========================================================================
+-- SECCION B - LAS 10 TABLAS SIN DDL EN EL REPO
+-- ===========================================================================
+--
+-- !! PENDIENTE: ESTA SECCION ESTA INCOMPLETA A PROPOSITO !!
+--
+-- No se recibio la salida de las consultas de introspeccion 2.1 / 2.2 / 2.3,
+-- que son las unicas que conocen la forma REAL de estas tablas.
+--
+-- Lo que sigue NO es DDL. Es la vista que tiene el codigo TypeScript de cada
+-- tabla (lib/types.ts). Sirve como checklist para contrastar contra la BD,
+-- pero NO alcanza para reconstruir el CREATE TABLE, porque un tipo de
+-- TypeScript no lleva:
+--     defaults, NOT NULL, claves primarias, claves foraneas y su ON DELETE,
+--     CHECK constraints, indices, ni precision de tipos numericos/timestamp.
+--
+-- Escribir el CREATE TABLE adivinando desde estos tipos produciria un archivo
+-- que parece autoritativo y no lo es - exactamente el problema que este
+-- baseline existe para terminar.
+--
+-- PARA COMPLETAR: correr las consultas 2.1, 2.2 y 2.3 del plan M0 y pegar el
+-- resultado. Alternativa mas directa y preferible:
+--     npx supabase db dump --db-url "<DIRECT_URL>" --schema public
+--
+-- ---------------------------------------------------------------------------
+-- B.1  borradores            (5 usos en codigo; tipo BorradorGuardado, types.ts:822)
+--      campos segun TS: id, empresa_id, contacto_id?, canal, contenido, tipo,
+--                       usado, creado_en
+--      lectura/escritura: app/api/borradores/route.ts,
+--                         app/api/borradores/[id]/route.ts
+-- [PENDIENTE: CREATE TABLE real]
+--
+-- B.2  borradores_feedback   (4 usos; tipo BorradorFeedback, types.ts:794)
+--      campos segun TS: id, creado_en, empresa_id?, contacto_id?, canal,
+--                       tipo_borrador?, borrador_ia, evaluacion?,
+--                       version_vendedor?, notas?
+--      lectura/escritura: lib/queries.ts:1287 insertBorradorFeedback,
+--                         lib/queries.ts:1296 getFeedbackEjemplos
+-- [PENDIENTE: CREATE TABLE real]
+--
+-- B.3  casos                 (5 usos; tipo Caso, types.ts:768)
+--      campos segun TS: id, sector, tamano_empresa?, cargo_decisor?, problema,
+--                       proveedor_anterior?, solucion, tipo_etiqueta?, resultado,
+--                       objecion_vencida?, canal_entrada?, tecnica_venta?,
+--                       tiempo_cierre?, activo, creado_en, actualizado_en
+--      OJO: tamano_empresa, canal_entrada y tecnica_venta son uniones en TS
+--           (TamanoCaso / CanalCaso / TecnicaCaso) - probable CHECK en la BD.
+-- [PENDIENTE: CREATE TABLE real]
+--
+-- B.4  chat_empresa          (4 usos; tipo ChatEmpresa, types.ts:633)
+--      campos segun TS: id, empresa_id, pregunta, respuesta, creado_en
+-- [PENDIENTE: CREATE TABLE real]
+--
+-- B.5  correos_detectados    (2 usos; tipo CorreoDetectado, types.ts:835)
+--      campos segun TS: id, empresa_id, gmail_thread_id, gmail_message_id,
+--                       asunto?, remitente?, fecha, snippet?, analizado, creado_en
+--      OJO: probable UNIQUE sobre gmail_message_id (el sync reinserta).
+--      NO tiene contacto_id - el sync de Gmail nunca crea interacciones.
+-- [PENDIENTE: CREATE TABLE real]
+--
+-- B.6  debug_logs            (1 uso; SIN tipo en types.ts)
+--      Insert temporal de depuracion en app/api/preparacion/route.ts:536.
+--      Unica de las 10 sin interfaz TypeScript. Candidata a eliminarse en vez
+--      de documentarse.
+-- [PENDIENTE: confirmar si existe y si debe conservarse]
+--
+-- B.7  evaluaciones_semanales (3 usos; tipo EvaluacionSemanal, types.ts:687)
+--      campos segun TS: id, semana_inicio, semana_fin, resumen_ia?,
+--                       tasa_cumplimiento?, tasa_conversion?, fortalezas?,
+--                       areas_mejora?, recomendaciones? (jsonb), creado_en
+-- [PENDIENTE: CREATE TABLE real]
+--
+-- B.8  integraciones         (7 usos; tipo Integracion, types.ts:749)
+--      campos segun TS: id, tipo, access_token, refresh_token?, email?, activo,
+--                       expira_en?, creado_en, actualizado_en
+--      SENSIBLE: guarda tokens OAuth de Gmail en claro. Verificar RLS con la
+--      consulta extra del plan M0 antes de dar por buena esta tabla.
+-- [PENDIENTE: CREATE TABLE real]
+--
+-- B.9  misiones_diarias      (7 usos; tipo MisionDiaria, types.ts:671)
+--      campos segun TS: id, empresa_id, fecha, accion_sugerida, resultado?,
+--                       detalle_vendedor?, feedback_ia?, creado_en
+--      OJO: resultado es ResultadoMision en TS - probable CHECK en la BD.
+-- [PENDIENTE: CREATE TABLE real]
+--
+-- B.10 rendimiento_ejecutivo (2 usos; tipo RendimientoEjecutivo, types.ts:704)
+--      campos segun TS: id (siempre 1 - fila unica), score_actual, racha_record,
+--                       tasa_cumplimiento_historica, tasa_conversion_historica,
+--                       canal_mas_efectivo?, tecnica_mas_efectiva?, ultimo_calculo?
+--      OJO: el patron "fila unica" sugiere CHECK (id = 1), igual que
+--           contexto_exportable en schema.sql:209.
+-- [PENDIENTE: CREATE TABLE real]
+
+
+-- ===========================================================================
+-- SECCION C - LAS 11 COLUMNAS SIN DDL EN EL REPO
+-- ===========================================================================
+--
+-- Columnas que el codigo lee y escribe pero que no tienen CREATE ni ALTER en
+-- ningun .sql del repositorio. Verificado: 0 archivos de supabase/ las define.
+-- ('resuelta' aparece solo dentro de un comentario de add_no_realizada.sql,
+--  nunca como definicion.)
+--
+--   interacciones.resuelta                  <- CRITICA: es el filtro central de
+--                                              las tareas pendientes de /hoy
+--   interacciones.badge_estado
+--   interacciones.decision_sugerida
+--   contactos.verificado
+--   metricas_diarias.prioridades_cache
+--   metricas_diarias.prioridades_generadas_en
+--   metricas_diarias.notas_dia
+--   empresas.conversacion_pausada_at
+--   empresas.meddic
+--   empresas.valor_estimado_clp
+--   empresas.angulo_entrada
+--
+-- [PENDIENTE: tipos y defaults reales - consulta 3 del plan M0]
+--
+-- Estas columnas se formalizan en M5 con ALTER TABLE ... ADD COLUMN IF NOT
+-- EXISTS, que seran no-ops contra la BD viva. Existen para que el repo pueda
+-- reconstruir el esquema desde cero.
+
+
+-- ===========================================================================
+-- COMO COMPLETAR ESTE ARCHIVO
+-- ===========================================================================
+--
+-- 1. Correr en el SQL editor de Supabase las consultas 2.1, 2.2, 2.3 y 3
+--    del plan M0 (introspeccion).
+-- 2. Reemplazar cada bloque [PENDIENTE] por el CREATE TABLE real, con sus
+--    constraints e indices.
+-- 3. Quitar de la Seccion A la nota "Estado del CHECK: DESCONOCIDO" una vez
+--    corrida la consulta 1.2.
+-- 4. El encabezado NO EJECUTAR se queda. Siempre.
