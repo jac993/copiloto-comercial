@@ -91,6 +91,9 @@
 --   [VERIFICADO] Las 10 tablas, con columnas (2.1), constraints (2.2) e
 --                indices (2.3) tomados de la introspeccion de la BD viva.
 --
+--   ACTUALIZACION 2026-09-22: de esas 10, debug_logs (B.6) fue ELIMINADA de
+--   la BD. Quedan 9 vivas. Su DDL se conserva como registro historico.
+--
 --   Salvedades que quedan:
 --     a) Los NOMBRES de los indices no los capturo la consulta 2.3 (solo sus
 --        definiciones). Los nombres usados abajo son descriptivos, no los
@@ -269,11 +272,16 @@ create index idx_correos_pendientes   on correos_detectados (analizado)
 
 
 -- ---------------------------------------------------------------------------
--- B.6  debug_logs            (1 uso; SIN tipo en lib/types.ts)
---      Insert temporal de depuracion en app/api/preparacion/route.ts:536.
---      ⚠️ Tabla temporal de debugging — evaluar si eliminar
---      id es int8 NOT NULL sin default pero es PK: implica identity/bigserial.
---      empresa_id es TEXT, no uuid: no puede tener FK a empresas.
+-- B.6  debug_logs            🗑️ ELIMINADA 2026-09-22
+--      DROP TABLE debug_logs ejecutado en Supabase (migracion
+--      20260922_m5c_borrar_tablas_muertas.sql). El insert que la
+--      alimentaba se quito de app/api/preparacion/route.ts en el commit
+--      b786183. Ya no existe ni en la BD ni en el codigo.
+--      El DDL de abajo se conserva solo como registro historico.
+--
+--      Tal como estaba: 1 uso, sin tipo en lib/types.ts. Rompia las
+--      convenciones del proyecto (id int8, empresa_id text sin FK posible,
+--      created_at en vez de creado_en).
 -- ---------------------------------------------------------------------------
 create table debug_logs (
   id          bigint       not null,   -- probable identity/bigserial
@@ -386,12 +394,13 @@ create table rendimiento_ejecutivo (
 -- ---------------------------------------------------------------------------
 -- B.11 OTRAS TABLAS DE LA BD - revisadas 2026-09-22
 -- ---------------------------------------------------------------------------
---   casos_exito   [PENDIENTE - sin introspeccion todavia]
---     Existe en la BD y NO tiene DDL en el repo, pero tampoco la usa NADIE:
---     cero apariciones de "casos_exito" en app/, lib/, components/ y supabase/.
---     El codigo usa la tabla "casos" (ver B.3), que es otra. Todo indica que
---     es un resto de una version anterior. Antes de documentarla conviene
---     decidir si se borra: documentar una tabla muerta la vuelve permanente.
+--   casos_exito   🗑️ ELIMINADA 2026-09-22
+--     DROP TABLE casos_exito ejecutado en Supabase (migracion
+--     20260922_m5c_borrar_tablas_muertas.sql). Nunca se introspecciono:
+--     no queda registro de sus columnas ni de su contenido.
+--     Motivo del borrado: cero apariciones de "casos_exito" en app/, lib/,
+--     components/ y hooks/. El codigo usa la tabla "casos" (ver B.3), que es
+--     otra y sigue viva. Era un resto de una version anterior.
 --
 --   api_usage, aprendizajes, patrones_conversion, senales
 --     NO van en este baseline: ya tienen DDL versionado en el repo.
@@ -487,7 +496,7 @@ create table rendimiento_ejecutivo (
 -- 2. RLS de integraciones: no aparecio en la lista de tablas sin RLS, asi que
 --    no se sabe si la tiene activada ni con que policies. Es la que guarda los
 --    tokens OAuth de Gmail en texto plano.
--- 3. Decidir que hacer con casos_exito (tabla sin uso) y con debug_logs
---    (tabla temporal de depuracion). Borrarlas es mas barato que documentarlas.
+-- 3. [CERRADO 2026-09-22] casos_exito y debug_logs se eliminaron de la BD con
+--    la migracion 20260922_m5c_borrar_tablas_muertas.sql.
 --
 -- El encabezado NO EJECUTAR se queda. Siempre.
