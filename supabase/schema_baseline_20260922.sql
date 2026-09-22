@@ -9,6 +9,9 @@
 -- ##  Correrlo sobre la BD de produccion no arregla nada y puede fallar a  ##
 -- ##  mitad de camino dejando el esquema inconsistente.                    ##
 -- ##                                                                       ##
+-- ##  ADEMAS: los CREATE TABLE de la Seccion B estan INCOMPLETOS a         ##
+-- ##  proposito - les faltan PK, FK, UNIQUE, CHECK e indices (ver B.0).    ##
+-- ##                                                                       ##
 -- ###########################################################################
 --
 -- Baseline generado: 2026-09-22
@@ -64,86 +67,192 @@
 -- SECCION B - LAS 10 TABLAS SIN DDL EN EL REPO
 -- ===========================================================================
 --
--- !! PENDIENTE: ESTA SECCION ESTA INCOMPLETA A PROPOSITO !!
+-- B.0  ESTADO DE ESTA SECCION
+-- ---------------------------------------------------------------------------
+--   [VERIFICADO]  Consulta 2.1 (columnas) para 6 de las 10 tablas:
+--                 borradores, borradores_feedback, casos, chat_empresa,
+--                 correos_detectados, debug_logs.
+--                 De esas 6, los CREATE TABLE de abajo son fieles: nombre de
+--                 columna, tipo, nullability y default salen tal cual de
+--                 information_schema.columns.
 --
--- No se recibio la salida de las consultas de introspeccion 2.1 / 2.2 / 2.3,
--- que son las unicas que conocen la forma REAL de estas tablas.
+--   [PENDIENTE]   Consulta 2.1 para las 4 restantes: evaluaciones_semanales,
+--                 integraciones, misiones_diarias, rendimiento_ejecutivo.
+--                 (La salida llego cortada en "evaluacion...".)
 --
--- Lo que sigue NO es DDL. Es la vista que tiene el codigo TypeScript de cada
--- tabla (lib/types.ts). Sirve como checklist para contrastar contra la BD,
--- pero NO alcanza para reconstruir el CREATE TABLE, porque un tipo de
--- TypeScript no lleva:
---     defaults, NOT NULL, claves primarias, claves foraneas y su ON DELETE,
---     CHECK constraints, indices, ni precision de tipos numericos/timestamp.
+--   [PENDIENTE]   Consulta 2.2 (PK / FK / UNIQUE / CHECK) para las 10.
+--   [PENDIENTE]   Consulta 2.3 (indices) para las 10.
 --
--- Escribir el CREATE TABLE adivinando desde estos tipos produciria un archivo
--- que parece autoritativo y no lo es - exactamente el problema que este
--- baseline existe para terminar.
+--   POR ESO NINGUN CREATE TABLE DE ABAJO LLEVA CONSTRAINTS.
+--   No se escribio "primary key" ni "references" en ninguno: seria inventado.
+--   En todas, id es uuid NOT NULL con default gen_random_uuid(), lo que hace
+--   casi seguro que sea la PK - pero "casi seguro" no es "verificado", y este
+--   archivo existe justamente para no repetir esa clase de suposicion.
 --
--- PARA COMPLETAR: correr las consultas 2.1, 2.2 y 2.3 del plan M0 y pegar el
--- resultado. Alternativa mas directa y preferible:
---     npx supabase db dump --db-url "<DIRECT_URL>" --schema public
+--   PARA COMPLETAR: correr 2.2 y 2.3, y 2.1 para las 4 que faltan.
+--   Alternativa mas directa, trae todo de una y ya formateado:
+--       npx supabase db dump --db-url "<DIRECT_URL>" --schema public
 --
 -- ---------------------------------------------------------------------------
--- B.1  borradores            (5 usos en codigo; tipo BorradorGuardado, types.ts:822)
---      campos segun TS: id, empresa_id, contacto_id?, canal, contenido, tipo,
---                       usado, creado_en
---      lectura/escritura: app/api/borradores/route.ts,
+-- HALLAZGOS NUEVOS de la consulta 2.1 (discrepancias BD vs lib/types.ts)
+-- ---------------------------------------------------------------------------
+--   1. borradores.feedback_rechazo (text) EXISTE en la BD pero NO esta en el
+--      tipo BorradorGuardado (lib/types.ts:822). Columna huerfana: ningun
+--      codigo TypeScript la conoce.
+--   2. borradores_feedback.evaluacion es TEXT en la BD, pero el tipo
+--      BorradorFeedback la declara como EvaluacionFeedback (objeto), no string.
+--      O se guarda JSON serializado en texto, o el tipo miente.
+--   3. borradores.empresa_id es NULLABLE en la BD, pero BorradorGuardado la
+--      declara como string obligatorio. Mismo caso en canal, contenido y tipo.
+--   4. debug_logs rompe todas las convenciones del proyecto: id es int8 (no
+--      uuid), empresa_id es TEXT (no uuid, sin FK posible) y la marca de
+--      tiempo se llama created_at en vez de creado_en. Confirma que es una
+--      tabla desechable, no parte del modelo.
+
+
+-- ---------------------------------------------------------------------------
+-- B.1  borradores            (5 usos; tipo BorradorGuardado, lib/types.ts:822)
+--      Lectura/escritura: app/api/borradores/route.ts,
 --                         app/api/borradores/[id]/route.ts
--- [PENDIENTE: CREATE TABLE real]
---
--- B.2  borradores_feedback   (4 usos; tipo BorradorFeedback, types.ts:794)
---      campos segun TS: id, creado_en, empresa_id?, contacto_id?, canal,
---                       tipo_borrador?, borrador_ia, evaluacion?,
---                       version_vendedor?, notas?
---      lectura/escritura: lib/queries.ts:1287 insertBorradorFeedback,
+--      [VERIFICADO 2.1] columnas / [PENDIENTE 2.2-2.3] PK, FK, indices
+-- ---------------------------------------------------------------------------
+create table borradores (
+  id                uuid         not null default gen_random_uuid(),
+  empresa_id        uuid         null,
+  contacto_id       uuid         null,
+  canal             text         null,
+  contenido         text         null,
+  tipo              text         null,
+  usado             boolean      null default false,
+  creado_en         timestamptz  null default now(),
+  feedback_rechazo  text         null   -- no existe en lib/types.ts
+);
+
+
+-- ---------------------------------------------------------------------------
+-- B.2  borradores_feedback   (4 usos; tipo BorradorFeedback, lib/types.ts:794)
+--      Lectura/escritura: lib/queries.ts:1287 insertBorradorFeedback,
 --                         lib/queries.ts:1296 getFeedbackEjemplos
--- [PENDIENTE: CREATE TABLE real]
---
--- B.3  casos                 (5 usos; tipo Caso, types.ts:768)
---      campos segun TS: id, sector, tamano_empresa?, cargo_decisor?, problema,
---                       proveedor_anterior?, solucion, tipo_etiqueta?, resultado,
---                       objecion_vencida?, canal_entrada?, tecnica_venta?,
---                       tiempo_cierre?, activo, creado_en, actualizado_en
---      OJO: tamano_empresa, canal_entrada y tecnica_venta son uniones en TS
---           (TamanoCaso / CanalCaso / TecnicaCaso) - probable CHECK en la BD.
--- [PENDIENTE: CREATE TABLE real]
---
--- B.4  chat_empresa          (4 usos; tipo ChatEmpresa, types.ts:633)
---      campos segun TS: id, empresa_id, pregunta, respuesta, creado_en
--- [PENDIENTE: CREATE TABLE real]
---
--- B.5  correos_detectados    (2 usos; tipo CorreoDetectado, types.ts:835)
---      campos segun TS: id, empresa_id, gmail_thread_id, gmail_message_id,
---                       asunto?, remitente?, fecha, snippet?, analizado, creado_en
---      OJO: probable UNIQUE sobre gmail_message_id (el sync reinserta).
---      NO tiene contacto_id - el sync de Gmail nunca crea interacciones.
--- [PENDIENTE: CREATE TABLE real]
---
--- B.6  debug_logs            (1 uso; SIN tipo en types.ts)
+--      [VERIFICADO 2.1] columnas / [PENDIENTE 2.2-2.3] PK, FK, indices
+-- ---------------------------------------------------------------------------
+create table borradores_feedback (
+  id                uuid         not null default gen_random_uuid(),
+  creado_en         timestamptz  null default now(),
+  empresa_id        uuid         null,
+  contacto_id       uuid         null,
+  canal             text         not null,
+  tipo_borrador     text         null,
+  borrador_ia       text         not null,
+  evaluacion        text         null,   -- TS la declara como objeto, no string
+  version_vendedor  text         null,
+  notas             text         null
+);
+
+
+-- ---------------------------------------------------------------------------
+-- B.3  casos                 (5 usos; tipo Caso, lib/types.ts:768)
+--      [VERIFICADO 2.1] columnas / [PENDIENTE 2.2-2.3] PK, CHECK, indices
+--      OJO: tamano_empresa, canal_entrada y tecnica_venta son TEXT planos en
+--      la BD, pero en TS son uniones cerradas (TamanoCaso / CanalCaso /
+--      TecnicaCaso). Si 2.2 no devuelve un CHECK para ellas, no hay nada que
+--      impida escribir un valor fuera de la union.
+-- ---------------------------------------------------------------------------
+create table casos (
+  id                  uuid         not null default gen_random_uuid(),
+  sector              text         not null,
+  tamano_empresa      text         null,
+  cargo_decisor       text         null,
+  problema            text         not null,
+  proveedor_anterior  text         null,
+  solucion            text         not null,
+  tipo_etiqueta       text         null,
+  resultado           text         not null,
+  objecion_vencida    text         null,
+  canal_entrada       text         null,
+  tecnica_venta       text         null,
+  tiempo_cierre       text         null,
+  activo              boolean      not null default true,
+  creado_en           timestamptz  not null default now(),
+  actualizado_en      timestamptz  not null default now()
+);
+
+
+-- ---------------------------------------------------------------------------
+-- B.4  chat_empresa          (4 usos; tipo ChatEmpresa, lib/types.ts:633)
+--      [VERIFICADO 2.1] columnas / [PENDIENTE 2.2-2.3] PK, FK, indices
+--      Coincide exactamente con el tipo TypeScript.
+-- ---------------------------------------------------------------------------
+create table chat_empresa (
+  id          uuid         not null default gen_random_uuid(),
+  empresa_id  uuid         not null,
+  pregunta    text         not null,
+  respuesta   text         not null,
+  creado_en   timestamptz  not null default now()
+);
+
+
+-- ---------------------------------------------------------------------------
+-- B.5  correos_detectados    (2 usos; tipo CorreoDetectado, lib/types.ts:835)
+--      Escritura: app/api/gmail/sync/route.ts:101
+--      [VERIFICADO 2.1] columnas / [PENDIENTE 2.2-2.3] PK, FK, UNIQUE, indices
+--      OJO: falta confirmar si hay UNIQUE sobre gmail_message_id. El sync
+--      reinserta en cada corrida; sin esa restriccion se duplican correos.
+--      NO tiene contacto_id - por eso el sync de Gmail nunca puede atribuir
+--      un correo a una persona ni crear interacciones.
+-- ---------------------------------------------------------------------------
+create table correos_detectados (
+  id                uuid         not null default gen_random_uuid(),
+  empresa_id        uuid         not null,
+  gmail_thread_id   text         not null,
+  gmail_message_id  text         not null,
+  asunto            text         null,
+  remitente         text         null,
+  fecha             timestamptz  not null,
+  snippet           text         null,
+  analizado         boolean      not null default false,
+  creado_en         timestamptz  not null default now()
+);
+
+
+-- ---------------------------------------------------------------------------
+-- B.6  debug_logs            (1 uso; SIN tipo en lib/types.ts)
 --      Insert temporal de depuracion en app/api/preparacion/route.ts:536.
---      Unica de las 10 sin interfaz TypeScript. Candidata a eliminarse en vez
---      de documentarse.
--- [PENDIENTE: confirmar si existe y si debe conservarse]
---
+--      ⚠️ Tabla temporal de debugging — evaluar si eliminar
+--      [VERIFICADO 2.1] columnas / [PENDIENTE 2.2-2.3] PK, indices
+--      id es int8 sin default: probablemente GENERATED AS IDENTITY o un
+--      serial, pero information_schema no lo distingue aca. Falta 2.2.
+--      empresa_id es TEXT, no uuid: no puede tener FK a empresas.
+-- ---------------------------------------------------------------------------
+create table debug_logs (
+  id          bigint       not null,
+  endpoint    text         null,
+  empresa_id  text         null,   -- text, no uuid: sin FK posible
+  datos       jsonb        null,
+  created_at  timestamptz  null default now()   -- rompe la convencion creado_en
+);
+
+
+-- ---------------------------------------------------------------------------
 -- B.7  evaluaciones_semanales (3 usos; tipo EvaluacionSemanal, types.ts:687)
 --      campos segun TS: id, semana_inicio, semana_fin, resumen_ia?,
 --                       tasa_cumplimiento?, tasa_conversion?, fortalezas?,
 --                       areas_mejora?, recomendaciones? (jsonb), creado_en
--- [PENDIENTE: CREATE TABLE real]
+-- [PENDIENTE: consulta 2.1 llego cortada - falta CREATE TABLE real]
 --
--- B.8  integraciones         (7 usos; tipo Integracion, types.ts:749)
+-- B.8  integraciones         (7 usos; tipo Integracion, lib/types.ts:749)
 --      campos segun TS: id, tipo, access_token, refresh_token?, email?, activo,
 --                       expira_en?, creado_en, actualizado_en
---      SENSIBLE: guarda tokens OAuth de Gmail en claro. Verificar RLS con la
---      consulta extra del plan M0 antes de dar por buena esta tabla.
--- [PENDIENTE: CREATE TABLE real]
+--      ⚠️ access_token y refresh_token se guardan en texto plano — revisar
+--      RLS y encriptación
+--      Verificar RLS con la consulta extra del plan M0 antes de dar por
+--      buena esta tabla.
+-- [PENDIENTE: consulta 2.1 llego cortada - falta CREATE TABLE real]
 --
--- B.9  misiones_diarias      (7 usos; tipo MisionDiaria, types.ts:671)
+-- B.9  misiones_diarias      (7 usos; tipo MisionDiaria, lib/types.ts:671)
 --      campos segun TS: id, empresa_id, fecha, accion_sugerida, resultado?,
 --                       detalle_vendedor?, feedback_ia?, creado_en
 --      OJO: resultado es ResultadoMision en TS - probable CHECK en la BD.
--- [PENDIENTE: CREATE TABLE real]
+-- [PENDIENTE: consulta 2.1 llego cortada - falta CREATE TABLE real]
 --
 -- B.10 rendimiento_ejecutivo (2 usos; tipo RendimientoEjecutivo, types.ts:704)
 --      campos segun TS: id (siempre 1 - fila unica), score_actual, racha_record,
@@ -151,7 +260,7 @@
 --                       canal_mas_efectivo?, tecnica_mas_efectiva?, ultimo_calculo?
 --      OJO: el patron "fila unica" sugiere CHECK (id = 1), igual que
 --           contexto_exportable en schema.sql:209.
--- [PENDIENTE: CREATE TABLE real]
+-- [PENDIENTE: consulta 2.1 llego cortada - falta CREATE TABLE real]
 
 
 -- ===========================================================================
@@ -187,10 +296,13 @@
 -- COMO COMPLETAR ESTE ARCHIVO
 -- ===========================================================================
 --
--- 1. Correr en el SQL editor de Supabase las consultas 2.1, 2.2, 2.3 y 3
---    del plan M0 (introspeccion).
--- 2. Reemplazar cada bloque [PENDIENTE] por el CREATE TABLE real, con sus
---    constraints e indices.
--- 3. Quitar de la Seccion A la nota "Estado del CHECK: DESCONOCIDO" una vez
---    corrida la consulta 1.2.
--- 4. El encabezado NO EJECUTAR se queda. Siempre.
+-- 1. Correr la consulta 2.1 para las 4 tablas que faltan (B.7 a B.10).
+-- 2. Correr las consultas 2.2 (constraints) y 2.3 (indices) para las 10, y
+--    agregar PK, FK con su ON DELETE, UNIQUE, CHECK e indices a cada
+--    CREATE TABLE de la Seccion B.
+-- 3. Correr la consulta 3 y completar la Seccion C con tipos y defaults.
+-- 4. Correr la consulta 1.2 (pg_constraint sobre empresas) y quitar de la
+--    Seccion A la nota "Estado del CHECK: DESCONOCIDO".
+-- 5. Los avisos [VERIFICADO] / [PENDIENTE] se van borrando a medida que cada
+--    bloque queda respaldado por introspeccion real.
+-- 6. El encabezado NO EJECUTAR se queda. Siempre.
