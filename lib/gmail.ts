@@ -6,7 +6,13 @@
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
-const SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"].join(" ");
+// gmail.send permite enviar correos que el vendedor ya aprobó (modo copiloto).
+// Ojo: los tokens emitidos antes de agregar este scope NO lo incluyen; hay que
+// reconectar Gmail desde Configuración para que Google pida el permiso nuevo.
+const SCOPES = [
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.send",
+].join(" ");
 
 // ── Tipos ─────────────────────────────────────────────────────
 
@@ -170,4 +176,84 @@ export async function getAccountEmail(accessToken: string): Promise<string> {
   if (!res.ok) return "desconocido";
   const data = await res.json() as { emailAddress: string };
   return data.emailAddress;
+}
+
+// ── Envío de correos ──────────────────────────────────────────
+// Solo se llama desde /api/gmail/send, después de que el vendedor aprobó el
+// mensaje con un clic. Nunca se usa para envíos automáticos.
+
+export interface SendEmailParams {
+  to: string;
+  subject: string;
+  body: string;
+  threadId?: string;
+  from?: string;
+}
+
+// Quita saltos de línea de valores que van en headers: sin esto, un asunto o
+// destinatario con "\r\n" podría inyectar headers extra (Bcc, etc.).
+function limpiarHeader(valor: string): string {
+  return valor.replace(/[\r\n]+/g, " ").trim();
+}
+
+// RFC 2047: los headers MIME solo admiten ASCII; un asunto con tildes o ñ
+// se codifica como =?UTF-8?B?...?= para que llegue legible.
+function codificarHeader(valor: string): string {
+  if (/^[\x20-\x7E]*$/.test(valor)) return valor;
+  return `=?UTF-8?B?${Buffer.from(valor, "utf-8").toString("base64")}?=`;
+}
+
+// Construye el mensaje RFC 2822 y lo codifica en base64url (lo que exige el
+// campo "raw" de la Gmail API). El cuerpo va en base64 para no depender de
+// que el texto sea ASCII ni del largo de las líneas.
+function construirMensajeRaw({ to, subject, body, from }: SendEmailParams): string {
+  const cuerpoBase64 = Buffer.from(body, "utf-8")
+    .toString("base64")
+    .replace(/.{76}/g, "$&\r\n");
+  const headers = [
+    ...(from ? [`From: ${limpiarHeader(from)}`] : []),
+    `To: ${limpiarHeader(to)}`,
+    `Subject: ${codificarHeader(limpiarHeader(subject))}`,
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+  ];
+  const mensaje = `${headers.join("\r\n")}\r\n\r\n${cuerpoBase64}`;
+  return Buffer.from(mensaje, "utf-8").toString("base64url");
+}
+
+// Envía un correo desde la cuenta autenticada. Si viene threadId, Gmail lo
+// agrupa en ese hilo (el asunto debe coincidir, p. ej. "Re: ...").
+export async function sendEmail(
+  accessToken: string,
+  params: SendEmailParams
+): Promise<{ messageId: string; threadId: string }> {
+  if (!params.to.trim()) throw new Error("Falta el destinatario del correo");
+  if (!params.subject.trim()) throw new Error("Falta el asunto del correo");
+
+  const payload: { raw: string; threadId?: string } = { raw: construirMensajeRaw(params) };
+  if (params.threadId) payload.threadId = params.threadId;
+
+  const res = await fetch(`${GMAIL_API_BASE}/messages/send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const detalle = await res.text();
+    // 403 con "insufficient" = el token es anterior al scope gmail.send.
+    if (res.status === 403 && detalle.toLowerCase().includes("insufficient")) {
+      throw new Error(
+        "Gmail no tiene permiso para enviar correos. Reconecta Gmail desde Configuración para autorizar el envío."
+      );
+    }
+    throw new Error(`Error al enviar correo por Gmail (${res.status}): ${detalle}`);
+  }
+
+  const data = await res.json() as { id: string; threadId: string };
+  return { messageId: data.id, threadId: data.threadId };
 }
