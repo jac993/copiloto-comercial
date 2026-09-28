@@ -49,3 +49,48 @@ export function esStubDeTarea(i: Interaccion): boolean {
   // Sin resumen de IA y cuyo único "texto" es vacío o un marcador de sistema.
   return sinResumen && (t === "" || MARCADORES_OCULTAR.has(t));
 }
+
+// ── ¿El prospecto ya conoce al vendedor? ─────────────────────
+// Decide si un borrador debe incluir una línea de presentación. Un intento
+// saliente sin respuesta NO presenta al vendedor: una llamada que nadie
+// contestó o un correo que nadie respondió no le dice al prospecto quién
+// es. Solo cuenta un intercambio real: el prospecto escribió o respondió,
+// hubo reunión, o hubo una llamada con conversación.
+export const MARCADOR_RESPONDIO = "Respondió al contacto";
+
+// Resoluciones negativas: el botón las guarda como respuesta del prospecto
+// (remitente "prospecto", sentimiento "negativo") aunque justamente NO
+// respondió. Hay que descartarlas antes de mirar el remitente.
+const MARCADORES_SIN_CONTACTO = new Set([
+  "Vio el mensaje pero no respondió",
+  "Sin respuesta tras 48h",
+  MARCADOR_LLAMADA_SIN_RESPUESTA,
+]);
+
+export type InteraccionContactoReal = Pick<
+  Interaccion,
+  "tipo" | "remitente" | "transcripcion" | "resumen_ia" | "sentimiento"
+> & {
+  cadencia_asignacion_id?: string | null;
+  resuelta?: boolean | null;
+};
+
+export function esContactoReal(i: InteraccionContactoReal): boolean {
+  // Tarea de cadencia pendiente: recordatorio de enviar, no un contacto.
+  if (i.cadencia_asignacion_id && i.resuelta === false) return false;
+  const t = (i.transcripcion ?? "").trim();
+  // "Llamada sin respuesta" se guarda con sentimiento "neutro", así que el
+  // sentimiento no basta: hay que mirar el marcador.
+  if (MARCADORES_SIN_CONTACTO.has(t)) return false;
+  if (i.remitente === "prospecto" || t === MARCADOR_RESPONDIO) return true;
+  if (i.tipo === "reunion") return true;
+  if (i.tipo === "sin_respuesta" || i.sentimiento === "sin_respuesta") return false;
+  if (i.tipo === "llamada") {
+    // Llamada con transcripción o resumen = hubo conversación.
+    return t !== "" || !!(i.resumen_ia ?? "").trim();
+  }
+  // Mensajes escritos del vendedor (correo, WhatsApp, LinkedIn): solo cuentan
+  // si el análisis detectó una reacción del prospecto. "neutro" no alcanza:
+  // es el valor por defecto de un mensaje saliente sin respuesta.
+  return i.sentimiento === "positivo" || i.sentimiento === "negativo";
+}

@@ -17,6 +17,7 @@ import { validarDatosParaGeneracion } from "@/lib/validar-borrador";
 import { calcularCadencia } from "@/lib/cadencia";
 import { registrarUso } from "@/lib/registrarUso";
 import { extraerJsonSeguro } from "@/lib/json-parser";
+import { esContactoReal } from "@/lib/interaccion-meta";
 
 export const maxDuration = 60;
 
@@ -295,13 +296,18 @@ export async function POST(req: NextRequest) {
     // Le dice explícitamente a Claude en qué touch va y qué canal rotar,
     // para que el borrador no repita el enfoque del intento anterior.
     let cadenciaTexto = "";
+    // ¿El contacto ya conoce al vendedor? Se decide en código y no en el
+    // prompt: la IA leía un historial con intentos y asumía que ya se
+    // conocían. Sin contacto registrado (sin contactoId) se asume que no.
+    let conoceAlVendedor = false;
     if (contactoId) {
       const { data: intsCad } = await supabase
         .from("interacciones")
-        .select("tipo, fecha, remitente, sentimiento, contacto_id, cadencia_asignacion_id, resuelta")
+        .select("tipo, fecha, remitente, sentimiento, contacto_id, cadencia_asignacion_id, resuelta, transcripcion, resumen_ia")
         .eq("empresa_id", empresaId)
         .eq("contacto_id", contactoId)
         .order("fecha", { ascending: true });
+      conoceAlVendedor = (intsCad ?? []).some((i) => esContactoReal(i));
       const cadencia = calcularCadencia(intsCad ?? [], contactoId);
       if (cadencia) {
         const rotacion =
@@ -550,6 +556,7 @@ ${ejemplosAprobados}
           decisorCargo:     decisorCargo,
           decisorNombre:    decisorNombre ?? "No registrado",
           decisorArea:      decisorArea ?? null,
+          conoceAlVendedor,
           dolorDecisor:     decisorFicha?.dolor_especifico ?? null,
           historialReciente: historialTexto || "",
           // Resumen ejecutivo + inteligencia de Perplexity (ficha_ia). Antes no

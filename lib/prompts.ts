@@ -1090,6 +1090,10 @@ export function buildPromptBorradores(datos: {
   decisorArea?: string | null
   // Dolor específico del cargo según la ficha IA
   dolorDecisor?: string | null
+  // true si hay al menos una interacción REAL con este contacto (respondió,
+  // reunión, llamada con conversación). Lo calcula la ruta con
+  // esContactoReal: llamadas sin respuesta y stubs no cuentan.
+  conoceAlVendedor?: boolean
   historialReciente: string
   contextoVendedor: string
   // Tipo de contacto detectado (apertura/seguimiento/continuacion/reactivacion)
@@ -1112,6 +1116,14 @@ export function buildPromptBorradores(datos: {
   contextoEstrategico: string
 }): string {
   const esApertura = datos.tipo === "apertura";
+
+  // Caso A (no lo conoce) vs caso B (ya lo conoce). Sin interacción real el
+  // prospecto no sabe quién es José Antonio: una llamada que no contestó no
+  // lo presentó. Por eso el mensaje necesita una línea de presentación.
+  const conoce = datos.conoceAlVendedor === true;
+  // Líneas de presentación de los ejemplos (vacías en el caso B).
+  const presEj = conoce ? "" : "Soy José Antonio de One Label, fabricamos etiquetas para envases de productos químicos.\n";
+  const presEjLinkedin = conoce ? "" : " soy José Antonio de One Label, fabricamos etiquetas para envases de productos químicos.";
 
   // Solo el primer nombre: el saludo con nombre y apellido suena a plantilla.
   const nombreValido = datos.decisorNombre && datos.decisorNombre !== 'No registrado'
@@ -1162,7 +1174,7 @@ export function buildPromptBorradores(datos: {
   // instrucción del tipo (continuación reconoce la conversación, etc.).
   const restriccionesApertura = `RESTRICCIONES ABSOLUTAS (Predictable Revenue — violarlas invalida el borrador):
 1. LONGITUD: correo máximo 100 palabras · LinkedIn máximo 60 palabras.
-2. APERTURA: la primera línea habla del mundo del prospecto (su empresa, su industria, un problema observable en su sector). NUNCA empieces hablando de One Label, de ti mismo ni de lo que ofreces.
+2. APERTURA: el mensaje habla del mundo del prospecto (su empresa, su industria, un problema observable en su sector). NUNCA hables de One Label, de ti mismo ni de lo que ofreces${conoce ? "" : ", salvo la única línea de PRESENTACIÓN OBLIGATORIA (ver más abajo)"}.
 3. UNA SOLA PREGUNTA: el mensaje termina con exactamente una pregunta abierta. Múltiples preguntas reducen la tasa de respuesta.
 4. SIN ADJUNTOS NI LINKS: no incluyas URLs, PDFs ni referencias a documentos en el primer contacto.
 5. CTA DE BAJO COMPROMISO: el objetivo del mensaje es obtener UNA RESPUESTA, no agendar una reunión. La única petición es que respondan la pregunta de la plantilla. Nunca pidas reunión ni llamada.`;
@@ -1174,21 +1186,21 @@ export function buildPromptBorradores(datos: {
 CORREO EJEMPLO:
 Asunto: Etiquetado en despacho Oxiquim
 "Hola Christian,
-Asumo que los quiebres de stock de etiquetas en despacho ya los tienen resueltos, pero por si acaso, ¿es algo donde vale la pena conversar?
+${presEj}Asumo que los quiebres de stock de etiquetas en despacho ya los tienen resueltos, pero por si acaso, ¿es algo donde vale la pena conversar?
 Saludos,"
 
 LINKEDIN EJEMPLO:
-"Hola Christian, asumo que los quiebres de stock de etiquetas en despacho ya los tienen resueltos, pero por si acaso, ¿es algo donde vale la pena conversar?"
+"Hola Christian,${presEjLinkedin} ${conoce ? "asumo" : "Asumo"} que los quiebres de stock de etiquetas en despacho ya los tienen resueltos, pero por si acaso, ¿es algo donde vale la pena conversar?"
 
 POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
-- Van directo del saludo a la afirmación — sin frase de introducción ni explicación del negocio
+- Van directo del saludo${conoce ? "" : " y la presentación"} a la afirmación, sin frase de introducción ni explicación del negocio del cliente
 - La afirmación asume que el problema YA está resuelto: no acusa, no presiona, y muestra que sabes de qué hablas
 - Invitan a confirmar o corregir con una respuesta de dos palabras
 - Sin regulaciones, sin normativas, sin datos inventados
 
 REGLAS DE APERTURA:
 1. Abre correo y LinkedIn con "Hola [nombre]," — nunca con el cargo
-2. La línea siguiente es directamente la afirmación de la plantilla. NO uses "Estuve revisando la operación de..." ni ninguna otra introducción.
+2. ${conoce ? "La línea siguiente es directamente la afirmación de la plantilla." : "La línea siguiente es la presentación; después, directamente la afirmación de la plantilla."} NO uses "Estuve revisando la operación de..." ni ninguna otra introducción.
 3. La [situación concreta] debe salir de una línea real del contacto o del resumen ejecutivo
    (prioridades, dolores probables, qué fabrican) y conectar con el área del contacto.`;
 
@@ -1197,15 +1209,14 @@ REGLAS DE APERTURA:
 CORREO EJEMPLO:
 Asunto: Pregunta sobre operación Oxiquim
 "Hola Christian,
-Estuve revisando la operación de Oxiquim y me surgió una pregunta.
-¿Han tenido quiebres de stock o errores de etiquetas en despacho? ¿Es algo que les genera paradas o lo tienen bien controlado?
+${conoce ? "Estuve revisando la operación de Oxiquim y me surgió una pregunta.\n" : presEj}¿Han tenido quiebres de stock o errores de etiquetas en despacho? ¿Es algo que les genera paradas o lo tienen bien controlado?
 Saludos,"
 
 LINKEDIN EJEMPLO:
-"Hola Christian, estuve revisando la operación de Oxiquim y me surgió una pregunta: ¿han tenido quiebres o errores de etiquetado en despacho? ¿Es algo que les genera paradas o lo tienen bien controlado?"
+"Hola Christian, ${conoce ? "estuve revisando la operación de Oxiquim y me surgió una pregunta:" : presEjLinkedin.trim()} ¿han tenido quiebres o errores de etiquetado en despacho? ¿Es algo que les genera paradas o lo tienen bien controlado?"
 
 POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
-- Abren con nombre y una frase que muestra que revisaste la empresa — sin presumir
+- Abren con nombre y ${conoce ? "una frase que muestra que revisaste la empresa, sin presumir" : "una presentación de una línea, porque el contacto no te conoce"}
 - Hacen UNA pregunta amplia y abierta — el cliente decide si tiene el problema, tú no se lo dices
 - Tono de persona real, no de plantilla corporativa
 - Sin regulaciones, sin normativas, sin datos específicos inventados
@@ -1213,7 +1224,7 @@ POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
 
 REGLAS DE APERTURA:
 1. Abre correo y LinkedIn con "Hola [nombre]," — nunca con el cargo
-2. Segunda línea: "Estuve revisando la operación de [empresa] y me surgió una pregunta"
+2. Segunda línea: ${conoce ? '"Estuve revisando la operación de [empresa] y me surgió una pregunta"' : 'la presentación obligatoria (reemplaza a "Estuve revisando la operación de...")'}
 3. La pregunta de apertura debe apuntar a un PROBLEMA CONCRETO con consecuencia operacional,
    no a un proceso genérico. Sigue esta estructura:
    "¿han tenido [problema específico del rubro]? ¿Es algo que [consecuencia operacional]
@@ -1235,7 +1246,7 @@ REGLAS DE APERTURA:
 2. UNA SOLA PREGUNTA: el mensaje termina con exactamente una pregunta. Múltiples preguntas reducen la tasa de respuesta.
 3. SIN ADJUNTOS NI LINKS.
 4. CTA DE BAJO COMPROMISO: el mensaje solo busca una respuesta. No pidas reunión ni llamada.
-5. El ENFOQUE del mensaje lo dicta la INSTRUCCIÓN CRÍTICA de arriba (este NO es un contacto en frío — no uses la apertura "Estuve revisando la operación de..." ni te presentes de nuevo). La FORMA del correo la dicta la PLANTILLA OBLIGATORIA del final.
+5. El ENFOQUE del mensaje lo dicta la INSTRUCCIÓN CRÍTICA de arriba (no uses la apertura "Estuve revisando la operación de..."${conoce ? " ni te presentes de nuevo" : ""}). La FORMA del correo la dicta la PLANTILLA OBLIGATORIA del final.
 6. Los ejemplos de mensajes aprobados por el vendedor (si existen más abajo) son SOLO referencia de tono y extensión — no copies su estructura ni su contenido.
 
 REGLA DE ÁNGULO NUEVO — LA MÁS IMPORTANTE DE TODAS:
@@ -1259,11 +1270,27 @@ genérico de la industria ni de una afirmación de que el problema existe.`;
     ? `Afirmación suave de estilo Predictable Revenue (hay datos concretos de la empresa), con exactamente esta forma:
   "Asumo que [situación concreta basada en los datos reales de arriba] ya lo tienen resuelto, pero por si acaso, ¿es algo donde vale la pena conversar?"
   La afirmación asume que el problema YA está resuelto e invita a confirmar o corregir, sin presionar.
-  Va directo después del saludo: sin línea ni párrafo previo que introduzca o explique — los datos
-  alimentan la afirmación, no una introducción. Esa frase es LA única pregunta del mensaje.`
+  Va directo después del ${conoce ? "saludo" : "saludo y la línea de presentación"}: sin otra línea ni párrafo que introduzca o
+  explique. Los datos alimentan la afirmación, no una introducción. Esa frase es LA única pregunta del mensaje.`
     : `Pregunta SPIN de Situación/Problema (no hay datos concretos de la empresa), con exactamente esta forma:
   "¿Han tenido [problema concreto basado en los datos reales de arriba]? ¿Es algo que [consecuencia operacional] o lo tienen bien controlado?"
   Ese par cuenta como LA única pregunta del mensaje: ningún otro "?" en el correo.`;
+
+  // Caso A: presentación obligatoria. Caso B: prohibida, ya lo conoce.
+  const bloquePresentacion = conoce
+    ? `PRESENTACIÓN: NO. El contacto ya conoce al vendedor (hay interacciones reales registradas con él).
+No te presentes ni digas quién eres: ve directo al tema, como continuación natural de lo conversado.`
+    : `PRESENTACIÓN OBLIGATORIA: el contacto NO conoce al vendedor. No hay ninguna interacción real con él
+(las llamadas sin respuesta, los mensajes sin responder y los registros de sistema no cuentan: el
+prospecto no sabe quién llamó ni quién escribió). Esto prevalece sobre cualquier "no te presentes"
+de este prompt, incluida la INSTRUCCIÓN CRÍTICA.
+- Justo después del saludo, UNA línea con esta forma:
+  "Soy José Antonio de One Label, [una línea sobre qué hacemos, relevante para esta empresa]."
+- La parte sobre qué hacemos se ajusta a lo que ellos fabrican o envasan según el resumen ejecutivo
+  (ej. "fabricamos etiquetas autoadhesivas para envases de bebidas"). Sin adjetivos de venta
+  ("líderes", "los mejores"), sin clientes, cifras ni casos que no estén en el contexto.
+- Después va directo a la ${estiloPR ? "afirmación" : "pregunta"} de la plantilla.
+- NUNCA asumas que el prospecto conoce al vendedor ni que recuerda un intento anterior.`;
 
   return `Eres José Antonio, KAM de One Label, imprenta industrial de etiquetas autoadhesivas en Chile. Redacta borradores de contacto adaptados a esta empresa y al estado real de la relación.
 
@@ -1298,6 +1325,8 @@ tema, no cambia la forma del mensaje.
 
 ${esApertura ? bloqueApertura : bloqueNoApertura}
 
+${bloquePresentacion}
+
 PROHIBICIONES EXPLÍCITAS (violar cualquiera invalida el borrador — prevalecen sobre cualquier otra instrucción de este prompt, incluida la INSTRUCCIÓN CRÍTICA y la intención de cadencia):
 1. NUNCA hagas meta-comentarios sobre el historial de contacto ni sobre el canal: nada de
    "cambio de canal", "cambio de tema", "te escribo porque antes te llamé", "intenté
@@ -1324,8 +1353,9 @@ PROHIBICIONES EXPLÍCITAS (violar cualquiera invalida el borrador — prevalecen
    y dos puntos. (Las comillas y guiones de ESTE prompt son para ti; no los copies al mensaje.)
 
 PLANTILLA OBLIGATORIA DEL CORREO ("cuerpo") — síguela estrictamente, en este orden:
-- Línea 1: "Hola ${primerNombre}," (solo el nombre, sin apellido ni cargo)
-- Cuerpo: máximo 3 líneas, sin afirmar problemas, terminando en la pregunta.
+- Línea 1: "Hola ${primerNombre}," (solo el nombre, sin apellido ni cargo)${conoce ? "" : `
+- Línea 2: la presentación "Soy José Antonio de One Label, [qué hacemos relevante para ellos]."`}
+- Cuerpo: máximo 3 líneas${conoce ? "" : " (incluida la presentación)"}, sin afirmar problemas, terminando en la pregunta.
 - ${formaMensaje}
 - Cierre, en su propia línea y nada más después: "Saludos," (solo esa palabra: sin nombre, sin empresa, sin firma)
 - SIN frases de cierre adicionales ("quedo atento", "cualquier cosa me avisas"),
@@ -1333,7 +1363,7 @@ PLANTILLA OBLIGATORIA DEL CORREO ("cuerpo") — síguela estrictamente, en este 
   SIN preguntas múltiples.
 Asunto del correo: máximo 8 palabras, sin signos de exclamación, sin juegos de palabras.
 
-WhatsApp y LinkedIn: mismo contenido, mismo estilo y mismas prohibiciones; saludo "Hola ${primerNombre},"
+WhatsApp y LinkedIn: mismo contenido, mismo estilo y mismas prohibiciones; saludo "Hola ${primerNombre},"${conoce ? "" : ", la misma línea de presentación"}
 y la misma forma final, sin firma. LinkedIn más corto.
 
 Responde ÚNICAMENTE con este JSON en una sola línea sin markdown:
