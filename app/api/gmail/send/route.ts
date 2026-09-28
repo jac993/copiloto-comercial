@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { sendEmail, refreshAccessToken } from "@/lib/gmail";
+import { sendEmail, refreshAccessToken, getFirmaGmail } from "@/lib/gmail";
 import { insertInteraccion } from "@/lib/queries";
 import type { Integracion, InteraccionInsert } from "@/lib/types";
 
@@ -85,6 +85,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: mensaje }, { status: 502 });
   }
 
+  // ── Firma de Gmail ────────────────────────────────────────
+  // La API no agrega la firma sola. Se lee de la configuración de Gmail de
+  // la misma cuenta remitente; si falla o no hay, se envía sin firma.
+  const remitente = integracion.email ?? REMITENTE_POR_DEFECTO;
+  const firmaHtml = await getFirmaGmail(accessToken, remitente);
+
   // ── Enviar ────────────────────────────────────────────────
   let enviado: { messageId: string; threadId: string };
   try {
@@ -93,7 +99,8 @@ export async function POST(req: NextRequest) {
       subject,
       body,
       threadId,
-      from: integracion.email ?? REMITENTE_POR_DEFECTO,
+      from: remitente,
+      firmaHtml,
     });
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : "No se pudo enviar el correo";
@@ -115,6 +122,8 @@ export async function POST(req: NextRequest) {
 
   // interacciones no tiene columnas descripcion ni gmail_thread_id: el texto
   // va en transcripcion (igual que /api/interacciones/crear para emails).
+  // Se guarda SIN la firma: el historial alimenta los prompts de IA y la
+  // firma sería ruido en cada correo.
   const interaccion: InteraccionInsert = {
     empresa_id: empresaId,
     contacto_id: null,
