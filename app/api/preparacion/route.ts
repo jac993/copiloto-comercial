@@ -51,7 +51,7 @@ const INSTRUCCION_TIPO: Record<TipoBorrador, string> = {
   apertura:
     "PRIMER CONTACTO. Preséntate brevemente y presenta el motivo del contacto. El decisor no te conoce.",
   seguimiento:
-    "YA HUBO CONTACTO PREVIO pero no se llegó a nada concreto. NO te presentes de nuevo. Retoma el hilo reconociendo el contacto anterior y propone un paso concreto. Si el intento anterior no obtuvo respuesta, PROHIBIDO repetir el mismo ángulo o pregunta — revisa los intentos previos del contexto y cambia el enfoque (dolor distinto, caso real, o valor nuevo sin pedir nada).",
+    "YA HUBO CONTACTO PREVIO pero no se llegó a nada concreto. NO te presentes de nuevo. Retoma el TEMA (no el intento: no menciones que ya escribiste o llamaste). Si el intento anterior no obtuvo respuesta, PROHIBIDO repetir el mismo ángulo o pregunta — revisa los intentos previos del contexto y cambia a un dolor distinto tomado del contacto o del resumen ejecutivo de la empresa (o un caso real de One Label si está en el contexto).",
   continuacion:
     `TIPO CONTINUACION — YA HUBO CONVERSACIÓN REAL CON ESTE CONTACTO.
 
@@ -97,17 +97,17 @@ Incorrecto: "Propuesta One Label", "Solución para [empresa]"`,
 INSTRUCCIÓN PARA REACTIVACIÓN:
 
 Tienes acceso al historial real de interacciones con este contacto en la sección
-"HISTORIAL DE INTERACCIONES". DEBES partir el mensaje reconociendo los intentos
-anteriores sin hacerlos sentir como presión.
+"HISTORIAL DE INTERACCIONES". Úsalo para elegir el tema — NO para comentar los
+intentos: nunca menciones que ya escribiste, llamaste o cambiaste de canal.
 
 Si el historial está vacío, tratar como tipo 'apertura' (primer contacto).
 
 ESTRUCTURA OBLIGATORIA (cuando hay historial):
 
-1. REFERENCIA DIRECTA al último contacto del historial:
-   - Menciona cuándo fue el último intento real
-   - NO menciones que "no respondió" — eso presiona
-   - Sí puedes decir "sé que andas ocupado" o "quería retomar el tema"
+1. RETOMA EL TEMA, no el intento:
+   - Si hubo una conversación real con contenido, puedes referir lo que se habló
+   - NO menciones que "no respondió", ni cuándo fue el último intento — eso presiona
+     y es un meta-comentario
 
 2. PREGUNTA DE REACTIVACIÓN:
    "¿Cambió algo desde entonces?", "¿Sigue siendo relevante el tema?"
@@ -128,8 +128,8 @@ LONGITUD MÁXIMA: 80 palabras para WhatsApp/LinkedIn, 120 para correo.
 REGLA DE ÁNGULO NUEVO: los intentos anteriores no obtuvieron respuesta — PROHIBIDO
 repetir el ángulo, dolor o estructura de pregunta de esos intentos (revísalos en
 "Intentos previos" del contexto). Especialmente si el prospecto VIO el mensaje y no
-respondió: ese ángulo ya falló. Usa un dolor distinto, un caso real con resultado
-concreto, o entrega valor sin pedir nada.
+respondió: ese ángulo ya falló. Usa un dolor distinto tomado del contacto o del
+resumen ejecutivo de la empresa (o un caso real de One Label si está en el contexto).
 
 PARA CORREO — asunto sin presión:
 Correcto: "Retomando el tema de etiquetado"
@@ -308,7 +308,9 @@ export async function POST(req: NextRequest) {
           cadencia.canalSugerido && cadencia.canalSugerido !== canal
             ? ` La cadencia sugería "${cadencia.canalSugerido}" para rotar (el canal anterior fue ${cadencia.ultimoCanal ?? "—"}); ajusta el enfoque para no repetir el intento previo.`
             : " Coincide con el canal sugerido por la rotación.";
-        cadenciaTexto = `\n\n━━━ CADENCIA DE SEGUIMIENTO ━━━\n${cadencia.resumen} Este borrador es para el canal "${canal}".${rotacion}`;
+        // "Dato interno": sin esa aclaración el modelo convertía la rotación
+        // en contenido del mensaje ("Cambio de canal y de tema...").
+        cadenciaTexto = `\n\n━━━ CADENCIA DE SEGUIMIENTO (dato interno — NUNCA lo menciones en el mensaje) ━━━\n${cadencia.resumen} Este borrador es para el canal "${canal}".${rotacion}`;
       }
     }
 
@@ -466,10 +468,11 @@ ${senalesTexto}
 Aprendizajes del vendedor para este tipo de decisor (patrones confirmados en la práctica — respétalos):
 ${aprendizajesTexto}`.trim();
 
+    // El dolor específico del decisor ya no va aquí: viaja al bloque CONTACTO
+    // de buildPromptBorradores, que el prompt trata como fuente n.º 1.
     const contextoEstrategico = `
 ${estrategiaBase}
 Ángulo de entrada: ${ficha?.angulo_entrada ?? "Sin definir."}
-${decisorFicha?.dolor_especifico ? `Dolor específico del decisor (${decisorCargo}): ${decisorFicha.dolor_especifico}` : ""}
 Objeciones probables:
 ${objecionesTexto}
 Casos reales de One Label (usar SOLO estos, nunca inventar):
@@ -546,7 +549,20 @@ ${ejemplosAprobados}
           rubro:            empresa.industria ?? "no especificado",
           decisorCargo:     decisorCargo,
           decisorNombre:    decisorNombre ?? "No registrado",
+          decisorArea:      decisorArea ?? null,
+          dolorDecisor:     decisorFicha?.dolor_especifico ?? null,
           historialReciente: historialTexto || "",
+          // Resumen ejecutivo + inteligencia de Perplexity (ficha_ia). Antes no
+          // llegaban a los borradores de texto y el modelo rellenaba con
+          // conocimiento genérico del rubro.
+          fichaEmpresa: {
+            resumenEjecutivo:    ficha?.resumen_ejecutivo ?? null,
+            queFabrican:         ficha?.que_fabrican_o_venden ?? null,
+            porQueEtiquetas:     ficha?.por_que_necesitan_etiquetas ?? null,
+            prioridadesActuales: ficha?.inteligencia_comercial?.prioridades_actuales ?? null,
+            doloresProbables:    ficha?.inteligencia_comercial?.dolores_probables ?? null,
+            clientesYExigencias: ficha?.inteligencia_comercial?.clientes_y_exigencias ?? null,
+          },
           // Fix 3 (H5.2): notas_vendedor NO viaja al prompt de borradores
           // (salida JSON). Se mantiene el parámetro por compatibilidad, vacío.
           contextoVendedor: "",

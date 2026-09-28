@@ -1071,27 +1071,78 @@ Responde ÚNICAMENTE con este JSON (sin markdown, sin texto adicional):
 // El system prompt es SYSTEM_PROMPT_VALE — así Claude aplica
 // las metodologías de venta correctas según el estado real de
 // la relación detectado en el historial.
+//
+// Por qué el orden importa: SYSTEM_PROMPT_VALE es largo y empuja
+// a "entregar valor" con conocimiento sectorial (Challenger Teach).
+// Si los datos específicos llegan al final y sin jerarquía, el modelo
+// rellena con generalidades de la industria (caso CCU/Octavio). Por eso
+// el prompt presenta primero al CONTACTO y su historial, después el
+// resumen ejecutivo de la empresa (ficha_ia, investigado con scraping +
+// Perplexity) y deja explícito que el conocimiento general es el
+// último recurso.
 // =============================================================
 export function buildPromptBorradores(datos: {
   nombre: string
   rubro: string
   decisorCargo: string
   decisorNombre: string
+  // Área del contacto (calidad, operaciones...) — define el dolor a preguntar
+  decisorArea?: string | null
+  // Dolor específico del cargo según la ficha IA
+  dolorDecisor?: string | null
   historialReciente: string
   contextoVendedor: string
   // Tipo de contacto detectado (apertura/seguimiento/continuacion/reactivacion)
   // con su instrucción específica — antes solo la recibía el canal llamada.
   tipo: string
   instruccionTipo: string
-  // Bloque armado en la ruta: etapa pipeline, MEDDIC, ángulo, dolor del
-  // decisor, técnica recomendada, objeciones, casos reales y temperatura.
+  // Datos de la empresa desde ficha_ia. Antes NO llegaban al prompt de
+  // borradores (solo ángulo/objeciones), y sin ellos el modelo usaba
+  // conocimiento genérico del rubro.
+  fichaEmpresa?: {
+    resumenEjecutivo?: string | null
+    queFabrican?: string | null
+    porQueEtiquetas?: string | null
+    prioridadesActuales?: string | null
+    doloresProbables?: string | null
+    clientesYExigencias?: string | null
+  }
+  // Bloque armado en la ruta: etapa pipeline, MEDDIC, ángulo, técnica
+  // recomendada, objeciones, casos reales, temperatura e intentos previos.
   contextoEstrategico: string
 }): string {
   const esApertura = datos.tipo === "apertura";
 
-  const estadoRelacion = datos.historialReciente && datos.historialReciente !== 'Sin interacciones previas registradas.'
-    ? `HISTORIAL REAL:\n${datos.historialReciente}\nEste NO es primer contacto — adecúa el tono al historial.`
-    : `Sin historial. Primer contacto en frío.`
+  // Solo el primer nombre: el saludo con nombre y apellido suena a plantilla.
+  const nombreValido = datos.decisorNombre && datos.decisorNombre !== 'No registrado'
+    ? datos.decisorNombre.trim()
+    : '';
+  const primerNombre = nombreValido ? nombreValido.split(/\s+/)[0] : '[Nombre]';
+
+  const hayHistorial = !!datos.historialReciente && datos.historialReciente !== 'Sin interacciones previas registradas.';
+  const estadoRelacion = hayHistorial
+    ? `HISTORIAL DE INTERACCIONES CON ESTE CONTACTO (fuente n.º 1 — léelo completo antes de redactar):\n${datos.historialReciente}\nEste NO es primer contacto — el mensaje debe ser coherente con lo que aquí aparece.`
+    : `HISTORIAL DE INTERACCIONES CON ESTE CONTACTO: sin registros. Primer contacto en frío.`
+
+  // Solo se incluyen las líneas con dato real: una línea "Sin info" invita
+  // al modelo a rellenar el hueco con generalidades.
+  const f = datos.fichaEmpresa ?? {};
+  const lineasEmpresa = [
+    f.resumenEjecutivo && `- Resumen ejecutivo: ${f.resumenEjecutivo}`,
+    f.queFabrican && `- Qué fabrican o venden: ${f.queFabrican}`,
+    f.porQueEtiquetas && `- Por qué necesitan etiquetas: ${f.porQueEtiquetas}`,
+    f.prioridadesActuales && `- Prioridades actuales (investigación web): ${f.prioridadesActuales}`,
+    f.doloresProbables && `- Dolores probables (investigación web): ${f.doloresProbables}`,
+    f.clientesYExigencias && `- Sus clientes y lo que les exigen (investigación web): ${f.clientesYExigencias}`,
+  ].filter(Boolean).join("\n");
+  const bloqueEmpresa = lineasEmpresa
+    ? `RESUMEN EJECUTIVO DE LA EMPRESA (fuente n.º 2):\n${lineasEmpresa}`
+    : `RESUMEN EJECUTIVO DE LA EMPRESA (fuente n.º 2): sin ficha investigada.`
+
+  const bloqueContacto = `CONTACTO (fuente n.º 1):
+- Nombre: ${nombreValido || 'No registrado'} → en el saludo usa solo "${primerNombre}"
+- Cargo: ${datos.decisorCargo || 'No registrado'}
+- Área: ${datos.decisorArea || 'no especificada'}${datos.dolorDecisor ? `\n- Dolor típico de este cargo en esta empresa (ficha): ${datos.dolorDecisor}` : ''}`
 
   // Las restricciones Predictable Revenue y los ejemplos de contacto en frío
   // aplican SOLO a apertura. En los demás tipos, la estructura la dicta la
@@ -1101,7 +1152,7 @@ export function buildPromptBorradores(datos: {
 2. APERTURA: la primera línea habla del mundo del prospecto (su empresa, su industria, un problema observable en su sector). NUNCA empieces hablando de One Label, de ti mismo ni de lo que ofreces.
 3. UNA SOLA PREGUNTA: el mensaje termina con exactamente una pregunta abierta. Múltiples preguntas reducen la tasa de respuesta.
 4. SIN ADJUNTOS NI LINKS: no incluyas URLs, PDFs ni referencias a documentos en el primer contacto.
-5. CTA DE BAJO COMPROMISO: el objetivo del mensaje es obtener UNA RESPUESTA, no agendar una reunión. Pide algo mínimo ("¿es algo que les pasa?" · "¿tiene sentido conversarlo?"). Nunca pidas directamente una reunión o llamada de 30+ minutos en el primer mensaje.
+5. CTA DE BAJO COMPROMISO: el objetivo del mensaje es obtener UNA RESPUESTA, no agendar una reunión. La única petición es que respondan la pregunta de la plantilla. Nunca pidas reunión ni llamada.
 
 EJEMPLOS REALES QUE DEBES IMITAR (mismo tono, adapta el contenido al rubro y cargo):
 
@@ -1109,12 +1160,11 @@ CORREO EJEMPLO:
 Asunto: Pregunta sobre operación Oxiquim
 "Hola Christian,
 Estuve revisando la operación de Oxiquim y me surgió una pregunta.
-En operaciones de despacho de químicos a este volumen, ¿cómo están manejando los errores o quiebres de stock de etiquetas? ¿Es algo que genera paradas o lo tienen bien controlado?
-Saludos,
-José Antonio"
+¿Han tenido quiebres de stock o errores de etiquetas en despacho? ¿Es algo que les genera paradas o lo tienen bien controlado?
+Saludos, José Antonio — One Label"
 
 LINKEDIN EJEMPLO:
-"Hola Christian, estuve revisando la operación de Oxiquim y me surgió una pregunta: en despachos a este volumen, ¿cómo manejan los quiebres o errores de etiquetado? ¿Es algo que les genera paradas?"
+"Hola Christian, estuve revisando la operación de Oxiquim y me surgió una pregunta: ¿han tenido quiebres o errores de etiquetado en despacho? ¿Es algo que les genera paradas o lo tienen bien controlado?"
 
 POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
 - Abren con nombre y una frase que muestra que revisaste la empresa — sin presumir
@@ -1131,7 +1181,8 @@ REGLAS DE APERTURA:
    "¿han tenido [problema específico del rubro]? ¿Es algo que [consecuencia operacional]
    o lo tienen bien controlado?"
 
-   Ejemplos correctos por rubro:
+   Ejemplos por rubro (SOLO referencia de forma — el problema concreto sale primero del
+   contacto y del resumen ejecutivo; usa un ejemplo de rubro solo si no hay datos específicos):
    - Química + Jefe Calidad → "¿han tenido problemas con quiebres de stock de etiquetas GHS en despacho? ¿Es algo que les genera paradas o lo tienen resuelto?"
    - Higiene/consumo masivo → "¿han tenido etiquetas que se despegan o pierden legibilidad en línea de producción? ¿Es algo recurrente o lo tienen controlado?"
    - Farmacéutico → "¿han tenido rechazos por etiquetas con datos incorrectos o ilegibles en lotes? ¿Es algo que les genera reprocesos?"
@@ -1143,54 +1194,89 @@ REGLAS DE APERTURA:
 1. LONGITUD: WhatsApp máximo 80 palabras · correo máximo 120 palabras · LinkedIn máximo 60 palabras.
 2. UNA SOLA PREGUNTA: el mensaje termina con exactamente una pregunta. Múltiples preguntas reducen la tasa de respuesta.
 3. SIN ADJUNTOS NI LINKS.
-4. CTA DE BAJO COMPROMISO: máximo 15 minutos, o solo una respuesta.
-5. La ESTRUCTURA del mensaje la dicta la INSTRUCCIÓN CRÍTICA de arriba (este NO es un contacto en frío — no uses la apertura "Estuve revisando la operación de..." ni te presentes de nuevo).
-6. Los ejemplos de mensajes aprobados por el vendedor (si existen más abajo) son SOLO referencia de tono y extensión — la estructura la manda la instrucción del tipo.
+4. CTA DE BAJO COMPROMISO: el mensaje solo busca una respuesta. No pidas reunión ni llamada.
+5. El ENFOQUE del mensaje lo dicta la INSTRUCCIÓN CRÍTICA de arriba (este NO es un contacto en frío — no uses la apertura "Estuve revisando la operación de..." ni te presentes de nuevo). La FORMA del correo la dicta la PLANTILLA OBLIGATORIA del final.
+6. Los ejemplos de mensajes aprobados por el vendedor (si existen más abajo) son SOLO referencia de tono y extensión — no copies su estructura ni su contenido.
 
 REGLA DE ÁNGULO NUEVO — LA MÁS IMPORTANTE DE TODAS:
 Revisa "Intentos previos con este contacto" en el contexto estratégico. Si hay intentos
 anteriores SIN respuesta, identifica qué ángulo/pregunta usaste en cada uno y está
 PROHIBIDO repetir ese ángulo, ese dolor o esa estructura de pregunta. Repetir un ángulo
 ignorado entrena al prospecto a seguir ignorándote. Según la resolución registrada:
-- "VIO el mensaje y NO respondió" → leyó y decidió ignorar: el ángulo FALLÓ. Cambia el
-  enfoque por completo — dolor DISTINTO, o entrega valor sin pedir nada (dato de industria,
-  caso real de One Label con resultado concreto), o formato Challenger (afirmación corta
-  que enseñe algo, no otra pregunta de diagnóstico).
+- "VIO el mensaje y NO respondió" → leyó y decidió ignorar: el ángulo FALLÓ. Cambia a un
+  dolor DISTINTO, tomado del contacto (su área/cargo) o del resumen ejecutivo de la empresa.
+  Si hay un caso real de One Label en el contexto, puede apoyar la pregunta.
 - "sin respuesta tras 48h" (sin evidencia de lectura) → puede ser timing o canal, no
-  necesariamente el mensaje: re-toque breve y liviano es válido, pero igual con ángulo
-  o formato distinto al anterior.
-- "no contestó la llamada" → cambia de canal y referencia el intento sin presionar.`;
+  necesariamente el mensaje: re-toque breve y liviano es válido, pero igual con un
+  dolor distinto al anterior.
+- "no contestó la llamada" → escribe el mensaje como si fuera el primero por este canal,
+  sin mencionar la llamada ni el cambio de canal.
+El ángulo nuevo SIEMPRE sale de los datos (contacto → resumen ejecutivo). Nunca de un dato
+genérico de la industria ni de una afirmación sobre su operación.`;
 
   return `Eres José Antonio, KAM de One Label, imprenta industrial de etiquetas autoadhesivas en Chile. Redacta borradores de contacto adaptados a esta empresa y al estado real de la relación.
 
 TIPO DE BORRADOR: ${datos.tipo.toUpperCase()}
 INSTRUCCIÓN CRÍTICA: ${datos.instruccionTipo}
 
-EMPRESA Y DECISOR:
-- Empresa: ${datos.nombre}
-- Rubro: ${datos.rubro}
-- Cargo del decisor: ${datos.decisorCargo || 'No registrado'}
-- Nombre del decisor: ${datos.decisorNombre && datos.decisorNombre !== 'No registrado' ? datos.decisorNombre : '[Nombre]'}
+EMPRESA: ${datos.nombre} · Rubro: ${datos.rubro}
+
+${bloqueContacto}
 
 ${estadoRelacion}
+
+${bloqueEmpresa}
+
 ${datos.contextoEstrategico}
 
-APLICACIÓN DE METODOLOGÍA — OBLIGATORIA:
-Antes de redactar, clasifica el estado de la relación según la metodología del system prompt
-(usa la etapa del pipeline, el MEDDIC, el historial y la temperatura de la conversación) y
-aplica la técnica que corresponde a ese estado. El mensaje debe reflejar esa técnica: por
-ejemplo, si hay un problema identificado sin urgencia, la pregunta debe ser de Implicación
-(costo del problema), no de Situación; si el deal está cotizado, el foco es avanzar la
-decisión, no re-descubrir el dolor.
+PRIORIDAD DE INFORMACIÓN — OBLIGATORIA (el problema concreto de la pregunta sale de aquí, en este orden):
+1. PRIMERO: lo que se sabe del contacto específico — su cargo, su área y el historial de
+   interacciones con él. Si el historial menciona un tema o dolor, ese es el tema.
+2. SEGUNDO: el resumen ejecutivo de la empresa (ficha investigada: qué fabrican, por qué
+   necesitan etiquetas, prioridades y dolores detectados en la investigación web).
+3. ÚLTIMO RECURSO: conocimiento general de la industria de etiquetas, SOLO si 1 y 2 no
+   entregan nada útil para el área del contacto. Esto tiene prioridad sobre la sugerencia del
+   system prompt de "entregar valor" o "enseñar" con conocimiento sectorial.
+Si usas un dato, debe poder rastrearse a una línea de los bloques de arriba.
+
+APLICACIÓN DE METODOLOGÍA:
+Clasifica el estado de la relación según la metodología del system prompt (etapa del
+pipeline, MEDDIC, historial y temperatura) para elegir QUÉ preguntar. El correo siempre se
+expresa como UNA pregunta SPIN de Situación/Problema con la forma de la plantilla — el
+estado define el tema de la pregunta, no cambia la forma del mensaje.
 
 ${esApertura ? bloqueApertura : bloqueNoApertura}
 
-REGLAS FINALES:
-1. NUNCA afirmes que el cliente tiene un problema
-2. NUNCA menciones regulaciones, fiscalizaciones, normativas ni datos de tu entrenamiento
-3. Correo: máximo 4 líneas de cuerpo, firma "Saludos, José Antonio — One Label"
-4. LinkedIn: mismo tono que correo pero más corto
-5. No inventes contexto que no esté en el historial o en el contexto estratégico
+PROHIBICIONES EXPLÍCITAS (violar cualquiera invalida el borrador — prevalecen sobre cualquier otra instrucción de este prompt, incluida la INSTRUCCIÓN CRÍTICA y la intención de cadencia):
+1. NUNCA hagas meta-comentarios sobre el historial de contacto ni sobre el canal: nada de
+   "cambio de canal", "cambio de tema", "te escribo porque antes te llamé", "intenté
+   contactarte", "no sé si viste mi mensaje", "vuelvo a escribirte", "por acá también".
+   La cadencia, la rotación de canal y los intentos previos son datos internos para ti, no
+   contenido del mensaje. (Hablar de lo que el contacto dijo en una conversación real sí
+   está permitido; hablar de los intentos, no.)
+2. NUNCA hagas juegos de palabras, rimas ni combinaciones con el nombre de la empresa o sus
+   marcas (ej. prohibido algo como "CirCCUlar"). El nombre se escribe tal cual, una vez como máximo.
+3. NUNCA afirmes que el problema existe ("sé que tienen...", "en su operación ocurre...",
+   "empresas como la suya sufren..."). Solo pregunta si existe.
+4. NUNCA inventes ángulos técnicos (sustratos, adhesivos, sostenibilidad, economía circular,
+   normativas, certificaciones, líneas de producto) que no estén respaldados por el historial
+   o por el resumen ejecutivo.
+5. NUNCA menciones regulaciones, fiscalizaciones ni normativas, ni datos de tu entrenamiento.
+6. No inventes contexto que no esté en el historial, en el resumen ejecutivo o en el contexto estratégico.
+
+PLANTILLA OBLIGATORIA DEL CORREO ("cuerpo") — síguela estrictamente, en este orden:
+- Línea 1: "Hola ${primerNombre}," (solo el nombre, sin apellido ni cargo)
+- Cuerpo: máximo 3 líneas, sin afirmar problemas, terminando en la pregunta.
+- Pregunta SPIN de Situación/Problema, con exactamente esta forma:
+  "¿Han tenido [problema concreto basado en los datos reales de arriba]? ¿Es algo que [consecuencia operacional] o lo tienen bien controlado?"
+  Ese par cuenta como LA única pregunta del mensaje: ningún otro "?" en el correo.
+- Cierre, en su propia línea y nada más después: "Saludos, José Antonio — One Label"
+- SIN frases de cierre adicionales ("quedo atento", "cualquier cosa me avisas", "¿conversamos?"),
+  SIN solicitar reunión ni llamada, SIN preguntas múltiples.
+Asunto del correo: máximo 8 palabras, sin signos de exclamación, sin juegos de palabras.
+
+WhatsApp y LinkedIn: mismo contenido y mismas prohibiciones; saludo "Hola ${primerNombre}," y una
+sola pregunta con la misma forma, sin firma. LinkedIn más corto.
 
 Responde ÚNICAMENTE con este JSON en una sola línea sin markdown:
 {"whatsapp":"...","correo":{"asunto":"...","cuerpo":"..."},"linkedin":"...","llamada":"..."}`
