@@ -137,6 +137,42 @@ Correcto: "Retomando el tema de etiquetado"
 Incorrecto: "Seguimiento pendiente", "¿Pudiste revisar mi mensaje?"`,
 };
 
+// ── Línea de presentación fija ───────────────────────────────
+// Cuando el contacto no conoce al vendedor, el borrador lleva una línea de
+// presentación. Se arma en código y no la redacta la IA: cuando la IA la
+// escribía, nombraba el producto específico del cliente o inventaba
+// descripciones de One Label. Aquí solo cambia el término de industria.
+type TerminoIndustria = "consumo masivo" | "farmacéutica" | "industrial";
+
+// Sin tildes ni mayúsculas, para que "Químico" y "quimico" coincidan igual.
+const normalizar = (s: string): string =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+const PALABRAS_INDUSTRIA: [TerminoIndustria, string[]][] = [
+  ["consumo masivo", ["bebida", "cerveza", "vino", "jugo", "lacteo", "alimento", "food", "snack"]],
+  ["farmacéutica",   ["farma", "laboratorio", "medicamento", "salud"]],
+  ["industrial",     ["quimic", "petroleo", "mineria", "gas"]],
+];
+
+// Sin export: Next.js no acepta exportaciones que no sean de ruta en route.ts.
+// El orden importa: "bebidas gaseosas" debe caer en consumo masivo antes de
+// que "gas" lo mande a industrial.
+function getIndustryTerm(rubro: string): TerminoIndustria {
+  const r = normalizar(rubro);
+  for (const [termino, palabras] of PALABRAS_INDUSTRIA) {
+    if (palabras.some((p) => r.includes(p))) return termino;
+  }
+  return "industrial";
+}
+
+// "la industria de farmacéutica" y "la industria de industrial" no se dicen:
+// cada término lleva su propia forma natural en español.
+const FRASE_INDUSTRIA: Record<TerminoIndustria, string> = {
+  "consumo masivo": "la industria de consumo masivo",
+  "farmacéutica":   "la industria farmacéutica",
+  "industrial":     "el sector industrial",
+};
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as PrepararBody;
@@ -549,6 +585,10 @@ ${ejemplosAprobados}
     // Texto (whatsapp/correo/linkedin): buildPromptBorradores con SYSTEM_PROMPT_VALE.
     // Ahora recibe el tipo con su instrucción (antes solo la veía llamada) y el
     // contexto estratégico completo para que el selector de técnica de VALE opere.
+    const rubroEmpresa = empresa.industria ?? ficha?.industria ?? "";
+    const lineaPresentacion =
+      `Soy José Antonio de One Label, fabricamos etiquetas autoadhesivas para ${FRASE_INDUSTRIA[getIndustryTerm(rubroEmpresa)]}.`;
+
     const promptBorradores = canal !== "llamada"
       ? buildPromptBorradores({
           nombre:           empresa.razon_social || empresa.nombre,
@@ -557,6 +597,7 @@ ${ejemplosAprobados}
           decisorNombre:    decisorNombre ?? "No registrado",
           decisorArea:      decisorArea ?? null,
           conoceAlVendedor,
+          lineaPresentacion,
           dolorDecisor:     decisorFicha?.dolor_especifico ?? null,
           historialReciente: historialTexto || "",
           // Resumen ejecutivo + inteligencia de Perplexity (ficha_ia). Antes no

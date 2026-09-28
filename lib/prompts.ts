@@ -1094,6 +1094,9 @@ export function buildPromptBorradores(datos: {
   // reunión, llamada con conversación). Lo calcula la ruta con
   // esContactoReal: llamadas sin respuesta y stubs no cuentan.
   conoceAlVendedor?: boolean
+  // Línea de presentación ya redactada en la ruta (caso A). La IA la copia
+  // literal: cuando la redactaba ella, nombraba el producto del cliente.
+  lineaPresentacion: string
   historialReciente: string
   contextoVendedor: string
   // Tipo de contacto detectado (apertura/seguimiento/continuacion/reactivacion)
@@ -1122,9 +1125,12 @@ export function buildPromptBorradores(datos: {
   // lo presentó. Por eso el mensaje necesita una línea de presentación.
   const conoce = datos.conoceAlVendedor === true;
   // Líneas de presentación de los ejemplos (vacías en el caso B).
-  // Término de industria ("industria química"), no el producto: ver PRESENTACIÓN OBLIGATORIA.
-  const presEj = conoce ? "" : "Soy José Antonio de One Label, fabricamos etiquetas autoadhesivas para la industria química.\n";
-  const presEjLinkedin = conoce ? "" : " soy José Antonio de One Label, fabricamos etiquetas autoadhesivas para la industria química.";
+  // Los ejemplos usan la misma línea fija que debe copiar, así no hay dos
+  // versiones de la presentación compitiendo en el prompt.
+  const presEj = conoce ? "" : `${datos.lineaPresentacion}\n`;
+  const presEjLinkedin = conoce
+    ? ""
+    : ` ${datos.lineaPresentacion.charAt(0).toLowerCase()}${datos.lineaPresentacion.slice(1)}`;
 
   // Solo el primer nombre: el saludo con nombre y apellido suena a plantilla.
   const nombreValido = datos.decisorNombre && datos.decisorNombre !== 'No registrado'
@@ -1285,15 +1291,10 @@ No te presentes ni digas quién eres: ve directo al tema, como continuación nat
 (las llamadas sin respuesta, los mensajes sin responder y los registros de sistema no cuentan: el
 prospecto no sabe quién llamó ni quién escribió). Esto prevalece sobre cualquier "no te presentes"
 de este prompt, incluida la INSTRUCCIÓN CRÍTICA.
-- Justo después del saludo, UNA línea con esta forma:
-  "Soy José Antonio de One Label, [qué hacemos, usando el término de industria del cliente]."
-- La parte sobre qué hacemos usa el TÉRMINO DE INDUSTRIA del cliente, deducido del rubro y del
-  resumen ejecutivo: por ejemplo "consumo masivo" para bebidas o alimentos, "farmacéutica" para
-  laboratorios, "industrial" para manufactura. Ej: "fabricamos etiquetas autoadhesivas para
-  consumo masivo".
-- NUNCA nombres el producto específico que fabrican (nada de "para sus cervezas", "para envases
-  de bebidas", "para sus jugos"): suena a que los estás observando y acota de más lo que hacemos.
-- Sin adjetivos de venta ("líderes", "los mejores"), sin clientes, cifras ni casos que no estén en el contexto.
+- Justo después del saludo, copia EXACTAMENTE esta línea, palabra por palabra:
+  ${datos.lineaPresentacion}
+- Es un texto fijo: no la reescribas, no la adaptes, no le agregues ni le quites nada. No
+  menciones el producto específico que fabrican ni describas a One Label en ningún otro lugar.
 - Después va directo a la ${estiloPR ? "afirmación" : "pregunta"} de la plantilla.
 - NUNCA asumas que el prospecto conoce al vendedor ni que recuerda un intento anterior.`;
 
@@ -1359,7 +1360,7 @@ PROHIBICIONES EXPLÍCITAS (violar cualquiera invalida el borrador — prevalecen
 
 PLANTILLA OBLIGATORIA DEL CORREO ("cuerpo") — síguela estrictamente, en este orden:
 - Línea 1: "Hola ${primerNombre}," (solo el nombre, sin apellido ni cargo)${conoce ? "" : `
-- Línea 2: la presentación "Soy José Antonio de One Label, [qué hacemos, con el término de industria del cliente, nunca su producto específico]."`}
+- Línea 2: la presentación, copiada literal: ${datos.lineaPresentacion}`}
 - Cuerpo: máximo 3 líneas${conoce ? "" : " (incluida la presentación)"}, sin afirmar problemas, terminando en la pregunta.
 - ${formaMensaje}
 - Cierre, en su propia línea y nada más después: "Saludos," (solo esa palabra: sin nombre, sin empresa, sin firma)
