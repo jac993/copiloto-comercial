@@ -90,6 +90,12 @@ export async function POST(req: NextRequest) {
   // la misma cuenta remitente; si falla o no hay, se envía sin firma.
   const remitente = integracion.email ?? REMITENTE_POR_DEFECTO;
   const firmaHtml = await getFirmaGmail(accessToken, remitente);
+  // DEBUG TEMPORAL — diagnosticar firma ausente. Eliminar al resolver.
+  console.log(
+    "[gmail/send] remitente:", remitente,
+    "| integracion.email:", integracion.email ?? "(null, se usó el por defecto)",
+    "| firma adjuntada:", firmaHtml ? "sí" : "no"
+  );
 
   // ── Enviar ────────────────────────────────────────────────
   let enviado: { messageId: string; threadId: string };

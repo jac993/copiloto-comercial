@@ -208,11 +208,22 @@ export async function getFirmaGmail(accessToken: string, email: string): Promise
       // Sin timeout, una respuesta colgada de Google retrasaría el envío.
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    // DEBUG TEMPORAL — diagnosticar firma ausente. Eliminar al resolver.
+    console.log("[gmail/firma] sendAs status:", res.status, "| email consultado:", email);
+    if (!res.ok) {
+      console.log("[gmail/firma] respuesta de error:", (await res.text()).slice(0, 500));
+      return null;
+    }
     const data = await res.json() as { signature?: string };
     const firma = data.signature?.trim();
+    console.log(
+      "[gmail/firma] signature:",
+      firma ? `con contenido (${firma.length} caracteres): ${firma.slice(0, 120)}` : "VACÍA o ausente",
+      "| campos recibidos:", Object.keys(data).join(", ")
+    );
     return firma ? firma : null;
-  } catch {
+  } catch (err) {
+    console.log("[gmail/firma] error en la consulta:", err instanceof Error ? `${err.name}: ${err.message}` : String(err));
     return null;
   }
 }
