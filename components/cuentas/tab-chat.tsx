@@ -16,6 +16,9 @@ import {
   Mail, ExternalLink, AlertCircle, RefreshCw, Phone, MessageSquare, MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { cn } from "@/lib/utils";
 import { calcularCadencia } from "@/lib/cadencia";
@@ -482,6 +485,18 @@ export function TabChat({
 
   const hayCargandoBorrador = borradorItems.some((it) => it.estado === "cargando");
 
+  // Destinatario para "Enviar por Gmail": primero el email del decisor para
+  // quien se redactó el borrador; si no tiene, el primer contacto de la
+  // empresa con email. El modal lo muestra antes de enviar para que el
+  // vendedor confirme a quién le llega.
+  const emailDestinoPara = (decisor: DecisorDisplay): string | null => {
+    const propio = decisor.contactoId
+      ? contactos.find((c) => c.id === decisor.contactoId)?.email?.trim()
+      : null;
+    if (propio) return propio;
+    return contactos.find((c) => c.email?.trim())?.email?.trim() ?? null;
+  };
+
   // ── Feed combinado: chat de texto libre + borradores locales, por fecha ──
 
   type FeedEntry =
@@ -672,6 +687,7 @@ export function TabChat({
                 key={entry.key}
                 item={entry.item}
                 empresaId={empresaId}
+                emailDestino={emailDestinoPara(entry.item.decisor)}
                 onReintentar={() => void handleReintentar(entry.item)}
                 onRegenerar={() => void handleRegenerar(entry.item)}
                 onMarcarUsado={() => void handleMarcarUsado(entry.item)}
@@ -729,12 +745,14 @@ export function TabChat({
 function TarjetaBorrador({
   item,
   empresaId,
+  emailDestino,
   onReintentar,
   onRegenerar,
   onMarcarUsado,
 }: {
   item: BorradorFeedItem;
   empresaId: string;
+  emailDestino: string | null;
   onReintentar: () => void;
   onRegenerar: () => void;
   onMarcarUsado: () => void;
@@ -812,6 +830,7 @@ function TarjetaBorrador({
                 decisor={decisor}
                 empresaId={empresaId}
                 borradorId={item.borradorId ?? null}
+                emailDestino={emailDestino}
                 onRegenerar={onRegenerar}
               />
               {item.advertencias?.map((adv, i) => (
@@ -867,12 +886,14 @@ function BorradorContent({
   decisor,
   empresaId,
   borradorId,
+  emailDestino,
   onRegenerar,
 }: {
   borrador: BorradorCanalResult;
   decisor: DecisorDisplay;
   empresaId: string;
   borradorId?: string | null;
+  emailDestino: string | null;
   onRegenerar?: () => void;
 }) {
   if (borrador.canal === "llamada") {
@@ -939,8 +960,160 @@ function BorradorContent({
         />
       </div>
 
+      {/* Solo los borradores de correo se pueden enviar por Gmail */}
+      {borrador.canal === "correo" && (
+        <EnviarGmailBoton
+          empresaId={empresaId}
+          borradorId={borradorId ?? null}
+          to={emailDestino}
+          destinatarioNombre={decisor.nombre}
+          subject={borrador.asunto}
+          body={borrador.cuerpo}
+        />
+      )}
+
       <CopiarBoton texto={textoParaCopiar} label="Copiar" className="w-full" />
     </div>
+  );
+}
+
+// ── Enviar por Gmail (modo copiloto) ───────────────────────────
+// Nunca envía directo: el clic abre un modal con destinatario, asunto y
+// cuerpo, y solo "Confirmar envío" llama a /api/gmail/send. Si no hay
+// email de contacto, el botón queda deshabilitado explicando por qué.
+
+type EstadoEnvio = "idle" | "enviando" | "enviado" | "error";
+
+function EnviarGmailBoton({
+  empresaId,
+  borradorId,
+  to,
+  destinatarioNombre,
+  subject,
+  body,
+}: {
+  empresaId: string;
+  borradorId: string | null;
+  to: string | null;
+  destinatarioNombre: string | null;
+  subject: string;
+  body: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [estado, setEstado] = useState<EstadoEnvio>("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const confirmar = async () => {
+    if (!to || estado === "enviando") return;
+    setEstado("enviando");
+    setError(null);
+    try {
+      const res = await fetch("/api/gmail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empresaId,
+          ...(borradorId ? { borradorId } : {}),
+          to,
+          subject,
+          body,
+        }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "No se pudo enviar el correo");
+      setEstado("enviado");
+      setAbierto(false);
+    } catch (e) {
+      setEstado("error");
+      setError(e instanceof Error ? e.message : "No se pudo enviar el correo");
+    }
+  };
+
+  if (estado === "enviado") {
+    return (
+      <div className="mb-2 flex items-center justify-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-2.5 text-xs font-medium text-green-700 dark:border-green-800/40 dark:bg-green-900/15 dark:text-green-400">
+        <CheckCheck className="h-3.5 w-3.5" />
+        ✅ Enviado a {to}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* span con title: un botón deshabilitado no dispara eventos de hover,
+          así que el tooltip "Sin email de contacto" vive en el contenedor */}
+      <span title={to ? undefined : "Sin email de contacto"} className="mb-2 block">
+        <Button
+          size="sm"
+          className="w-full gap-1.5 min-h-[44px]"
+          disabled={!to}
+          onClick={() => { setEstado("idle"); setError(null); setAbierto(true); }}
+        >
+          <Mail className="h-3.5 w-3.5" />
+          Enviar por Gmail
+        </Button>
+      </span>
+
+      <Dialog open={abierto} onOpenChange={(v) => { if (estado !== "enviando") setAbierto(v); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>¿Enviar este correo?</DialogTitle>
+            <DialogDescription>
+              Revisa a quién le llega antes de confirmar. Se envía desde tu Gmail.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 text-sm">
+            <div className="flex items-start gap-2">
+              <span className="text-xs font-semibold text-muted-foreground w-14 shrink-0 pt-0.5">Para:</span>
+              <span className="font-medium break-all">
+                {destinatarioNombre ? `${destinatarioNombre} <${to}>` : to}
+              </span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-xs font-semibold text-muted-foreground w-14 shrink-0 pt-0.5">Asunto:</span>
+              <span className="font-medium">{subject}</span>
+            </div>
+            <div className="bg-muted/50 rounded-xl p-3 max-h-64 overflow-y-auto">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
+            </div>
+          </div>
+
+          {estado === "error" && error && (
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+              <p className="text-xs text-destructive leading-relaxed">❌ {error}</p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              className="min-h-[44px]"
+              disabled={estado === "enviando"}
+              onClick={() => setAbierto(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="min-h-[44px] gap-1.5"
+              disabled={estado === "enviando"}
+              onClick={() => void confirmar()}
+            >
+              {estado === "enviando" ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Enviando...
+                </>
+              ) : estado === "error" ? (
+                "Reintentar envío"
+              ) : (
+                "Confirmar envío"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
