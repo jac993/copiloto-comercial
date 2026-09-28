@@ -173,6 +173,32 @@ const FRASE_INDUSTRIA: Record<TerminoIndustria, string> = {
   "industrial":     "el sector industrial",
 };
 
+// ── Dolor por cargo ──────────────────────────────────────────
+// El ángulo del borrador debe salir del cargo del contacto: a Operaciones y
+// a Compras les importan cosas distintas aunque la empresa sea la misma.
+// El dolor de la ficha casi nunca servía para esto: se buscaba por cargo
+// EXACTO ("Jefe de Compras" no calza con "Jefe/a de Calidad") y además es
+// una plantilla fija igual para todas las empresas. Por eso este mapeo
+// manda, y el de la ficha queda solo si el cargo no calza con ninguno.
+// El orden importa: "Director de Operaciones" es Operaciones, no Gerencia.
+const DOLORES_POR_CARGO: [RegExp, string][] = [
+  [/calidad|\bqa\b|regulatory|aseguramiento/,
+    "especificaciones técnicas, rechazos de lote, trazabilidad, cumplimiento normativo"],
+  [/compra|adquisicion|procurement|abastecimiento/,
+    "homologación de proveedores, condiciones comerciales, plazos de entrega"],
+  [/logistica|supply chain|despacho|bodega/,
+    "plazos de entrega, stock, coordinación con línea de producción"],
+  [/operacion|produccion|planta|manufactura/,
+    "continuidad de línea, paros de producción, abastecimiento a tiempo"],
+  [/gerente general|\bceo\b|director|dueno|fundador/,
+    "costos operacionales, eficiencia, riesgo de abastecimiento"],
+];
+
+function getDolorPorCargo(cargo: string): string | null {
+  const c = normalizar(cargo);
+  return DOLORES_POR_CARGO.find(([patron]) => patron.test(c))?.[1] ?? null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as PrepararBody;
@@ -598,7 +624,7 @@ ${ejemplosAprobados}
           decisorArea:      decisorArea ?? null,
           conoceAlVendedor,
           lineaPresentacion,
-          dolorDecisor:     decisorFicha?.dolor_especifico ?? null,
+          dolorDecisor:     getDolorPorCargo(decisorCargo) ?? decisorFicha?.dolor_especifico ?? null,
           historialReciente: historialTexto || "",
           // Resumen ejecutivo + inteligencia de Perplexity (ficha_ia). Antes no
           // llegaban a los borradores de texto y el modelo rellenaba con

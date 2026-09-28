@@ -1174,7 +1174,29 @@ export function buildPromptBorradores(datos: {
   const bloqueContacto = `CONTACTO (fuente n.º 1):
 - Nombre: ${nombreValido || 'No registrado'} → en el saludo usa solo "${primerNombre}"
 - Cargo: ${datos.decisorCargo || 'No registrado'}
-- Área: ${datos.decisorArea || 'no especificada'}${datos.dolorDecisor ? `\n- Dolor típico de este cargo en esta empresa (ficha): ${datos.dolorDecisor}` : ''}`
+- Área: ${datos.decisorArea || 'no especificada'}${datos.dolorDecisor ? `\n- DOLORES DE SU CARGO (guía PRINCIPAL del ángulo): ${datos.dolorDecisor}` : ''}`
+
+  // Sin esta regla, el modelo tomaba el dato más llamativo de la empresa
+  // (ej. la reconversión de una planta) y le mandaba el mismo mensaje a
+  // Operaciones y a Compras. El dolor del cargo elige el tema; los datos de
+  // la empresa solo lo hacen más específico.
+  const bloqueAnguloCargo = `ÁNGULO SEGÚN EL CARGO DEL CONTACTO — OBLIGATORIO:
+El ángulo de la pregunta DEBE estar relacionado con los dolores del cargo del contacto
+(${datos.decisorCargo || 'cargo no registrado'}${datos.dolorDecisor ? `: ${datos.dolorDecisor}` : ''}), no con los datos generales de la empresa.
+Los datos de la empresa son contexto para hacer la pregunta más específica, no el tema central.
+Un mismo dato de la empresa se pregunta distinto según quién lo lee: a Operaciones le importa si
+la línea sigue andando; a Compras, cómo homologa y negocia con proveedores.
+
+Ejemplo CORRECTO para Compras en CCU:
+"¿Han tenido dificultades para homologar nuevos proveedores de etiquetas cuando cambian especificaciones de línea? ¿Es algo que les genera retrasos o lo tienen resuelto con sus proveedores actuales?"
+
+Ejemplo INCORRECTO para Compras en CCU:
+"Asumo que la reconversión de Limache ya tiene cubierto el etiquetado..."
+(ese ángulo es de Operaciones, no de Compras)
+
+Estos ejemplos muestran el TEMA correcto. La FORMA la sigue dictando la plantilla del final.
+Las prohibiciones siguen mandando: si un dolor del cargo toca normativas, pregunta por el efecto
+operacional (rechazos, reprocesos), nunca por la normativa.`;
 
   // Las restricciones Predictable Revenue y los ejemplos de contacto en frío
   // aplican SOLO a apertura. En los demás tipos, la estructura la dicta la
@@ -1208,8 +1230,8 @@ POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
 REGLAS DE APERTURA:
 1. Abre correo y LinkedIn con "Hola [nombre]," — nunca con el cargo
 2. ${conoce ? "La línea siguiente es directamente la afirmación de la plantilla." : "La línea siguiente es la presentación; después, directamente la afirmación de la plantilla."} NO uses "Estuve revisando la operación de..." ni ninguna otra introducción.
-3. La [situación concreta] debe salir de una línea real del contacto o del resumen ejecutivo
-   (prioridades, dolores probables, qué fabrican) y conectar con el área del contacto.`;
+3. La [situación concreta] parte de un dolor del CARGO del contacto; el resumen ejecutivo
+   (prioridades, dolores probables, qué fabrican) solo la hace más específica.`;
 
   const ejemplosAperturaSPIN = `EJEMPLOS REALES QUE DEBES IMITAR (mismo tono, adapta el contenido al rubro y cargo):
 
@@ -1275,12 +1297,12 @@ genérico de la industria ni de una afirmación de que el problema existe.`;
   // Forma de la línea final del cuerpo según el estilo elegido arriba.
   const formaMensaje = estiloPR
     ? `Afirmación suave de estilo Predictable Revenue (hay datos concretos de la empresa), con exactamente esta forma:
-  "Asumo que [situación concreta basada en los datos reales de arriba] ya lo tienen resuelto, pero por si acaso, ¿es algo donde vale la pena conversar?"
+  "Asumo que [situación concreta de un dolor de SU CARGO, precisada con los datos reales de arriba] ya lo tienen resuelto, pero por si acaso, ¿es algo donde vale la pena conversar?"
   La afirmación asume que el problema YA está resuelto e invita a confirmar o corregir, sin presionar.
   Va directo después del ${conoce ? "saludo" : "saludo y la línea de presentación"}: sin otra línea ni párrafo que introduzca o
   explique. Los datos alimentan la afirmación, no una introducción. Esa frase es LA única pregunta del mensaje.`
     : `Pregunta SPIN de Situación/Problema (no hay datos concretos de la empresa), con exactamente esta forma:
-  "¿Han tenido [problema concreto basado en los datos reales de arriba]? ¿Es algo que [consecuencia operacional] o lo tienen bien controlado?"
+  "¿Han tenido [problema concreto de un dolor de SU CARGO, precisado con los datos reales de arriba]? ¿Es algo que [consecuencia operacional] o lo tienen bien controlado?"
   Ese par cuenta como LA única pregunta del mensaje: ningún otro "?" en el correo.`;
 
   // Caso A: presentación obligatoria. Caso B: prohibida, ya lo conoce.
@@ -1313,9 +1335,12 @@ ${bloqueEmpresa}
 
 ${datos.contextoEstrategico}
 
+${bloqueAnguloCargo}
+
 PRIORIDAD DE INFORMACIÓN — OBLIGATORIA (el problema concreto de la pregunta sale de aquí, en este orden):
-1. PRIMERO: lo que se sabe del contacto específico — su cargo, su área y el historial de
-   interacciones con él. Si el historial menciona un tema o dolor, ese es el tema.
+1. PRIMERO: lo que se sabe del contacto específico: los dolores de su cargo, su área y el
+   historial de interacciones con él. Si el historial menciona un tema o dolor, ese es el tema;
+   si no, el tema sale de los dolores de su cargo.
 2. SEGUNDO: el resumen ejecutivo de la empresa (ficha investigada: qué fabrican, por qué
    necesitan etiquetas, prioridades y dolores detectados en la investigación web).
 3. ÚLTIMO RECURSO: conocimiento general de la industria de etiquetas, SOLO si 1 y 2 no
