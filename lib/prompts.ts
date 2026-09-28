@@ -1174,11 +1174,11 @@ export function buildPromptBorradores(datos: {
 CORREO EJEMPLO:
 Asunto: Etiquetado en despacho Oxiquim
 "Hola Christian,
-Asumo que los quiebres de stock de etiquetas en despacho ya los tienen resueltos — pero por si acaso, ¿es algo donde vale la pena conversar?
-Saludos, José Antonio — One Label"
+Asumo que los quiebres de stock de etiquetas en despacho ya los tienen resueltos, pero por si acaso, ¿es algo donde vale la pena conversar?
+Saludos,"
 
 LINKEDIN EJEMPLO:
-"Hola Christian, asumo que los quiebres de stock de etiquetas en despacho ya los tienen resueltos — pero por si acaso, ¿es algo donde vale la pena conversar?"
+"Hola Christian, asumo que los quiebres de stock de etiquetas en despacho ya los tienen resueltos, pero por si acaso, ¿es algo donde vale la pena conversar?"
 
 POR QUÉ FUNCIONAN ESTOS EJEMPLOS:
 - Van directo del saludo a la afirmación — sin frase de introducción ni explicación del negocio
@@ -1199,7 +1199,7 @@ Asunto: Pregunta sobre operación Oxiquim
 "Hola Christian,
 Estuve revisando la operación de Oxiquim y me surgió una pregunta.
 ¿Han tenido quiebres de stock o errores de etiquetas en despacho? ¿Es algo que les genera paradas o lo tienen bien controlado?
-Saludos, José Antonio — One Label"
+Saludos,"
 
 LINKEDIN EJEMPLO:
 "Hola Christian, estuve revisando la operación de Oxiquim y me surgió una pregunta: ¿han tenido quiebres o errores de etiquetado en despacho? ¿Es algo que les genera paradas o lo tienen bien controlado?"
@@ -1257,7 +1257,7 @@ genérico de la industria ni de una afirmación de que el problema existe.`;
   // Forma de la línea final del cuerpo según el estilo elegido arriba.
   const formaMensaje = estiloPR
     ? `Afirmación suave de estilo Predictable Revenue (hay datos concretos de la empresa), con exactamente esta forma:
-  "Asumo que [situación concreta basada en los datos reales de arriba] ya lo tienen resuelto — pero por si acaso, ¿es algo donde vale la pena conversar?"
+  "Asumo que [situación concreta basada en los datos reales de arriba] ya lo tienen resuelto, pero por si acaso, ¿es algo donde vale la pena conversar?"
   La afirmación asume que el problema YA está resuelto e invita a confirmar o corregir, sin presionar.
   Va directo después del saludo: sin línea ni párrafo previo que introduzca o explique — los datos
   alimentan la afirmación, no una introducción. Esa frase es LA única pregunta del mensaje.`
@@ -1317,12 +1317,17 @@ PROHIBICIONES EXPLÍCITAS (violar cualquiera invalida el borrador — prevalecen
 6. No inventes contexto que no esté en el historial, en el resumen ejecutivo o en el contexto estratégico.
 7. NUNCA escribas un párrafo introductorio que explique o describa el negocio del cliente
    ("Vi que son líderes en...", "Sé que ${datos.nombre} produce..."). El cliente conoce su negocio.
+8. NUNCA uses guiones largos (—) ni medios (–) en el mensaje. Donde irían, usa una coma o un punto.
+9. NUNCA uses caracteres que una persona no usa al escribir un correo normal: nada de guiones
+   como puntuación, comillas, paréntesis, punto y coma, asteriscos, viñetas, flechas, barras ni
+   emojis. Solo se permiten comas, puntos, signos de interrogación (¿?), signos de exclamación (¡!)
+   y dos puntos. (Las comillas y guiones de ESTE prompt son para ti; no los copies al mensaje.)
 
 PLANTILLA OBLIGATORIA DEL CORREO ("cuerpo") — síguela estrictamente, en este orden:
 - Línea 1: "Hola ${primerNombre}," (solo el nombre, sin apellido ni cargo)
 - Cuerpo: máximo 3 líneas, sin afirmar problemas, terminando en la pregunta.
 - ${formaMensaje}
-- Cierre, en su propia línea y nada más después: "Saludos, José Antonio — One Label"
+- Cierre, en su propia línea y nada más después: "Saludos," (solo esa palabra: sin nombre, sin empresa, sin firma)
 - SIN frases de cierre adicionales ("quedo atento", "cualquier cosa me avisas"),
   SIN solicitar reunión ni llamada${estiloPR ? ' (el "¿es algo donde vale la pena conversar?" de la fórmula es la única invitación permitida)' : ""},
   SIN preguntas múltiples.
