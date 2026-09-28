@@ -1122,8 +1122,9 @@ export function buildPromptBorradores(datos: {
   // lo presentó. Por eso el mensaje necesita una línea de presentación.
   const conoce = datos.conoceAlVendedor === true;
   // Líneas de presentación de los ejemplos (vacías en el caso B).
-  const presEj = conoce ? "" : "Soy José Antonio de One Label, fabricamos etiquetas para envases de productos químicos.\n";
-  const presEjLinkedin = conoce ? "" : " soy José Antonio de One Label, fabricamos etiquetas para envases de productos químicos.";
+  // Término de industria ("industria química"), no el producto: ver PRESENTACIÓN OBLIGATORIA.
+  const presEj = conoce ? "" : "Soy José Antonio de One Label, fabricamos etiquetas autoadhesivas para la industria química.\n";
+  const presEjLinkedin = conoce ? "" : " soy José Antonio de One Label, fabricamos etiquetas autoadhesivas para la industria química.";
 
   // Solo el primer nombre: el saludo con nombre y apellido suena a plantilla.
   const nombreValido = datos.decisorNombre && datos.decisorNombre !== 'No registrado'
@@ -1285,10 +1286,14 @@ No te presentes ni digas quién eres: ve directo al tema, como continuación nat
 prospecto no sabe quién llamó ni quién escribió). Esto prevalece sobre cualquier "no te presentes"
 de este prompt, incluida la INSTRUCCIÓN CRÍTICA.
 - Justo después del saludo, UNA línea con esta forma:
-  "Soy José Antonio de One Label, [una línea sobre qué hacemos, relevante para esta empresa]."
-- La parte sobre qué hacemos se ajusta a lo que ellos fabrican o envasan según el resumen ejecutivo
-  (ej. "fabricamos etiquetas autoadhesivas para envases de bebidas"). Sin adjetivos de venta
-  ("líderes", "los mejores"), sin clientes, cifras ni casos que no estén en el contexto.
+  "Soy José Antonio de One Label, [qué hacemos, usando el término de industria del cliente]."
+- La parte sobre qué hacemos usa el TÉRMINO DE INDUSTRIA del cliente, deducido del rubro y del
+  resumen ejecutivo: por ejemplo "consumo masivo" para bebidas o alimentos, "farmacéutica" para
+  laboratorios, "industrial" para manufactura. Ej: "fabricamos etiquetas autoadhesivas para
+  consumo masivo".
+- NUNCA nombres el producto específico que fabrican (nada de "para sus cervezas", "para envases
+  de bebidas", "para sus jugos"): suena a que los estás observando y acota de más lo que hacemos.
+- Sin adjetivos de venta ("líderes", "los mejores"), sin clientes, cifras ni casos que no estén en el contexto.
 - Después va directo a la ${estiloPR ? "afirmación" : "pregunta"} de la plantilla.
 - NUNCA asumas que el prospecto conoce al vendedor ni que recuerda un intento anterior.`;
 
@@ -1354,7 +1359,7 @@ PROHIBICIONES EXPLÍCITAS (violar cualquiera invalida el borrador — prevalecen
 
 PLANTILLA OBLIGATORIA DEL CORREO ("cuerpo") — síguela estrictamente, en este orden:
 - Línea 1: "Hola ${primerNombre}," (solo el nombre, sin apellido ni cargo)${conoce ? "" : `
-- Línea 2: la presentación "Soy José Antonio de One Label, [qué hacemos relevante para ellos]."`}
+- Línea 2: la presentación "Soy José Antonio de One Label, [qué hacemos, con el término de industria del cliente, nunca su producto específico]."`}
 - Cuerpo: máximo 3 líneas${conoce ? "" : " (incluida la presentación)"}, sin afirmar problemas, terminando en la pregunta.
 - ${formaMensaje}
 - Cierre, en su propia línea y nada más después: "Saludos," (solo esa palabra: sin nombre, sin empresa, sin firma)
